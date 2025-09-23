@@ -20,11 +20,11 @@ static gid_t nextgid;
 /*
  ** builtin group info
  */
-static const char *dummy_members[] = { 0 };
+static char *dummy_members[] = { 0 };
 
-static const struct group builtin_wheel = { "wheel", "*", 0, (__STRPTR*) dummy_members };
+static const struct group builtin_wheel = { "wheel", "*", 0, dummy_members };
 
-static const struct group builtin_nogroup = { "nogroup", "*", -2, (__STRPTR*) dummy_members };
+static const struct group builtin_nogroup = { "nogroup", "*", -2, dummy_members };
 
 /*
  **
@@ -82,7 +82,7 @@ static int gr_scan(int search, gid_t gid, const char *name, struct SocketSetting
 		if (search && !name && lss->lx_grp.gr_gid != gid)
 			continue;
 
-		for (lss->lx_grp.gr_mem = (__STRPTR*) (m = lss->lx_members);; ++m) {
+		for (lss->lx_grp.gr_mem = (m = lss->lx_members);; ++m) {
 			if (m == &lss->lx_members[MAXGRP - 1]) {
 				*m = NULL;
 				break;
@@ -186,7 +186,7 @@ struct group* getgrgid(gid_t gid) {
 		if ((gid == getgid()) && (lss->lx_grp.gr_name = getenv("GROUP"))) {
 			lss->lx_grp.gr_gid = gid;
 			lss->lx_grp.gr_passwd = "*";
-			lss->lx_grp.gr_mem = (__STRPTR*) dummy_members;
+			lss->lx_grp.gr_mem = dummy_members;
 			return &lss->lx_grp;
 		}
 	}
@@ -218,7 +218,7 @@ struct group* getgrnam(const char *name) {
 		if ((lss->lx_grp.gr_name = getenv("GROUP")) && !strcmp(lss->lx_grp.gr_name, name)) {
 			lss->lx_grp.gr_gid = getgid();
 			lss->lx_grp.gr_passwd = "*";
-			lss->lx_grp.gr_mem = (__STRPTR*) dummy_members;
+			lss->lx_grp.gr_mem = dummy_members;
 			return &lss->lx_grp;
 		}
 	}

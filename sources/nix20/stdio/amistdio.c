@@ -42,7 +42,7 @@ void __amiputs_putchar_callback(register char *ptr asm("a3")) {
 int amivsnprintf(char * buff, int sz, const char *fmt, va_list args) {
 	memset(buff, 0xff, sz - 1);
 	buff[sz - 1] = 0;
-	RawDoFmt(fmt, args, __amiputs_putchar_callback, buff);
+	RawDoFmt(fmt, args, (void(*)())__amiputs_putchar_callback, buff);
 	return strlen(buff);
 }
 

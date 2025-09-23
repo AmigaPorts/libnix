@@ -21,5 +21,5 @@ int execlp(const char * file, const char *arg, ...) {
 	}
 	va_end(v);
 
-	return execvp(file, argv);
+	return execvp(file, (char * const *)argv);
 }
