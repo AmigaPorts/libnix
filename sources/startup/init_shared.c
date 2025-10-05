@@ -220,7 +220,7 @@ __LibOpen(struct Library *_masterlib asm("a6")) {
 	// queue the library into pr_Task->tc_TrapData
 	__a4List.next = (struct A4List *)task->tc_TrapData;
 	__a4List.code = __LibOpen;
-	__a4List.a4 = a4;
+	__a4List.a4 = (ULONG)a4;
 	task->tc_TrapData = &__a4List;
 
 	asm volatile("move.l	(a7)+,a4" : "=r"(a4));
