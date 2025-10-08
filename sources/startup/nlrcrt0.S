@@ -9,14 +9,14 @@
 
 | some specific defines
 
-_LVOForbid	=	-132
-_LVOAllocMem	=	-198
-_LVOFindTask	=	-294
-_LVOFreeMem	=	-210
-_LVOGetMsg	=	-372
-_LVOReplyMsg	=	-378
-_LVOWaitPort	=	-384
-_LVOCopyMemQuick =	-630
+.LVOForbid	=	-132
+.LVOAllocMem	=	-198
+.LVOFindTask	=	-294
+.LVOFreeMem	=	-210
+.LVOGetMsg	=	-372
+.LVOReplyMsg	=	-378
+.LVOWaitPort	=	-384
+.LVOCopyMemQuick =	-630
 
 tc_TrapData =     46
 pr_MsgPort	=	  92
@@ -49,9 +49,9 @@ start:
 
 fromWB:
 	 	lea	a3@(pr_MsgPort:L),a0
-		jsr	a6@(_LVOWaitPort:L)
+		jsr	a6@(.LVOWaitPort:L)
 		lea	a3@(pr_MsgPort:L),a0
-		jsr	a6@(_LVOGetMsg:L)
+		jsr	a6@(.LVOGetMsg:L)
 		movel	d0,a2
 
 | resident setup - allocate memory and relocate
@@ -74,7 +74,7 @@ cpuok:
 		movel	d2,d0
 		movql	#1,d1
 		swap	d1
-		jsr	a6@(_LVOAllocMem:L)
+		jsr	a6@(.LVOAllocMem:L)
 		movel	d0,a4
 		movel	a4,d0
 		beq	cleanup
@@ -82,7 +82,7 @@ cpuok:
 		movel	d2,d0
 		movel	a5,a0
 		movel	a4,a1
-		jsr	a6@(_LVOCopyMemQuick:L)
+		jsr	a6@(.LVOCopyMemQuick:L)
 		lea	___datadata_relocs,a0
 		movel	a0@+,d0
 		beq	no_reloc
@@ -140,16 +140,16 @@ ____exit: .globl	____exit
 		movel	a4@(__WBenchMsg:L),a2
 		movel	a4@(___MemLen:L),d0
 		lea	a4@(-0x7ffe:L),a1
-		jsr	a6@(_LVOFreeMem:L)
+		jsr	a6@(.LVOFreeMem:L)
 
 | cleanup - reply wbmsg and exit
 
 cleanup:
 		movel	a2,d0
 		beqs	todos
-		jsr	a6@(_LVOForbid:L)
+		jsr	a6@(.LVOForbid:L)
 		movel	a2,a1
-		jsr	a6@(_LVOReplyMsg:L)
+		jsr	a6@(.LVOReplyMsg:L)
 todos:
 		movel	d7,d0
 		rts

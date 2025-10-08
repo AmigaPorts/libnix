@@ -4,11 +4,11 @@
 
 | some specific defines
 
-_LVOForbid	=	-132
-_LVOFindTask	=	-294
-_LVOGetMsg	=	-372
-_LVOReplyMsg	=	-378
-_LVOWaitPort	=	-384
+.LVOForbid	=	-132
+.LVOFindTask	=	-294
+.LVOGetMsg	=	-372
+.LVOReplyMsg	=	-378
+.LVOWaitPort	=	-384
 
 pr_MsgPort	=	  92
 pr_CLI		=	 172
@@ -35,9 +35,9 @@ start:
 		bne	fromCLI
 fromWB:
 		lea	a3@(pr_MsgPort:L),a0
-		jsr	a6@(_LVOWaitPort:L)
+		jsr	a6@(.LVOWaitPort:L)
 		lea	a3@(pr_MsgPort:L),a0
-		jsr	a6@(_LVOGetMsg:L)
+		jsr	a6@(.LVOGetMsg:L)
 		move.l	d0,d6
 fromCLI:
 
@@ -107,9 +107,9 @@ ____exit: .globl	____exit
 		movel	a4@(__WBenchMsg:L),d2
 cleanup:
 		beq	todos
-		jsr	a6@(_LVOForbid:L)
+		jsr	a6@(.LVOForbid:L)
 		movel	d2,a1
-		jsr	a6@(_LVOReplyMsg:L)
+		jsr	a6@(.LVOReplyMsg:L)
 
 | leave - get return val, restore stackptr
 

@@ -9,14 +9,14 @@
 
 | some specific defines
 
-_LVOForbid	=	-132
-_LVOAllocMem	=	-198
-_LVOFindTask	=	-294
-_LVOFreeMem	=	-210
-_LVOGetMsg	=	-372
-_LVOReplyMsg	=	-378
-_LVOWaitPort	=	-384
-_LVOCopyMemQuick =	-630
+.LVOForbid	=	-132
+.LVOAllocMem	=	-198
+.LVOFindTask	=	-294
+.LVOFreeMem	=	-210
+.LVOGetMsg	=	-372
+.LVOReplyMsg	=	-378
+.LVOWaitPort	=	-384
+.LVOCopyMemQuick =	-630
 
 tc_TrapData =     46
 pr_MsgPort	=	  92
@@ -45,9 +45,9 @@ start:		movel	a0,d3
 | wb start - get our message
 
 fromWB: 	lea	a3@(pr_MsgPort:W),a0
-		jsr	a6@(_LVOWaitPort:W)
+		jsr	a6@(.LVOWaitPort:W)
 		lea	a3@(pr_MsgPort:W),a0
-		jsr	a6@(_LVOGetMsg:W)
+		jsr	a6@(.LVOGetMsg:W)
 		movel	d0,a2
 
 | resident setup - allocate memory and relocate
@@ -57,7 +57,7 @@ fromCLI:	movql	#ERROR_NO_FREE_STORE,d7
 		movel	d2,d0
 		movql	#1,d1
 		swap	d1
-		jsr	a6@(_LVOAllocMem:W)
+		jsr	a6@(.LVOAllocMem:W)
 		movel	d0,a4
 		movel	a4,d0
 		beq	cleanup
@@ -65,7 +65,7 @@ fromCLI:	movql	#ERROR_NO_FREE_STORE,d7
 		movel	d2,d0
 		movel	a5,a0
 		movel	a4,a1
-		jsr	a6@(_LVOCopyMemQuick:W)
+		jsr	a6@(.LVOCopyMemQuick:W)
 		lea	___datadata_relocs,a0
 		movel	a0@+,d0
 		beq	no_reloc
@@ -122,15 +122,15 @@ ____exit: .globl	____exit
 		movel	a4@(__WBenchMsg:W),a2
 		movel	a4@(___MemLen:W),d0
 		lea	a4@(-0x7ffe:W),a1
-		jsr	a6@(_LVOFreeMem:W)
+		jsr	a6@(.LVOFreeMem:W)
 
 | cleanup - reply wbmsg and exit
 
 cleanup:	movel	a2,d0
 		beqs	todos
-		jsr	a6@(_LVOForbid:W)
+		jsr	a6@(.LVOForbid:W)
 		movel	a2,a1
-		jsr	a6@(_LVOReplyMsg:W)
+		jsr	a6@(.LVOReplyMsg:W)
 todos:		movel	d7,d0
 		rts
 
