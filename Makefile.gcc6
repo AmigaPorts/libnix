@@ -147,7 +147,7 @@ install_libm060bb32:
 # install the files for the given $(kind) into $(to)
 install_one:
 	mkdir -p $(PREFIX)/$(target)/libnix/lib/$(to)
-	rsync $(kind)/*.a $(PREFIX)/$(target)/libnix/lib/$(to) --exclude=$(kind)/libstubs.a
+	rsync $(kind)/*.a $(PREFIX)/$(target)/libnix/lib/$(to)
 	find $(kind) -maxdepth 1 -name "*.o" -exec cp {} $(PREFIX)/$(target)/libnix/lib/$(to) \;
 
 # startup stuff
