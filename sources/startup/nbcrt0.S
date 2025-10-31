@@ -4,11 +4,11 @@
 
 | some specific defines
 
-_LVOForbid	=	-132
-_LVOFindTask	=	-294
-_LVOGetMsg	=	-372
-_LVOReplyMsg	=	-378
-_LVOWaitPort	=	-384
+.LVOForbid	=	-132
+.LVOFindTask	=	-294
+.LVOGetMsg	=	-372
+.LVOReplyMsg	=	-378
+.LVOWaitPort	=	-384
 
 pr_MsgPort	=	  92
 pr_CLI		=	 172
@@ -54,9 +54,9 @@ nobss:
 | wb start - get wbmsg
 
 fromWB: 	lea	a3@(pr_MsgPort:W),a0
-		jsr	a6@(_LVOWaitPort:W)
+		jsr	a6@(.LVOWaitPort:W)
 		lea	a3@(pr_MsgPort:W),a0
-		jsr	a6@(_LVOGetMsg:W)
+		jsr	a6@(.LVOGetMsg:W)
 		movel	d0,a4@(__WBenchMsg:W)
 
 | execute all init functions then call main
@@ -90,9 +90,9 @@ ____exit: .globl	____exit
 		movel	a4@(_SysBase:W),a6
 		movel	a4@(__WBenchMsg:W),d2
 		beq	todos
-		jsr	a6@(_LVOForbid:W)
+		jsr	a6@(.LVOForbid:W)
 		movel	d2,a1
-		jsr	a6@(_LVOReplyMsg:W)
+		jsr	a6@(.LVOReplyMsg:W)
 
 | leave - get return val, restore stackptr
 
