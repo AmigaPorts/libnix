@@ -24,7 +24,7 @@ const char __libName[80];
 
 // place into data segment -> init with zero
 __attribute__((section(".data")))
- struct Library __lib = { {0, 0, NT_LIBRARY, 0, __libName},
+ struct Library __lib = { {0, 0, NT_LIBRARY, 0, (char *)__libName},
 		 LIBF_CHANGED | LIBF_SUMUSED, 0,
 		 0, 0,
 		 0, 0};
@@ -32,7 +32,7 @@ __attribute__((section(".data")))
 __attribute__((section(".data")))
  struct List __libList = { 0 };
 
-const char __libName[64] = { 0 };
+const char __libName[80] = { 0 };
 const APTR __FuncTable__[];
 
 struct ExecBase *SysBase = 0;
