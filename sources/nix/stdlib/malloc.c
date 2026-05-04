@@ -14,6 +14,8 @@
 //#define TRACK_AND_CHECK
 #ifdef TRACK_AND_CHECK
 
+#include <amistdio.h>
+
 int __track_max;
 long * __track;
 
