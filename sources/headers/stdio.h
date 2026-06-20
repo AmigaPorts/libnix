@@ -97,7 +97,7 @@ typedef __FILE FILE;
 #ifndef NULL
 #define NULL ((void *)0l)
 #endif
-#define BUFSIZ 65536
+#define BUFSIZ 1024
 #define EOF (-1)
 #define SEEK_SET 0
 #define SEEK_CUR 1
