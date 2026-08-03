@@ -1,4 +1,5 @@
 #include <exec/execbase.h>
+#include <dos/dos.h>
 #include <proto/exec.h>
 #include <stdlib.h>
 
@@ -16,9 +17,6 @@ register UWORD *a7 __asm("sp");
 extern void * AllocVec(unsigned, int);
 extern void FreeVec(void *);
 #endif
-
-#undef StackSwap
-#define StackSwap __StackSwap
 
 #pragma GCC push_options
 #pragma GCC optimize ("-Os")
@@ -53,7 +51,7 @@ void __stkswap() {
 }
 
 // performs no push/pop of a2/a6, it's not necessary...
-__attribute((noinline)) void StackSwap(volatile struct StackSwapStruct *newStack) {
+__attribute((noinline)) void __MyStackSwap(volatile struct StackSwapStruct *newStack) {
 	asm("move.l %0,a2"::"r" (newStack));
 	asm("move.l %0,a6"::"r" (SysBase));
 	__stkswap();
@@ -121,7 +119,7 @@ void __stkinit() {
 	stack.stk_Pointer = to;
 
 	/* Switch to new stack */
-	StackSwap(&stack);
+	__MyStackSwap(&stack);
 
 	__SaveSP += upper - (UWORD*) stack.stk_Upper;
 }
@@ -143,7 +141,7 @@ void __stkexit() {
 	stack.stk_Pointer = to;
 
 	/* Switch back to old stack */
-	StackSwap(&stack);
+	__MyStackSwap(&stack);
 
 	__SaveSP += upper - (UWORD*) stack.stk_Upper;
 
