@@ -9,7 +9,7 @@
 #undef FreeVec
 #endif
 
-extern struct Execbase * SysBase;
+extern struct ExecBase * SysBase;
 
 void * AllocVec(unsigned size, unsigned flags) {
 	unsigned * ptr = AllocMem(size += 4, flags);
