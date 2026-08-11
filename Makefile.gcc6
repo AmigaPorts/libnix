@@ -34,7 +34,7 @@ endif
 # use nix13 or nix20
 ifeq (,$(lc))
 CC = $(target)-gcc
-AR = $(target)-ar
+AR = $(target)-ar --target=amiga
 AS = $(target)-as
 
 VARIANTS_TO_BUILD = info lib libb libm020 libm020bb libm020bb32 libm881 libm020bb881 libm020bb32881
