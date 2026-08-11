@@ -38,6 +38,7 @@ OBJECTS2= \
 	nix/string/strcoll.o \
 	nix/string/strxfrm.o \
 	nix/time/strftime.o \
+	nix/stdio/statvfs.o \
 	nixmain/__nocommandline.o \
 	nix20/stdio/open.o 
 
