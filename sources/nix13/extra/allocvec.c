@@ -1,6 +1,7 @@
 #include <exec/execbase.h>
 #include <exec/memory.h>
-#include <inline/exec.h>
+#include <dos/dosextens.h>
+#include <proto/exec.h>
 
 #undef AllocDosObject
 #undef FreeDosObject
