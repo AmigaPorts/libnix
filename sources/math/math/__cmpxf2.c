@@ -105,10 +105,29 @@ union long_double_long
     } l;
 };
 
+/* convert long double to double */
+extern double
+__truncxfdf2 (long double ld);
+
+extern int __cmpdf2 (double x1, double x2);
+
+asm(".global ___eqxf2; ___eqxf2 = ___cmpxf2");
+asm(".global ___nexf2; ___nexf2 = ___cmpxf2");
+asm(".global ___ltxf2; ___ltxf2 = ___cmpxf2");
+asm(".global ___lexf2; ___lexf2 = ___cmpxf2");
+asm(".global ___gtxf2; ___gtxf2 = ___cmpxf2");
+asm(".global ___gexf2; ___gexf2 = ___cmpxf2");
+int
+__cmpxf2 (long double x1, long double x2)
+{
+	double d1 = (double) x1;
+	double d2 = (double) x2;
+  return __cmpdf2 (d1, d2);
+}
+
 /* gcc 15 and newer ship this in libgcc (xfpgnulib), where it would
    collide with our copy at link time. */
 #if !defined(__GNUC__) || __GNUC__ < 15
-/* convert long double to double */
 double
 __truncxfdf2 (long double ld)
 {
@@ -136,21 +155,7 @@ __truncxfdf2 (long double ld)
   dl.l.lower = (ldl.l.middle & MANTXMASK) << (32 - (EXPDBITS + 1 - 1));
   dl.l.lower |= ldl.l.lower >> (EXPDBITS + 1 - 1);
 
-  /*printf ("xfdf out: %g\n", dl.d);*/
+  /* printf ("xfdf out: %g\n", dl.d); */
   return dl.d;
 }
 #endif /* !defined(__GNUC__) || __GNUC__ < 15 */
-
-extern int __cmpdf2 (double x1, double x2);
-
-asm("___eqxf2: .global ___eqxf2");
-asm("___nexf2: .global ___nexf2");
-asm("___ltxf2: .global ___ltxf2");
-asm("___lexf2: .global ___lexf2");
-asm("___gtxf2: .global ___gtxf2");
-asm("___gexf2: .global ___gexf2");
-int
-__cmpxf2 (long double x1, long double x2)
-{
-  return __cmpdf2 ((double) x1, (double) x2);
-}
