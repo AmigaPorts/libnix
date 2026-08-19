@@ -233,6 +233,7 @@ lib$(libname).a: $(shell find $(root)/sources/$(lib)/* -name '*.c') $(stolen) $(
 	@cd $(lib) && files="$$(find $^ -name '*.c' -newer stamp)" && echo "$(CC) -c $(CFLAGS) $(flags) $$files" && \
 	$(CC) -c $(CFLAGS) $(flags) $$files
 	@#echo archive $(kind)/$@
+	echo @$(AR) rcs $@ $$(find ./$(lib)/* -name '*.o' -newer $(lib)/stamp)
 	@$(AR) rcs $@ $$(find ./$(lib)/* -name '*.o' -newer $(lib)/stamp)
 
 libb/libnix4.library:
