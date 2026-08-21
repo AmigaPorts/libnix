@@ -41,6 +41,26 @@ VARIANTS_TO_BUILD = info lib libb libm020 libm020bb libm020bb32 libm881 libm020b
 LIBS_TO_BUILD ?= libnix libnix13 libnix20 libnixmain libnix_main libm libsocket libstub
 STARTUPS ?= lib/devinit.o lib/libinit.o lib/libinitb.o lib/libinitr.o lib/ncrt0.o lib/nbcrt0.o lib/nlbcrt0.o lib/nrcrt0.o lib/nlrcrt0.o lib/init_shared.o
 
+# protect conflicting targets
+ifneq (,$(filter all,$(MAKECMDGOALS)))
+ifneq (,$(filter libc lib,$(MAKECMDGOALS)))
+$(error 'all' cannot be used together with 'libc' or 'lib')
+endif
+endif
+
+ifneq (,$(filter libc,$(MAKECMDGOALS)))
+ifneq (,$(filter lib,$(MAKECMDGOALS)))
+$(error 'libc' and 'lib' cannot be used together)
+endif
+endif
+
+# add order if clean all is run simultaneously
+ifneq (,$(filter clean,$(MAKECMDGOALS)))
+$(VARIANTS_TO_BUILD): clean
+libc: clean
+endif
+
+
 ifneq (,$(lib))
 crt = -mcrt=nix13
 ifeq (nix20,$(lib))
@@ -78,8 +98,10 @@ endif
 .PHONY: lib libb libm020 libm020bb libm020bb32 libm881 libm020bb881 libm020bb32881 lc
 all: $(VARIANTS_TO_BUILD)
 
+$(VARIANTS_TO_BUILD): $(STARTUPS)
+
 # the desired kinds to be build
-lib: $(STARTUPS)
+lib:
 	@mkdir -p $@
 	$(MAKE) one kind=$@
 	if [ -e lib/libstubs.a ] && [ "$$($(AR) t lib/libstubs.a | grep __initlib)" != "" ]; then rm -f lib/libstubs.a; fi
