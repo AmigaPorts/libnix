@@ -190,12 +190,12 @@ rm -f ../$out.a
 echo m68k-amigaos-ar rcs ../$out.a *stub*.o
 m68k-amigaos-ar rcs ../$out.a *stub*.o
 
-echo m68k-amigaos-gcc -resident -Os -fomit-frame-pointer export*.c -c
-m68k-amigaos-gcc -resident -Os -fomit-frame-pointer export*.c -c
+echo m68k-amigaos-gcc -fno-builtin -resident -Os -fomit-frame-pointer export*.c -c
+m68k-amigaos-gcc -fno-builtin -resident -Os -fomit-frame-pointer export*.c -c
 
 popd >/dev/null
 
 if [[ "$*" != "" ]]; then
 	echo	m68k-amigaos-gcc -shared -noixemul $* $dir/export-$out.o -o ${out}.library 
-	m68k-amigaos-gcc -shared -noixemul $* $dir/export-$out.o -o ${out}.library 
+	m68k-amigaos-gcc -shared -noixemul $* $dir/export-$out.o -o ${out}.library
 fi
