@@ -1,10 +1,12 @@
 #include <proto/mathieeesingbas.h>
 
-asm("___eqsf2: .global ___eqsf2");
-asm("___nesf2: .global ___nesf2");
-asm("___ltsf2: .global ___ltsf2");
-asm("___lesf2: .global ___lesf2");
-asm("___gtsf2: .global ___gtsf2");
-asm("___gesf2: .global ___gesf2");
+asm(".globl ___eqsf2; ___eqsf2 = ___cmpsf2");
+asm(".globl ___nesf2; ___nesf2 = ___cmpsf2");
+asm(".globl ___ltsf2; ___ltsf2 = ___cmpsf2");
+asm(".globl ___lesf2; ___lesf2 = ___cmpsf2");
+asm(".globl ___gtsf2; ___gtsf2 = ___cmpsf2");
+asm(".globl ___gesf2; ___gesf2 = ___cmpsf2");
 signed long __cmpsf2(float x,float y)
-{ return IEEESPCmp(x,y); }
+{
+	return IEEESPCmp(x,y);
+}
