@@ -345,13 +345,14 @@ int __vfprintf_total_size(FILE *stream, const char *format, va_list args) {
 			 * Scan flagc[] repeatedly until a full pass finds no match
 			 * (loop condition becomes false when i reaches the size).
 			 * --------------------------------------------------------- */
-			do
+			do {
 				for (i = 0; i < sizeof(flagc); i++)
 					if (flagc[i] == *ptr) {
 						flags |= 1 << i;
 						ptr++;
 						break;
-					} while (i < sizeof(flagc));
+					}
+			} while (i < sizeof(flagc));
 			/* ---- 2. field width: literal digits or '*' --------------- */
 			if (*ptr == '*') {
 				signed int a;
@@ -462,17 +463,27 @@ int __vfprintf_total_size(FILE *stream, const char *format, va_list args) {
 						if (type == 'o') {
 							/*
 							 * For octal with # flag:
-							 * - If precision is specified and value is 0, don't add prefix
-							 * - Otherwise add '0' prefix (including for 0 with default precision)
+					         * - If value is 0: just output "0" (no extra prefix)
+					         * - If precision is specified and value is 0: don't add prefix
+					         * - Otherwise add '0' prefix
 							 */
-							if (preci == 0x7fff || v) {
+					        if (preci == 0x7fff && v != 0) {
 								if (size1 < sizeof(buffer1))
 									buffer1[size1++] = '0';
+					        } else if (preci != 0x7fff && v != 0) {
+					            /* Precision specified and value non-zero: add prefix if needed */
+					            if (size1 < sizeof(buffer1)) {
+					                buffer1[size1++] = '0';
+					                --preci;
 							}
+					        }
+					        /* If v == 0, don't add prefix - just let the digit loop output "0" */
 						} else if ((type == 'x' || type == 'X') && v) {
 							if (size1 + 2 <= sizeof(buffer1)) {
 								buffer1[size1++] = '0';
-								buffer1[size1++] = type; /* The literal x/X prefix character. */
+					            buffer1[size1++] = type;
+					            if (preci != 0x7fff)
+					              preci -= 2;
 							}
 						}
 					}
@@ -1498,6 +1509,51 @@ int main(int argc, char **argv) {
 		printf("  (Expected ~17 significant digits with double fallback)\n");
 #endif
 	}
+
+	/* ==================================================================
+	 * SECTION 15: Integer alternate-form tests (%#hho and %#hhx)
+	 * ================================================================== */
+	printf("--- Integer alternate-form (%#hho and %#hhx) tests ---\n");
+	{
+	    unsigned char a;
+
+	    /* Test %#hho (octal with alternate form) */
+	    a = 0;
+	    TESTFMT("hho zero|0|", "%#hho", a);
+
+	    a = 1;
+	    TESTFMT("hho one|01|", "%#hho", a);
+
+	    a = 127;
+	    TESTFMT("hho 127|0177|", "%#hho", a);
+
+	    a = 255;
+	    TESTFMT("hho 255|0377|", "%#hho", a);
+
+	    /* Test %#hhx (hex with alternate form) */
+	    a = 0;
+	    TESTFMT("hhx zero|0|", "%#hhx", a);
+
+	    a = 1;
+	    TESTFMT("hhx one|0x1|", "%#hhx", a);
+
+	    a = 127;
+	    TESTFMT("hhx 127|0x7f|", "%#hhx", a);
+
+	    a = 255;
+	    TESTFMT("hhx 255|0xff|", "%#hhx", a);
+
+	    /* Test with width and precision */
+	    a = 42;
+	    TESTFMT("hho width|       052|", "%#10hho", a);
+	    TESTFMT("hhx width|      0x2a|", "%#10hhx", a);
+	    TESTFMT("hho prec|00052|", "%#.5hho", a);
+	    TESTFMT("hhx prec|0x02a|", "%#.5hhx", a);
+	    TESTFMT("hho left|052       |", "%#-10hho", a);
+	    TESTFMT("hhx left|0x2a      |", "%#-10hhx", a);
+	}
+	printf("\n");
+
 	/* ==================================================================
 	 * Additional
 	 * ================================================================== */
