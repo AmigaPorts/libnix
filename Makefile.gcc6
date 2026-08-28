@@ -34,7 +34,7 @@ endif
 # use nix13 or nix20
 ifeq (,$(lc))
 CC = $(target)-gcc
-AR = $(target)-ar
+AR = $(target)-ar --target=amiga
 AS = $(target)-as
 
 VARIANTS_TO_BUILD = info lib libb libm020 libm020bb libm020bb32 libm881 libm020bb881 libm020bb32881
@@ -169,7 +169,7 @@ install_libm060bb32:
 # install the files for the given $(kind) into $(to)
 install_one:
 	mkdir -p $(PREFIX)/$(target)/libnix/lib/$(to)
-	rsync $(kind)/*.a $(PREFIX)/$(target)/libnix/lib/$(to) --exclude=$(kind)/libstubs.a
+	rsync $(kind)/*.a $(PREFIX)/$(target)/libnix/lib/$(to)
 	find $(kind) -maxdepth 1 -name "*.o" -exec cp {} $(PREFIX)/$(target)/libnix/lib/$(to) \;
 
 # startup stuff
@@ -261,7 +261,7 @@ lib$(libname).a: $(shell find $(root)/sources/$(lib)/* -name '*.c') $(stolen) $(
 libb/libnix4.library:
 	cd libb && $(root)/preplib
 	cd libb && $(root)/mkstub libnix4 libnix.def $$(cat ofiles.txt | xargs)
-	cd libb && $(CC) -shared -noixemul $$(cat ofiles.txt | xargs) \
+	cd libb && $(CC) -fno-use-linker-plugin -shared -noixemul $$(cat ofiles.txt | xargs) \
 	libnix4-support/export*.o \
 	-o libnix4.library \
 	-Wl,-ulibVersionMajor=$(MAJOR),-ulibVersionMinor=$(MINOR),-ulibName=libnix4 \

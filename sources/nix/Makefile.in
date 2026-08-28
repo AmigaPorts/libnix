@@ -7,7 +7,7 @@ CC =		@CC@
 CPP =		@CPP@
 AS =		@AS@
 
-AR =		@AR@
+AR =		@AR@ --target=amiga
 RANLIB =	@RANLIB@
 AWK =		@AWK@
 

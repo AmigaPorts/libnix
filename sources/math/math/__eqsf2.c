@@ -7,4 +7,6 @@ asm(".globl ___lesf2; ___lesf2 = ___cmpsf2");
 asm(".globl ___gtsf2; ___gtsf2 = ___cmpsf2");
 asm(".globl ___gesf2; ___gesf2 = ___cmpsf2");
 signed long __cmpsf2(float x,float y)
-{ return IEEESPCmp(x,y); }
+{
+	return IEEESPCmp(x,y);
+}

@@ -44,15 +44,15 @@ UBYTE **ArgArrayInit(long argc, UBYTE **argv)
   else
     if ((dObj=GetDiskObject(((struct WBStartup *)argv)->sm_ArgList->wa_Name)))
       return (UBYTE **)dObj->do_ToolTypes;
+
   return NULL;
-    
 }
 
 STRPTR ArgString(UBYTE **tt, STRPTR entry, STRPTR defstr)
 {
   STRPTR str;
 
-  if (!entry || !(str=FindToolType((CONST_STRPTR*)tt,entry)))
+  if (!entry || !(str=FindToolType((STRPTR const *)tt,entry)))
     str=defstr;
   return str;
 }
@@ -61,7 +61,7 @@ LONG ArgInt(UBYTE **tt, STRPTR entry, long defval)
 {
   STRPTR str;
 
-  if (entry && (str=FindToolType((CONST_STRPTR*)tt,entry)))
+  if (entry && (str=FindToolType((STRPTR const *)tt,entry)))
     StrToLong(str,&defval);
   return defval;
 }
