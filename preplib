@@ -3,6 +3,13 @@
 # create the def file for the library
 # run it in the libb folder
 
+objdump_symbols()
+{
+  # Windows-hosted binutils write CRLF even when run from a Unix build host.
+  # Keep carriage returns out of symbol names and generated definition files.
+  m68k-amigaos-objdump -t "$@" | tr -d '\r'
+}
+
 find nix -name "*.o" \
   -not -name cxxglue.o \
   -not -name __eprintf.o  \
@@ -39,7 +46,7 @@ find math    -name "*.o" >> ofiles.txt
 rm -f all.def
 while IFS="" read -r p || [ -n "$p" ]
 do
-  m68k-amigaos-objdump -t "$p" | grep " 0000 01" | grep " .text" | xargs -0 | grep .text | awk '{print $6;}' >> all.def
+  objdump_symbols "$p" | grep " 0000 01" | grep " .text" | xargs -0 | grep .text | awk '{print $6;}' >> all.def
 done < ofiles.txt
 
 cat all.def | grep . | sort > alls.def
@@ -51,9 +58,9 @@ uniq -d alls.def
 rm -f tainted.txt
 while IFS="" read -r p || [ -n "$p" ]
 do
-  x=$(m68k-amigaos-objdump -t "$p" | grep ' 0001 86\| 0000 21')
+  x=$(objdump_symbols "$p" | grep ' 0001 86\| 0000 21')
   if [ "$x" != "" ]; then
-    m68k-amigaos-objdump -t "$p" | grep " 0000 01" | xargs -0 | awk '{print $6;}' | grep . >> tainted.txt
+    objdump_symbols "$p" | grep " 0000 01" | xargs -0 | awk '{print $6;}' | grep . >> tainted.txt
   fi
 done < ofiles.txt
 
@@ -65,9 +72,9 @@ while [ $fs != $(stat --printf="%s" tainted.txt) ]; do
   cp tainted.txt tainted2.txt
   while IFS="" read -r p || [ -n "$p" ]
   do
-    x=$(m68k-amigaos-objdump -t "$p" | grep -f tainted.txt)
+    x=$(objdump_symbols "$p" | grep -f tainted.txt)
     if [ "$x" != "" ]; then
-      m68k-amigaos-objdump -t "$p" | grep " 0000 01" | xargs -0 | awk '{print $6;}' | grep . >> tainted2.txt
+      objdump_symbols "$p" | grep " 0000 01" | xargs -0 | awk '{print $6;}' | grep . >> tainted2.txt
     fi
   done < ofiles.txt
   cat tainted2.txt | grep . | sort -u > tainted.txt
