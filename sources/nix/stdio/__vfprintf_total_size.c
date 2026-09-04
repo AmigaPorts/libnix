@@ -60,6 +60,614 @@ union _ld_bits {
 		unsigned long long mant :64;
 	} b;
 };
+
+typedef union long_double_long {
+	struct {
+		unsigned short exp;
+		unsigned short pad;
+		unsigned long middle;
+		unsigned long lower;
+	} l;
+	struct {
+		unsigned long upper;
+		unsigned long middle;
+		unsigned long lower;
+	} w;
+} LDL;
+
+static inline LDL __LDL_from_double(double d) {
+	union _d_bits u;
+	u.d = d;
+
+	LDL r;
+
+	/* Exact zero */
+	if (u.b.exp == 0 && u.b.frac0 == 0 && u.b.frac1 == 0) {
+		r.l.exp = 0;
+		r.l.pad = 0;
+		r.l.middle = 0;
+		r.l.lower = 0;
+		return r;
+	}
+
+	unsigned long long mant;
+	int exp;
+
+	if (u.b.exp == 0) {
+		/* Subnormal double: exponent = -1022, no hidden bit */
+		mant = ((unsigned long long) u.b.frac0 << 32) | u.b.frac1;
+		exp = -1022;
+
+		/* Normalize until bit 52 becomes 1 */
+		while ((mant >> 52) == 0) {
+			mant <<= 1;
+			exp--;
+		}
+	} else {
+		/* Normal double: add hidden bit */
+		mant = (1ULL << 52) | ((unsigned long long) u.b.frac0 << 32) | u.b.frac1;
+		exp = (int) u.b.exp - 1023;
+	}
+
+	/* Convert 53 bit mantissa into 64 bit Motorola format
+	 by shifting it so that bit 63 becomes the integer bit. */
+	unsigned long long mant64 = mant << (63 - 52);
+
+	r.l.exp = (unsigned short) (exp + 16383);
+	r.l.pad = 0;
+	r.l.middle = (unsigned long) (mant64 >> 32);
+	r.l.lower = (unsigned long) (mant64 & 0xFFFFFFFFUL);
+
+	return r;
+}
+
+static inline LDL __LDL_from_long_double(long double ld)
+{
+    union _ld_bits u;
+    u.ld = ld;
+
+    LDL r;
+
+    unsigned short E = u.b.exp;
+    unsigned long long mant = u.b.mant;
+
+    /* Exact zero */
+    if (E == 0 && mant == 0) {
+        r.l.exp    = 0;
+        r.l.pad    = 0;
+        r.l.middle = 0;
+        r.l.lower  = 0;
+        return r;
+    }
+
+    /* Subnormal long double: normalize mantissa */
+    if (E == 0) {
+        int exp = -16382;
+
+        /* Shift until integer bit (bit 63) becomes 1 */
+        while ((mant & 0x8000000000000000ULL) == 0) {
+            mant <<= 1;
+            exp--;
+        }
+
+        r.l.exp    = (unsigned short)(exp + 16383);
+        r.l.pad    = 0;
+        r.l.middle = (unsigned long)(mant >> 32);
+        r.l.lower  = (unsigned long)(mant & 0xFFFFFFFFUL);
+        return r;
+    }
+
+    /* Normal long double: copy fields directly */
+    r.l.exp    = E;
+    r.l.pad    = 0;
+    r.l.middle = (unsigned long)(mant >> 32);
+    r.l.lower  = (unsigned long)(mant & 0xFFFFFFFFUL);
+
+    return r;
+}
+
+/* Unpack an LDL value into an unbiased exponent and a 64-bit mantissa.
+ *
+ * Subnormals are already converted when the LDL was created, so this
+ * function performs no normalization. It simply exposes the stored
+ * exponent and mantissa in unbiased form.
+ *
+ * Motorola 80-bit rules:
+ *   exp == 0 && mant == 0   -> exact zero
+ *   exp == 0 && mant != 0   -> subnormal (already normalized by caller)
+ *   exp != 0                -> normal (explicit integer bit)
+ *
+ * Sign is not stored in LDL, so polarity is ignored.
+ */
+static inline void __LDL_unpack(const LDL *x,
+                                int *exp,
+                                unsigned long long *mant)
+{
+    unsigned short E = x->l.exp;
+
+    /* Combine the 64-bit mantissa */
+    unsigned long long m =
+        ((unsigned long long)x->l.middle << 32) |
+         (unsigned long long)x->l.lower;
+
+    /* Exact zero */
+    if (E == 0 && m == 0) {
+        *exp  = 0;
+        *mant = 0;
+        return;
+    }
+
+    /* Subnormal: exp == 0 but mant != 0
+     * Caller already normalized the mantissa when constructing LDL.
+     * We simply return the unbiased exponent for subnormals.
+     */
+    if (E == 0) {
+        *exp  = -16382;
+        *mant = m;
+        return;
+    }
+
+    /* Normal number: unbiased exponent = E - 16383 */
+    *exp  = (int)E - 16383;
+    *mant = m;
+}
+
+/* Pack an unbiased exponent and a 64-bit mantissa into an LDL value.
+ *
+ * Assumptions:
+ * - Sign is not used.
+ * - Subnormals are already converted by the caller.
+ * - Mantissa already contains the explicit integer bit (bit 63).
+ * - Only zero and normal numbers need to be packed.
+ *
+ * Motorola 80-bit rules:
+ *   Zero: exp = 0, mant = 0
+ *   Normal: exp_raw = exp + 16383
+ *           mant is stored as 64-bit integer with explicit MSB
+ */
+static inline LDL __LDL_pack(int exp, unsigned long long mant)
+{
+    LDL r;
+
+    /* Zero */
+    if (mant == 0) {
+        r.l.exp    = 0;
+        r.l.pad    = 0;
+        r.l.middle = 0;
+        r.l.lower  = 0;
+        return r;
+    }
+
+    /* Normal number: apply bias */
+    unsigned short E = (unsigned short)(exp + 16383);
+
+    r.l.exp    = E;
+    r.l.pad    = 0;
+    r.l.middle = (unsigned long)(mant >> 32);
+    r.l.lower  = (unsigned long)(mant & 0xFFFFFFFFUL);
+
+    return r;
+}
+
+/* Multiply two LDL values (Motorola 80-bit extended format, signless).
+ *
+ * This routine performs a full 64x64 -> 128-bit mantissa multiply,
+ * normalizes the product so that the integer bit is in position 63,
+ * adds the unbiased exponents, and rounds the result to nearest-even.
+ *
+ * Assumptions:
+ * - LDL contains only normal numbers or zero. Subnormals have already
+ *   been converted by the LDL creation functions.
+ * - Mantissas always contain the explicit integer bit (bit 63).
+ * - No sign bit is stored or processed.
+ * - Underflow cannot occur because all operations stay within the
+ *   numeric range [0 .. 10). Therefore no exponent shifting or
+ *   subnormal generation is required.
+ * - Overflow into INF is not required because the caller guarantees
+ *   that the exponent stays within the valid Motorola 80-bit range.
+ *
+ * Returns:
+ *   A new LDL value representing (a * b) in Motorola 80-bit format.
+ */
+
+static inline LDL __LDL_mul(LDL a, LDL b)
+{
+    int exp_a, exp_b, exp_r;
+    unsigned long long mant_a, mant_b;
+
+    unsigned long long hi, lo;
+    unsigned long long mant_r;
+    unsigned int guard = 0, sticky = 0;
+
+    __LDL_unpack(&a, &exp_a, &mant_a);
+    __LDL_unpack(&b, &exp_b, &mant_b);
+
+    /* Zero */
+    if (mant_a == 0 || mant_b == 0)
+        return __LDL_pack(0, 0);
+
+    /* Add exponents */
+    exp_r = exp_a + exp_b;
+
+    /* 64x64 -> 128-bit multiply */
+    unsigned int a_lo = (unsigned int)mant_a;
+    unsigned int a_hi = (unsigned int)(mant_a >> 32);
+    unsigned int b_lo = (unsigned int)mant_b;
+    unsigned int b_hi = (unsigned int)(mant_b >> 32);
+
+    unsigned long long p0 = (unsigned long long)a_lo * b_lo;
+    unsigned long long p1 = (unsigned long long)a_lo * b_hi;
+    unsigned long long p2 = (unsigned long long)a_hi * b_lo;
+    unsigned long long p3 = (unsigned long long)a_hi * b_hi;
+
+    unsigned long long mid =
+        (p0 >> 32) +
+        (p1 & 0xFFFFFFFFULL) +
+        (p2 & 0xFFFFFFFFULL);
+
+    hi = p3 + (p1 >> 32) + (p2 >> 32) + (mid >> 32);
+    lo = (mid << 32) | (p0 & 0xFFFFFFFFULL);
+
+    /* Normalize product so that mant_r has integer bit at 63 */
+    if (hi & 0x8000000000000000ULL) {
+        mant_r = hi;
+        guard  = (unsigned int)(lo >> 63);
+        sticky = (lo & 0x7FFFFFFFFFFFFFFFULL) != 0;
+        exp_r++;
+    } else {
+        mant_r = (hi << 1) | (lo >> 63);
+        {
+            unsigned long long lo_shifted = lo << 1;
+            guard  = (unsigned int)(lo_shifted >> 63);
+            sticky = (lo_shifted & 0x7FFFFFFFFFFFFFFFULL) != 0;
+        }
+    }
+
+    /* Round to nearest even */
+    if (guard && (sticky || (mant_r & 1ULL))) {
+        mant_r++;
+        if (mant_r == 0) {
+            mant_r = 0x8000000000000000ULL;
+            exp_r++;
+        }
+    }
+
+    return __LDL_pack(exp_r, mant_r);
+}
+
+/* Multiply an LDL value by 10.0 (Motorola 80-bit extended format, signless).
+ *
+ * This routine implements a fast multiply-by-10 using the identity:
+ *     10 = 8 + 2 = 8 + (1/4 * 8)
+ * which allows the mantissa to be scaled using only shifts and adds.
+ *
+ * Steps:
+ *   1. Check for zero (mantissa == 0).
+ *   2. Compute x/4 by performing a 64-bit right shift by 2.
+ *   3. Add x + x/4 using 64-bit mantissa arithmetic.
+ *   4. Detect 64-bit overflow of the mantissa and renormalize by
+ *      shifting right one bit and incrementing the exponent.
+ *   5. Multiply the result by 8 by adding 3 to the exponent.
+ *
+ * Assumptions:
+ *   - LDL contains only normal numbers or zero. Subnormals have already
+ *     been converted by the LDL creation functions.
+ *   - Mantissas always contain the explicit integer bit (bit 63).
+ *   - No sign bit is stored or processed.
+ *   - Underflow cannot occur because all operations stay within the
+ *     numeric range [0 .. 10).
+ *   - Overflow into INF is not required because the caller guarantees
+ *     that the exponent stays within the valid Motorola 80-bit range.
+ *
+ * Returns:
+ *   A new LDL value representing (x * 10.0) in Motorola 80-bit format.
+ */
+static inline LDL __LDL_mul_10(LDL x)
+{
+    LDL r = x;
+
+    /* Zero check */
+    if (x.l.middle == 0 && x.l.lower == 0)
+        return __LDL_pack(0, 0);
+
+    unsigned long hi = x.l.middle;
+    unsigned long lo = x.l.lower;
+
+    /* 64-bit right shift by 2 (x / 4) */
+    unsigned long hi2 = hi >> 2;
+    unsigned long lo2 = (lo >> 2) | (hi << 30);
+
+    /* 64-bit addition: (x + x/4) */
+    unsigned long res_lo = lo + lo2;
+    unsigned long carry  = (res_lo < lo);
+    unsigned long res_hi = hi + hi2 + carry;
+
+    /* Check 64-bit overflow (bit 63 set) */
+    if (res_hi < hi || (res_hi == hi && hi2 > 0)) {
+        /* Shift right 1 bit to re-normalize */
+        res_lo = (res_lo >> 1) | (res_hi << 31);
+        res_hi = (res_hi >> 1) | 0x80000000;
+        r.l.exp += 1;
+    }
+
+    /* Scale by 8 (add 3 to exponent) */
+    r.l.exp += 3;
+
+    r.l.middle = res_hi;
+    r.l.lower  = res_lo;
+
+    return r;
+}
+
+static inline void __LDL_round_to_double(LDL *val) {
+    /* zero -> do nothinh */
+    if (val->l.exp == 0 || val->l.middle == 0) {
+        return;
+    }
+
+    /* Bit 10 in val->l.lower is bit 54*/
+    uint32_t round_bit = (val->l.lower >> 10) & 1U;
+
+    /* zero masked bits*/
+    val->l.lower &= ~0x7FFU;
+
+    // always round up yields best printing
+    {
+        /* add 1  (2^11 = 0x800) */
+        uint64_t sum_l = (uint64_t)val->l.lower + 0x880ULL;
+        val->l.lower = (uint32_t)sum_l;
+
+        /* add carry */
+        uint64_t sum_m = (uint64_t)val->l.middle + (sum_l >> 32);
+        val->l.middle = (uint32_t)sum_m;
+
+        /* overflow */
+        if (sum_m > 0xFFFFFFFFULL) {
+            val->l.middle >>= 1;
+            val->l.middle |= 0x80000000U;
+            val->l.exp++;
+        }
+    }
+}
+
+/* Convert an unsigned long integer into an LDL value
+ * (Motorola 80-bit extended format, signless).
+ *
+ * This routine constructs a normalized LDL value from an integer z.
+ * The conversion follows these steps:
+ *
+ *   1. Zero input produces an exact LDL zero.
+ *   2. Compute the unbiased exponent as floor(log2(z)).
+ *      Since z is small, this is done using simple range checks.
+ *   3. Normalize the integer so that the mantissa has its integer bit
+ *      at position 63. For small integers this is achieved by shifting
+ *      z left by (31 - exp) to form the upper 32 bits of the mantissa.
+ *   4. Lower 32 bits of the mantissa are set to zero.
+ *   5. The biased exponent is stored as (exp + 16383).
+ *
+ * Assumptions:
+ *   - z fits into 32 bits.
+ *   - No sign bit is stored or processed.
+ *   - No subnormal or underflow handling is required because z > 0
+ *     always produces a normal LDL value.
+ *
+ * Returns:
+ *   An LDL value representing (unsigned long) z.
+ */
+static inline LDL __LDL_from_uint(unsigned long z)
+{
+    LDL x;
+
+    /* Zero -> exact LDL zero */
+    if (z == 0) {
+        x.l.exp    = 0;
+        x.l.pad    = 0;
+        x.l.middle = 0;
+        x.l.lower  = 0;
+        return x;
+    }
+
+    /* Compute unbiased exponent = floor(log2(z)) */
+    int exp;
+    if (z >= 8)
+        exp = 3;
+    else if (z >= 4)
+        exp = 2;
+    else if (z >= 2)
+        exp = 1;
+    else
+        exp = 0;
+
+    /* Normalize integer:
+     * mantissa = z / 2^exp
+     * middle = mantissa * 2^31
+     *        = z << (31 - exp)
+     */
+    unsigned long middle = z << (31 - exp);
+
+    x.l.exp    = (unsigned short)(exp + 16383);
+    x.l.pad    = 0;
+    x.l.middle = middle;
+    x.l.lower  = 0;
+
+    return x;
+}
+
+/* Subtract an unsigned integer z from an LDL value a
+ * (Motorola 80-bit extended format, signless).
+ *
+ * This routine performs a mantissa-level subtraction:
+ *     result = a - z
+ *
+ * Steps:
+ *   1. Convert z into an LDL value using __LDL_from_uint().
+ *   2. Subtract the 64-bit mantissas (lower word is always zero for z).
+ *   3. If the result mantissa loses its integer bit, renormalize by
+ *      left-shifting until bit 63 becomes set and decrementing the
+ *      exponent accordingly.
+ *
+ * Assumptions:
+ *   - a is a normal LDL value or zero.
+ *   - z is in the range [0 .. 9], so exponent differences are small.
+ *   - No sign bit is stored or processed.
+ *   - No subnormal handling is required because LDL values are already
+ *     normalized when created.
+ *
+ * Returns:
+ *   A new LDL value representing (a - z).
+ */
+static inline LDL __LDL_sub_uint(LDL a, unsigned long z)
+{
+    LDL xa = a;
+    LDL xz;
+    LDL xr;
+
+    /* z == 0 -> return a unchanged */
+    if (z == 0)
+        return a;
+
+    /* Convert integer z into LDL */
+    xz = __LDL_from_uint(z);
+
+    unsigned long mant_a_hi = xa.l.middle;
+    unsigned long mant_a_lo = xa.l.lower;
+
+    unsigned long mant_z_hi = xz.l.middle;
+    /* mant_z_lo == 0 */
+
+    /* Subtract mantissas */
+    unsigned long res_lo = mant_a_lo; /* minus zero */
+    unsigned long res_hi = mant_a_hi - mant_z_hi;
+
+    /* Renormalize if MSB of res_hi is not set */
+    if ((res_hi >> 31) == 0) {
+        int n = __builtin_clz(res_hi); /* shift count to restore MSB at bit 31 */
+
+        if (n > 0) {
+            if (n < 32) {
+                res_hi = (res_hi << n) | (res_lo >> (32 - n));
+                res_lo <<= n;
+            } else {
+                res_hi = res_lo << (n - 32);
+                res_lo = 0;
+            }
+            xa.l.exp -= n;
+        }
+    }
+
+    xr.l.exp    = xa.l.exp;
+    xr.l.pad    = 0;
+    xr.l.middle = res_hi;
+    xr.l.lower  = res_lo;
+
+    return xr;
+}
+
+/* Convert an LDL value into an unsigned integer in the range [0..9].
+ *
+ * This routine extracts the integer part of an LDL value by using the
+ * unbiased exponent and the normalized mantissa. The mantissa always
+ * contains the explicit integer bit at position 63 (bit 31 of 'middle').
+ *
+ * Steps:
+ *   1. Compute the unbiased exponent: exp = raw_exp - 16383.
+ *   2. If exp < 0, the value is < 1.0, so return 0.
+ *   3. If exp > 3, the value is >= 16.0, but the caller guarantees
+ *      the range is [0..10), so clamp to 9.
+ *   4. Compute integer = floor(mantissa * 2^exp) by shifting the
+ *      upper 32 mantissa bits right by (31 - exp).
+ *   5. Clamp the result to 9.
+ *
+ * Assumptions:
+ *   - LDL contains only normal numbers or zero.
+ *   - No sign bit is stored or processed.
+ *   - No subnormal handling is required.
+ *   - The caller guarantees the numeric range [0..10).
+ *
+ * Returns:
+ *   Integer in the range [0..9].
+ */
+static inline int __LDL_fix_uint(LDL a)
+{
+    unsigned short exp_raw = a.l.exp;
+    unsigned long  mid     = a.l.middle;
+
+    /* Unbiased exponent */
+    int exp = (int)exp_raw - 16383;
+
+    /* < 1.0 -> integer = 0 */
+    if (exp < 0)
+        return 0;
+
+
+    /* >= 16.0 -> clamp to 9 */
+    if (exp > 3)
+        return 9;
+
+
+    /* integer = floor( mantissa * 2^exp )
+     * mantissa = 1.xxx...
+     * integer_bit = mid >> 31
+     * more bits = mid >> (31 - exp)
+     */
+    int z = (int)(mid >> (31 - exp));
+
+    /* clamp to 9 */
+    return (z > 9) ? 9 : z;
+}
+
+/* Compare an LDL value against a hardcoded Motorola 80-bit constant.
+ *
+ * The comparison is performed lexicographically:
+ *   1. Compare exponent.
+ *   2. If equal, compare upper 32 mantissa bits.
+ *   3. If equal, compare lower 32 mantissa bits.
+ *
+ * Assumptions:
+ *   - LDL is signless and already normalized.
+ *   - No NaN, INF, or subnormal handling is required.
+ *   - Constants are provided in raw Motorola 80-bit format.
+ *
+ * Returns:
+ *   -1  if a < constant
+ *    0  if a == constant
+ *    1  if a > constant
+ */
+static inline int __LDL_cmp_const(const LDL *a,
+                                  unsigned short bexp,
+                                  unsigned long  bmid,
+                                  unsigned long  blow)
+{
+    /* Compare exponent */
+    if (a->l.exp != bexp)
+        return (a->l.exp < bexp) ? -1 : 1;
+
+    /* Compare middle mantissa */
+    if (a->l.middle != bmid)
+        return (a->l.middle < bmid) ? -1 : 1;
+
+    /* Compare lower mantissa */
+    if (a->l.lower != blow)
+        return (a->l.lower < blow) ? -1 : 1;
+
+    return 0;
+}
+
+static inline int __LDL_cmp_10(const LDL *a)
+{
+    return __LDL_cmp_const(a, 0x4000, 0xA0000000UL, 0x00000000UL);
+}
+
+static inline int __LDL_cmp_5(const LDL *a)
+{
+    return __LDL_cmp_const(a, 0x4001, 0xA0000000UL, 0x00000000UL);
+}
+
+static inline int __LDL_cmp_1(const LDL *a)
+{
+    return __LDL_cmp_const(a, 0x3FFF, 0x80000000UL, 0x00000000UL);
+}
+
 /* Compile-time sanity checks for the assumed layouts (GCC).            */
 #if defined(__GNUC__)
 typedef char __chk_d_sz[(sizeof(double) == 8) ? 1 : -1];
@@ -108,71 +716,17 @@ static inline int _ld_isinf(union _ld_bits u) {
 static inline int _ld_iszero(union _ld_bits u) {
 	return u.b.exp == 0 && u.b.mant == 0;
 }
-/* --------------- value-taking wrappers ----------------------------- */
-static inline int signbit_d(double v) {
-	union _d_bits u;
-	u.d = v;
-	return _d_signbit(u);
-}
-static inline int isnan_d(double v) {
-	union _d_bits u;
-	u.d = v;
-	return _d_isnan(u);
-}
-static inline int isinf_d(double v) {
-	union _d_bits u;
-	u.d = v;
-	return _d_isinf(u);
-}
-static inline int iszero_d(double v) {
-	union _d_bits u;
-	u.d = v;
-	return _d_iszero(u);
-}
-static inline int signbit_ld(long double v) {
-	union _ld_bits u;
-	u.ld = v;
-	return _ld_signbit(u);
-}
-static inline int isnan_ld(long double v) {
-	union _ld_bits u;
-	u.ld = v;
-	return _ld_isnan(u);
-}
-static inline int isinf_ld(long double v) {
-	union _ld_bits u;
-	u.ld = v;
-	return _ld_isinf(u);
-}
-static inline int iszero_ld(long double v) {
-	union _ld_bits u;
-	u.ld = v;
-	return _ld_iszero(u);
-}
 
-/* Check if GCC version is 16 or higher.  */
-#if defined(__GNUC__) && (__GNUC__ >= 16)
-#define USE_LDOUBLE_MATH 1
-#else
-#define USE_LDOUBLE_MATH 0
-#endif
-
-#if USE_LDOUBLE_MATH
 /* Full long double precision math */
-typedef long double work_float_t;
-#define WORK_0_1    (0.1L  - 0.0000000000L)
-#define WORK_10     (10.0L - 0.0000000000L)
-#define WORK_5      (5.0L  - 0.0000000001L)
-#else
-/* Fallback: double precision math for older GCC */
-typedef double work_float_t;
-#define WORK_0_1    0.1
-#define WORK_10     10.0
-#define WORK_5      5.0
-#endif
+typedef LDL work_float_t;
+static const LDL WORK_0_1 = {
+    .l = { 16383 + (-4), 0, 0xCCCCCCCCUL, 0xCCCCCCCCUL }
+};
+
 /* ======================================================================
  * SECTION 3: plumbing, flags, constants
  * ==================================================================== */
+
 #ifdef FULL_SPECIFIERS
 extern unsigned char *__decimalpoint;
 #endif
@@ -203,83 +757,119 @@ extern int __vfprintf_total_size(FILE *stream, const char *fmt, va_list args);
 #define HAS_PRECI      32       /* '.' seen */
 static const char flagc[] = { '#', '0', '-', ' ', '+' };
 extern unsigned __ulldivus(unsigned long long *llp, unsigned short n);
-/*
- * Compute 10^n accurately using a precomputed table
- * of powers of 10 at exponents that are powers of two.
+
+/* Compute 10^n as an LDL value using precomputed 10^(2^bit) tables.
  *
- * For GCC >= 16, returns long double for full precision.
- * For older GCC, returns double (long double math is broken on m68k).
+ * This routine builds 10^n by decomposing |n| into its binary
+ * representation and multiplying an LDL accumulator by 10^(2^bit)
+ * for each set bit. Positive n uses the pow10_pos_table (10^(+2^bit)),
+ * negative n uses the pow10_neg_table (10^(-2^bit)).
+ *
+ * Steps:
+ *   1. Handle n == 0 by returning exactly 1.0 in LDL format.
+ *   2. Initialize result to 1.0 (LDL with biased exponent 0x3FFF and
+ *      mantissa 1.0).
+ *   3. Take exp = |n| and iterate over its bits:
+ *        - For each bit set, multiply result by the corresponding
+ *          entry in pow10_pos_table or pow10_neg_table.
+ *        - Shift exp right and increment bit index.
+ *   4. Return the accumulated LDL value.
+ *
+ * Assumptions:
+ *   - __LDL_mul implements normalized Motorola 80-bit multiplication
+ *     without subnormal handling.
+ *   - pow10_pos_table and pow10_neg_table contain correctly biased
+ *     exponents (16383 + binexp) and normalized mantissas.
+ *
+ * Returns:
+ *   LDL value representing 10^n in Motorola 80-bit extended format.
  */
-#if USE_LDOUBLE_MATH
-static long double pow10_ld(int n)
-{
-    static const long double pow10_table[] = {
-        1e1L,          /* 10^1   */
-        1e2L,          /* 10^2   */
-        1e4L,          /* 10^4   */
-        1e8L,          /* 10^8   */
-        1e16L,         /* 10^16  */
-        1e32L,         /* 10^32  */
-        1e64L,         /* 10^64  */
-        1e128L,        /* 10^128 */
-        1e256L,        /* 10^256 */
-        1e512L,        /* 10^512 */
-        1e1024L,       /* 10^1024 */
-        1e2048L,       /* 10^2048 */
-        1e4096L,       /* 10^4096 */
-    };
-    long double result = 1.0L;
-    int exp = n < 0 ? -n : n;
-    int bit = 0;
-    if (n == 0)
-        return 1.0L;
-    while (exp > 0) {
-        if (exp & 1) {
-            if (n < 0)
-                result /= pow10_table[bit];
-            else
-                result *= pow10_table[bit];
-        }
-        exp >>= 1;
-        bit++;
-    }
-    return result;
-}
-#else
-/* Fallback for older GCC: use double precision */
-static double pow10_ld(int n) {
-	static const double pow10_table[] = { 1e1, /* 10^1   */
-	1e2, /* 10^2   */
-	1e4, /* 10^4   */
-	1e8, /* 10^8   */
-	1e16, /* 10^16  */
-	1e32, /* 10^32  */
-	1e64, /* 10^64  */
-	1e128, /* 10^128 */
-	1e256, /* 10^256 */
-	1e512, /* 10^512 */
-	1e1024, /* 10^1024 */
-	1e2048, /* 10^2048 */
-	1e4096, /* 10^4096 */
+static LDL pow10_ld(int n) {
+	/* 10^(2^bit) */
+	static const LDL pow10_pos_table[] = {
+	    /* 10^1 */
+	    { .l = { 16383 + 3,     0, 0xA0000000UL, 0x00000000UL } },
+	    /* 10^2 */
+	    { .l = { 16383 + 6,     0, 0xC8000000UL, 0x00000000UL } },
+	    /* 10^4 */
+	    { .l = { 16383 + 13,    0, 0x9C400000UL, 0x00000000UL } },
+	    /* 10^8 */
+	    { .l = { 16383 + 26,    0, 0xBEBC2000UL, 0x00000000UL } },
+	    /* 10^16 */
+	    { .l = { 16383 + 53,    0, 0x8E1BC9BFUL, 0x04000000UL } },
+	    /* 10^32 */
+	    { .l = { 16383 + 106,   0, 0x9DC5ADA8UL, 0x2B70B59DUL } },
+	    /* 10^64 */
+	    { .l = { 16383 + 212,   0, 0xC2781F49UL, 0xFFCFA6D5UL } },
+	    /* 10^128 */
+	    { .l = { 16383 + 425,   0, 0x93BA47C9UL, 0x80E98CDFUL } },
+	    /* 10^256 */
+	    { .l = { 16383 + 850,   0, 0xAA7EEBFBUL, 0x9DF9DE8DUL } },
+	    /* 10^512 */
+	    { .l = { 16383 + 1700,  0, 0xE319A0AEUL, 0xA60E91C6UL } },
+	    /* 10^1024 */
+	    { .l = { 16383 + 3401,  0, 0xC9767586UL, 0x81750C17UL } },
+	    /* 10^2048 */
+	    { .l = { 16383 + 6803,  0, 0x9E8B3B5DUL, 0xC53D5DE4UL } },
+	    /* 10^4096 */
+	    { .l = { 16383 + 13606, 0, 0xC4605202UL, 0x8A20979AUL } }
 	};
-	double result = 1.0;
-	int exp = n < 0 ? -n : n;
+
+	/* 1 / 10^(2^bit) */
+	static const LDL pow10_neg_table[] = {
+	    /* 10^-1 */
+	    { .l = { 16383 + (-4),     0, 0xCCCCCCCCUL, 0xCCCCCCCCUL } },
+	    /* 10^-2 */
+	    { .l = { 16383 + (-7),     0, 0xA3D70A3DUL, 0x70A3D70AUL } },
+	    /* 10^-4 */
+	    { .l = { 16383 + (-14),    0, 0xD1B71758UL, 0xE219652BUL } },
+	    /* 10^-8 */
+	    { .l = { 16383 + (-27),    0, 0xABCC7711UL, 0x8461CEFCUL } },
+	    /* 10^-16 */
+	    { .l = { 16383 + (-54),    0, 0xE69594BEUL, 0xC44DE15BUL } },
+	    /* 10^-32 */
+	    { .l = { 16383 + (-107),   0, 0xCFB11EADUL, 0x453994BAUL } },
+	    /* 10^-64 */
+	    { .l = { 16383 + (-213),   0, 0xA87FEA27UL, 0xA539E9A5UL } },
+	    /* 10^-128 */
+	    { .l = { 16383 + (-426),   0, 0xDDD0467CUL, 0x64BCE4A0UL } },
+	    /* 10^-256 */
+	    { .l = { 16383 + (-851),   0, 0xC0314325UL, 0x637A1939UL } },
+	    /* 10^-512 */
+	    { .l = { 16383 + (-1701),  0, 0x9049EE32UL, 0xDB23D21CUL } },
+	    /* 10^-1024 */
+	    { .l = { 16383 + (-3402),  0, 0xA2A682A5UL, 0xDA57C0BDUL } },
+	    /* 10^-2048 */
+	    { .l = { 16383 + (-6804),  0, 0xCEAE534FUL, 0x34362DE4UL } },
+	    /* 10^-4096 */
+	    { .l = { 16383 + (-13607), 0, 0xA6DD04C8UL, 0xD2CE9FDEUL } }
+	};
+
+
+	LDL result = { .l = { 0x3FFF, 0, 0x80000000UL, 0x00000000UL } };
+
+	int exp = (n < 0) ? -n : n;
 	int bit = 0;
-	if (n == 0)
-		return 1.0;
+
+	if (n == 0) {
+		LDL one = { .l = { 0x3FFF, 0, 0x80000000UL, 0x00000000UL } };
+		return one;
+	}
+
 	while (exp > 0) {
 		if (exp & 1) {
 			if (n < 0)
-				result /= pow10_table[bit];
+				result = __LDL_mul(result, pow10_neg_table[bit]);
 			else
-				result *= pow10_table[bit];
+				result = __LDL_mul(result, pow10_pos_table[bit]);
 		}
 		exp >>= 1;
 		bit++;
 	}
+
 	return result;
 }
-#endif
+
 /*
  * How many significant decimal digits each source format genuinely
  * carries.  Digit extraction goes this deep (plus one guard digit) so
@@ -296,6 +886,7 @@ static double pow10_ld(int n) {
 #else
 # define LD_DIGS 21                     /* m68k extended fallback          */
 #endif
+
 /* log10(2) as a 64-bit ratio, used to seed the decimal exponent
  * estimate directly from the binary exponent field.                    */
 #define LOG2_10_NUM  3010299956639811952ULL
@@ -463,27 +1054,27 @@ int __vfprintf_total_size(FILE *stream, const char *format, va_list args) {
 						if (type == 'o') {
 							/*
 							 * For octal with # flag:
-					         * - If value is 0: just output "0" (no extra prefix)
-					         * - If precision is specified and value is 0: don't add prefix
-					         * - Otherwise add '0' prefix
+							 * - If value is 0: just output "0" (no extra prefix)
+							 * - If precision is specified and value is 0: don't add prefix
+							 * - Otherwise add '0' prefix
 							 */
-					        if (preci == 0x7fff && v != 0) {
+							if (preci == 0x7fff && v != 0) {
 								if (size1 < sizeof(buffer1))
 									buffer1[size1++] = '0';
-					        } else if (preci != 0x7fff && v != 0) {
-					            /* Precision specified and value non-zero: add prefix if needed */
-					            if (size1 < sizeof(buffer1)) {
-					                buffer1[size1++] = '0';
-					                --preci;
+							} else if (preci != 0x7fff && v != 0) {
+								/* Precision specified and value non-zero: add prefix if needed */
+								if (size1 < sizeof(buffer1)) {
+									buffer1[size1++] = '0';
+									--preci;
+								}
 							}
-					        }
-					        /* If v == 0, don't add prefix - just let the digit loop output "0" */
+							/* If v == 0, don't add prefix - just let the digit loop output "0" */
 						} else if ((type == 'x' || type == 'X') && v) {
 							if (size1 + 2 <= sizeof(buffer1)) {
 								buffer1[size1++] = '0';
-					            buffer1[size1++] = type;
-					            if (preci != 0x7fff)
-					              preci -= 2;
+								buffer1[size1++] = type;
+								if (preci != 0x7fff)
+									preci -= 2;
 							}
 						}
 					}
@@ -563,28 +1154,15 @@ int __vfprintf_total_size(FILE *stream, const char *format, va_list args) {
 				char sign = 0;
 				const char *infnan = 0;
 				char pad = ((flags & ZEROPADFLAG) && !(flags & LALIGNFLAG)) ? '0' : ' ';
-#if USE_LDOUBLE_MATH
                 const int MEANINGFUL_DIGITS = is_ld ? LD_DIGS : D_DIGS;
-#else
-				const int MEANINGFUL_DIGITS = D_DIGS;
-#endif
 				/* -------- S1: load + make magnitude + specials ------- */
 				if (is_ld) {
 					long double raw_ld = va_arg(args, long double);
 					lu.ld = raw_ld;
-#if USE_LDOUBLE_MATH
-                    ld_val = raw_ld;             /* full precision        */
-#else
-					ld_val = (double) raw_ld; /* fall back to double   */
-#endif
+                    ld_val = __LDL_from_long_double(raw_ld);   /* ignore sign*/
 					if (_ld_signbit(lu)) {
 						sign = '-';
 						lu.b.sign = 0; /* erase sign field      */
-#if USE_LDOUBLE_MATH
-                        ld_val    = lu.ld;       /* reload operand        */
-#else
-						ld_val = (double) lu.ld;
-#endif
 					} else if (flags & SIGNFLAG)
 						sign = '+';
 					else if (flags & BLANKFLAG)
@@ -597,11 +1175,10 @@ int __vfprintf_total_size(FILE *stream, const char *format, va_list args) {
 					}
 				} else {
 					d.d = va_arg(args, double);
-					ld_val = d.d;
+					ld_val = __LDL_from_double(d.d);
 					if (_d_signbit(d)) {
 						d.b.sign = 0;
 						sign = '-';
-						ld_val = d.d;
 					} else if (flags & SIGNFLAG)
 						sign = '+';
 					else if (flags & BLANKFLAG)
@@ -630,20 +1207,25 @@ int __vfprintf_total_size(FILE *stream, const char *format, va_list args) {
 								normalized_exp = -normalized_exp;
 						}
 						/* Use pow10_ld() for accurate initial scaling */
-						if (normalized_exp >= 0) {
-							ld_val /= pow10_ld(normalized_exp);
-						} else {
-							ld_val *= pow10_ld(-normalized_exp);
-						}
+					    ld_val = __LDL_mul(ld_val, pow10_ld(-normalized_exp));
+
+					    if (!is_ld)
+					    	__LDL_round_to_double(&ld_val);
+
 						/* Fine-tune to [1,10) with minimal iterations */
-						while (ld_val >= WORK_10 && normalized_exp < 5000) {
-							ld_val *= WORK_0_1;
-							++normalized_exp;
+						while (__LDL_cmp_10(&ld_val) >= 0 && normalized_exp < 5000) {
+						    ld_val = __LDL_mul(ld_val, WORK_0_1);
+						    ++normalized_exp;
 						}
-						while (ld_val < 1.0 && normalized_exp > -5000) {
-							ld_val *= WORK_10;
-							--normalized_exp;
+
+						while (__LDL_cmp_1(&ld_val) < 0 && normalized_exp > -5000) {
+						    ld_val = __LDL_mul_10(ld_val);
+						    --normalized_exp;
 						}
+
+					    if (!is_ld)
+					    	__LDL_round_to_double(&ld_val);
+
 						exponent = (short) normalized_exp;
 					} else {
 						exponent = 0;
@@ -725,19 +1307,19 @@ int __vfprintf_total_size(FILE *stream, const char *format, va_list args) {
 								digits_to_compute = MEANINGFUL_DIGITS;
 							}
 							/* Use ld_val for digit extraction, not d.d */
-							work_float_t work = ld_val;
 							buffer[0] = '0';
 							startPos = pos = 1;
+
 							/* Compute digits using ld_val */
 							for (; pos <= digits_to_compute && pos < sizeof(buffer); ++pos) {
-								int z = (int) work;
+								unsigned int z = __LDL_fix_uint(ld_val);
 								if (z < 0) z = 0;
 								else if (z > 9) z = 9;
 								buffer[pos] = '0' + z;
-								work = (work - z) * WORK_10;
+								ld_val = __LDL_mul_10(__LDL_sub_uint(ld_val, z));
 							}
 							/* Perform rounding */
-							if (work >= WORK_5 - 0.0000001) {
+							if (__LDL_cmp_5(&ld_val) >= 0) {
 								int tpos = pos - 1;
 								while (tpos > 0) {
 									if (++buffer[tpos] <= '9')
