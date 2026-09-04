@@ -162,6 +162,7 @@ const char * __sys_errlist__data[] = {
 const char ** __sys_errlist = __sys_errlist__data;
 
 #define sys_nerr (sizeof(__sys_errlist__data)/sizeof(__sys_errlist__data[0]))
+const int __sys_nerr = sys_nerr;
 extern int
 #ifdef __posix_threads__
 __thread
