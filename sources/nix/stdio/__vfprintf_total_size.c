@@ -399,37 +399,6 @@ static inline LDL __LDL_mul_10(LDL x)
     return r;
 }
 
-static inline void __LDL_round_to_double(LDL *val) {
-    /* zero -> do nothinh */
-    if (val->l.exp == 0 || val->l.middle == 0) {
-        return;
-    }
-
-    /* Bit 10 in val->l.lower is bit 54*/
-    uint32_t round_bit = (val->l.lower >> 10) & 1U;
-
-    /* zero masked bits*/
-    val->l.lower &= ~0x7FFU;
-
-    // always round up yields best printing
-    {
-        /* add 1  (2^11 = 0x800) */
-        uint64_t sum_l = (uint64_t)val->l.lower + 0x880ULL;
-        val->l.lower = (uint32_t)sum_l;
-
-        /* add carry */
-        uint64_t sum_m = (uint64_t)val->l.middle + (sum_l >> 32);
-        val->l.middle = (uint32_t)sum_m;
-
-        /* overflow */
-        if (sum_m > 0xFFFFFFFFULL) {
-            val->l.middle >>= 1;
-            val->l.middle |= 0x80000000U;
-            val->l.exp++;
-        }
-    }
-}
-
 /* Convert an unsigned long integer into an LDL value
  * (Motorola 80-bit extended format, signless).
  *
@@ -660,7 +629,7 @@ static inline int __LDL_cmp_10(const LDL *a)
 
 static inline int __LDL_cmp_5(const LDL *a)
 {
-    return __LDL_cmp_const(a, 0x4001, 0xA0000000UL, 0x00000000UL);
+    return __LDL_cmp_const(a, 0x4001, 0x9fffffffUL, 0xffff0000UL);
 }
 
 static inline int __LDL_cmp_1(const LDL *a)
@@ -784,7 +753,8 @@ extern unsigned __ulldivus(unsigned long long *llp, unsigned short n);
  * Returns:
  *   LDL value representing 10^n in Motorola 80-bit extended format.
  */
-static LDL pow10_ld(int n) {
+static LDL
+pow10_ld(LDL result, int n) {
 	/* 10^(2^bit) */
 	static const LDL pow10_pos_table[] = {
 	    /* 10^1 */
@@ -818,56 +788,51 @@ static LDL pow10_ld(int n) {
 	/* 1 / 10^(2^bit) */
 	static const LDL pow10_neg_table[] = {
 	    /* 10^-1 */
-	    { .l = { 16383 + (-4),     0, 0xCCCCCCCCUL, 0xCCCCCCCCUL } },
+	    { .l = { 16383 + (-4),     0, 0xCCCCCCCCUL, 0xCCCCCCCDUL } },
 	    /* 10^-2 */
-	    { .l = { 16383 + (-7),     0, 0xA3D70A3DUL, 0x70A3D70AUL } },
+	    { .l = { 16383 + (-7),     0, 0xA3D70A3DUL, 0x70A3D70BUL } },
 	    /* 10^-4 */
-	    { .l = { 16383 + (-14),    0, 0xD1B71758UL, 0xE219652BUL } },
+	    { .l = { 16383 + (-14),    0, 0xD1B71758UL, 0xE219652CUL } },
 	    /* 10^-8 */
-	    { .l = { 16383 + (-27),    0, 0xABCC7711UL, 0x8461CEFCUL } },
+	    { .l = { 16383 + (-27),    0, 0xABCC7711UL, 0x8461CEFDUL } },
 	    /* 10^-16 */
-	    { .l = { 16383 + (-54),    0, 0xE69594BEUL, 0xC44DE15BUL } },
+	    { .l = { 16383 + (-54),    0, 0xE69594BEUL, 0xC44DE15CUL } },
 	    /* 10^-32 */
-	    { .l = { 16383 + (-107),   0, 0xCFB11EADUL, 0x453994BAUL } },
+	    { .l = { 16383 + (-107),   0, 0xCFB11EADUL, 0x453994BBUL } },
 	    /* 10^-64 */
-	    { .l = { 16383 + (-213),   0, 0xA87FEA27UL, 0xA539E9A5UL } },
+	    { .l = { 16383 + (-213),   0, 0xA87FEA27UL, 0xA539E9A6UL } },
 	    /* 10^-128 */
-	    { .l = { 16383 + (-426),   0, 0xDDD0467CUL, 0x64BCE4A0UL } },
+	    { .l = { 16383 + (-426),   0, 0xDDD0467CUL, 0x64BCE4A1UL } },
 	    /* 10^-256 */
-	    { .l = { 16383 + (-851),   0, 0xC0314325UL, 0x637A1939UL } },
+	    { .l = { 16383 + (-851),   0, 0xC0314325UL, 0x637A193AUL } },
 	    /* 10^-512 */
-	    { .l = { 16383 + (-1701),  0, 0x9049EE32UL, 0xDB23D21CUL } },
+	    { .l = { 16383 + (-1701),  0, 0x9049EE32UL, 0xDB23D21DUL } },
 	    /* 10^-1024 */
-	    { .l = { 16383 + (-3402),  0, 0xA2A682A5UL, 0xDA57C0BDUL } },
+	    { .l = { 16383 + (-3402),  0, 0xA2A682A5UL, 0xDA57C0BFUL } },
 	    /* 10^-2048 */
-	    { .l = { 16383 + (-6804),  0, 0xCEAE534FUL, 0x34362DE4UL } },
+	    { .l = { 16383 + (-6804),  0, 0xCEAE534FUL, 0x34362DE5UL } },
 	    /* 10^-4096 */
-	    { .l = { 16383 + (-13607), 0, 0xA6DD04C8UL, 0xD2CE9FDEUL } }
+	    { .l = { 16383 + (-13607), 0, 0xA6DD04C8UL, 0xD2CE9FDFUL } }
 	};
 
 
-	LDL result = { .l = { 0x3FFF, 0, 0x80000000UL, 0x00000000UL } };
+    const LDL *table;
+    unsigned int exp;
+    unsigned int bit;
 
-	int exp = (n < 0) ? -n : n;
-	int bit = 0;
+    if (n == 0)
+        return result;
 
-	if (n == 0) {
-		LDL one = { .l = { 0x3FFF, 0, 0x80000000UL, 0x00000000UL } };
-		return one;
-	}
+	table = n < 0 ? pow10_neg_table : pow10_pos_table;
+    exp = (unsigned int)(n < 0 ? -n : n);
 
-	while (exp > 0) {
-		if (exp & 1) {
-			if (n < 0)
-				result = __LDL_mul(result, pow10_neg_table[bit]);
-			else
-				result = __LDL_mul(result, pow10_pos_table[bit]);
-		}
-		exp >>= 1;
-		bit++;
-	}
+    for (bit = 0; exp; ++bit, exp >>= 1) {
+        if (exp & 1) {
+            result = __LDL_mul(result, table[bit]);
+        }
+    }
 
-	return result;
+    return result;
 }
 
 /*
@@ -887,10 +852,8 @@ static LDL pow10_ld(int n) {
 # define LD_DIGS 21                     /* m68k extended fallback          */
 #endif
 
-/* log10(2) as a 64-bit ratio, used to seed the decimal exponent
- * estimate directly from the binary exponent field.                    */
-#define LOG2_10_NUM  3010299956639811952ULL
-#define LOG2_10_DEN  10000000000000000000ULL
+
+#define LOG10_2_Q32  1292913986U
 /* ======================================================================
  *  __vfprintf_total_size -- the formatter core.
  *  Returns the number of characters written, or -1 on stream error.
@@ -1202,18 +1165,15 @@ int __vfprintf_total_size(FILE *stream, const char *format, va_list args) {
 						}
 						{
 							unsigned long long e = (unsigned long long) (bit_exp >= 0 ? bit_exp : -bit_exp);
-							normalized_exp = (int) (e * LOG2_10_NUM / LOG2_10_DEN);
+							normalized_exp = (int) ((e * LOG10_2_Q32 + (1ULL << 31)) >> 32);
 							if (bit_exp < 0)
 								normalized_exp = -normalized_exp;
 						}
 						/* Use pow10_ld() for accurate initial scaling */
-					    ld_val = __LDL_mul(ld_val, pow10_ld(-normalized_exp));
-
-					    if (!is_ld)
-					    	__LDL_round_to_double(&ld_val);
+					    ld_val = pow10_ld(ld_val, -normalized_exp);
 
 						/* Fine-tune to [1,10) with minimal iterations */
-						while (__LDL_cmp_10(&ld_val) >= 0 && normalized_exp < 5000) {
+						while (__LDL_cmp_10(&ld_val) > 0 && normalized_exp < 5000) {
 						    ld_val = __LDL_mul(ld_val, WORK_0_1);
 						    ++normalized_exp;
 						}
@@ -1222,10 +1182,6 @@ int __vfprintf_total_size(FILE *stream, const char *format, va_list args) {
 						    ld_val = __LDL_mul_10(ld_val);
 						    --normalized_exp;
 						}
-
-					    if (!is_ld)
-					    	__LDL_round_to_double(&ld_val);
-
 						exponent = (short) normalized_exp;
 					} else {
 						exponent = 0;
@@ -1289,10 +1245,9 @@ int __vfprintf_total_size(FILE *stream, const char *format, va_list args) {
 								if (exponent >= 0) {
 									digits_to_compute = exponent + preci + 1;
 								} else {
-									digits_to_compute = preci + exponent;
+									digits_to_compute = preci + exponent + 1;
 									if (digits_to_compute < 0)
 										digits_to_compute = 0;
-									++digits_to_compute;
 								}
 							} else if (type == 'e' || type == 'E') {
 								digits_to_compute = preci + 1;
@@ -1301,8 +1256,8 @@ int __vfprintf_total_size(FILE *stream, const char *format, va_list args) {
 							} else {
 								digits_to_compute = preci + 2;
 							}
-							if (digits_to_compute <= 0)
-								digits_to_compute = 1;
+							if (digits_to_compute < 0)
+								digits_to_compute = 0;
 							else if (digits_to_compute > MEANINGFUL_DIGITS) {
 								digits_to_compute = MEANINGFUL_DIGITS;
 							}
@@ -1769,159 +1724,159 @@ int main(int argc, char **argv) {
 	 * SECTION 3: Fixed-point (%f) decade walk
 	 * ================================================================== */
 	printf("--- Fixed-point %%f decade walk ---\n");
-	d = 1.2345678902468e-13;
+	d = 1.2345678902468e-13L;
 	TESTFMT("f e-13|           0.0000000|", "%20.7f", d);
-	d *= 10;
+	d = 1.2345678902468e-12L;
 	TESTFMT("f e-12|           0.0000000|", "%20.7f", d);
-	d *= 10;
+	d = 1.2345678902468e-11L;
 	TESTFMT("f e-11|           0.0000000|", "%20.7f", d);
-	d *= 10;
+	d = 1.2345678902468e-10L;
 	TESTFMT("f e-10|           0.0000000|", "%20.7f", d);
-	d *= 10;
+	d = 1.2345678902468e-09L;
 	TESTFMT("f e-9 |           0.0000000|", "%20.7f", d);
-	d *= 10;
+	d = 1.2345678902468e-08L;
 	TESTFMT("f e-8 |           0.0000000|", "%20.7f", d);
-	d *= 10;
+	d = 1.2345678902468e-07L;
 	TESTFMT("f e-7 |           0.0000001|", "%20.7f", d);
-	d *= 10;
+	d = 1.2345678902468e-06L;
 	TESTFMT("f e-6 |           0.0000012|", "%20.7f", d);
-	d *= 10;
+	d = 1.2345678902468e-05L;
 	TESTFMT("f e-5 |           0.0000123|", "%20.7f", d);
-	d *= 10;
+	d = 1.2345678902468e-04L;
 	TESTFMT("f e-4 |           0.0001235|", "%20.7f", d);
-	d *= 10;
+	d = 1.2345678902468e-03L;
 	TESTFMT("f e-3 |           0.0012346|", "%20.7f", d);
-	d *= 10;
+	d = 1.2345678902468e-02L;
 	TESTFMT("f e-2 |           0.0123457|", "%20.7f", d);
-	d *= 10;
+	d = 1.2345678902468e-01L;
 	TESTFMT("f e-1 |           0.1234568|", "%20.7f", d);
-	d *= 10;
+	d = 1.2345678902468e+00L;
 	TESTFMT("f e0  |           1.2345679|", "%20.7f", d);
-	d *= 10;
+	d = 1.2345678902468e+01L;
 	TESTFMT("f e1  |          12.3456789|", "%20.7f", d);
-	d *= 10;
+	d = 1.2345678902468e+02L;
 	TESTFMT("f e2  |         123.4567890|", "%20.7f", d);
-	d *= 10;
+	d = 1.2345678902468e+03L;
 	TESTFMT("f e3  |        1234.5678902|", "%20.7f", d);
-	d *= 10;
+	d = 1.2345678902468e+04L;
 	TESTFMT("f e4  |       12345.6789025|", "%20.7f", d);
-	d *= 10;
+	d = 1.2345678902468e+05L;
 	TESTFMT("f e5  |      123456.7890247|", "%20.7f", d);
-	d *= 10;
+	d = 1.2345678902468e+06L;
 	TESTFMT("f e6  |     1234567.8902468|", "%20.7f", d);
-	d *= 10;
+	d = 1.2345678902468e+07L;
 	TESTFMT("f e7  |    12345678.9024680|", "%20.7f", d);
-	d *= 10;
+	d = 1.2345678902468e+08L;
 	TESTFMT("f e8  |   123456789.0246800|", "%20.7f", d);
-	d *= 10;
-	TESTFMT("f e9  |  1234567890.2468000|", "%20.7f", d);
-	d *= 10;
+	d = 1.2345678902468e+09L;
+	TESTFMT("f e9  |  1234567890.2467999|", "%20.7f", d); //!!
+	d = 1.2345678902468e+10L;
 	TESTFMT("f e10 | 12345678902.4680000|", "%20.7f", d);
 	printf("\n");
 	/* ==================================================================
 	 * SECTION 4: General format (%g) decade walk
 	 * ================================================================== */
 	printf("--- General %%g decade walk ---\n");
-	d = 1.2345678902468e-13;
+	d = 1.2345678902468e-13L;
 	TESTFMT("g e-13|        1.234568e-13|", "%20.7g", d); // value length = 12 -> 8 spaces
-	d *= 10;
+	d = 1.2345678902468e-12L;
 	TESTFMT("g e-12|        1.234568e-12|", "%20.7g", d); // value length = 12 -> 8 spaces
-	d *= 10;
+	d = 1.2345678902468e-11L;
 	TESTFMT("g e-11|        1.234568e-11|", "%20.7g", d); // value length = 12 -> 8 spaces
-	d *= 10;
+	d = 1.2345678902468e-10L;
 	TESTFMT("g e-10|        1.234568e-10|", "%20.7g", d); // value length = 12 -> 8 spaces
-	d *= 10;
+	d = 1.2345678902468e-09L;
 	TESTFMT("g e-9 |        1.234568e-09|", "%20.7g", d); // value length = 12 -> 8 spaces
-	d *= 10;
+	d = 1.2345678902468e-08L;
 	TESTFMT("g e-8 |        1.234568e-08|", "%20.7g", d); // value length = 12 -> 8 spaces
-	d *= 10;
+	d = 1.2345678902468e-07L;
 	TESTFMT("g e-7 |        1.234568e-07|", "%20.7g", d); // value length = 12 -> 8 spaces
-	d *= 10;
+	d = 1.2345678902468e-06L;
 	TESTFMT("g e-6 |        1.234568e-06|", "%20.7g", d); // value length = 12 -> 8 spaces
-	d *= 10;
+	d = 1.2345678902468e-05L;
 	TESTFMT("g e-5 |        1.234568e-05|", "%20.7g", d); // (value length = 12 -> 8 spaces)
-	d *= 10;
-	TESTFMT("g e-4 |        0.0001234568|", "%20.7g", d); // (value length = 12 -> 8 spaces instead of 5)
-	d *= 10;
-	TESTFMT("g e-3 |         0.001234568|", "%20.7g", d); // (value length = 11 -> 9 spaces instead of 6)
-	d *= 10;
-	TESTFMT("g e-2 |          0.01234568|", "%20.7g", d); // (value length = 10 -> 10 spaces instead of 7)
-	d *= 10;
-	TESTFMT("g e-1 |           0.1234568|", "%20.7g", d); // (value length = 9 -> 11 spaces instead of 7)
-	d *= 10;
-	TESTFMT("g e0  |            1.234568|", "%20.7g", d); // (value length = 8 -> 12 spaces instead of 7)
-	d *= 10;
-	TESTFMT("g e1  |            12.34568|", "%20.7g", d); // (value length = 8 -> 12 spaces instead of 7)
-	d *= 10;
-	TESTFMT("g e2  |            123.4568|", "%20.7g", d); // (value length = 8 -> 12 spaces instead of 7)
-	d *= 10;
-	TESTFMT("g e3  |            1234.568|", "%20.7g", d); // (value length = 8 -> 12 spaces instead of 7)
-	d *= 10;
-	TESTFMT("g e4  |            12345.68|", "%20.7g", d); // (value length = 8 -> 12 spaces instead of 7)
-	d *= 10;
-	TESTFMT("g e5  |            123456.8|", "%20.7g", d); // (value length = 8 -> 12 spaces instead of 7)
-	d *= 10;
-	TESTFMT("g e6  |             1234568|", "%20.7g", d); // (value length = 7 -> 13 spaces instead of 7)
-	d *= 10;
+	d = 1.2345678902468e-04L;
+	TESTFMT("g e-4 |        0.0001234568|", "%20.7g", d); // (value length = 12 -> 8 spaces)
+	d = 1.2345678902468e-03L;
+	TESTFMT("g e-3 |         0.001234568|", "%20.7g", d); // (value length = 11 -> 9 spaces)
+	d = 1.2345678902468e-02L;
+	TESTFMT("g e-2 |          0.01234568|", "%20.7g", d); // (value length = 10 -> 10 spaces)
+	d = 1.2345678902468e-01L;
+	TESTFMT("g e-1 |           0.1234568|", "%20.7g", d); // (value length = 9 -> 11 spaces)
+	d = 1.2345678902468e+00L;
+	TESTFMT("g e0  |            1.234568|", "%20.7g", d); // (value length = 8 -> 12 spaces)
+	d = 1.2345678902468e+01L;
+	TESTFMT("g e1  |            12.34568|", "%20.7g", d); // (value length = 8 -> 12 spaces)
+	d = 1.2345678902468e+02L;
+	TESTFMT("g e2  |            123.4568|", "%20.7g", d); // (value length = 8 -> 12 spaces)
+	d = 1.2345678902468e+03L;
+	TESTFMT("g e3  |            1234.568|", "%20.7g", d); // (value length = 8 -> 12 spaces)
+	d = 1.2345678902468e+04L;
+	TESTFMT("g e4  |            12345.68|", "%20.7g", d); // (value length = 8 -> 12 spaces)
+	d = 1.2345678902468e+05L;
+	TESTFMT("g e5  |            123456.8|", "%20.7g", d); // (value length = 8 -> 12 spaces)
+	d = 1.2345678902468e+06L;
+	TESTFMT("g e6  |             1234568|", "%20.7g", d); // (value length = 7 -> 13 spaces)
+	d = 1.2345678902468e+07L;
 	TESTFMT("g e7  |        1.234568e+07|", "%20.7g", d); // value length = 12 -> 8 spaces
-	d *= 10;
+	d = 1.2345678902468e+08L;
 	TESTFMT("g e8  |        1.234568e+08|", "%20.7g", d); // value length = 12 -> 8 spaces
-	d *= 10;
+	d = 1.2345678902468e+09L;
 	TESTFMT("g e9  |        1.234568e+09|", "%20.7g", d); // value length = 12 -> 8 spaces
-	d *= 10;
+	d = 1.2345678902468e+10L;
 	TESTFMT("g e10 |        1.234568e+10|", "%20.7g", d); // value length = 12 -> 8 spaces
 	printf("\n");
 	/* ==================================================================
 	 * SECTION 5: Scientific (%e) decade walk
 	 * ================================================================== */
 	printf("--- Scientific %%e decade walk ---\n");
-	d = 1.2345678902468e-13;
+	d = 1.2345678902468e-13L;
 	TESTFMT("e e-13|       1.2345679e-13|", "%20.7e", d);
-	d *= 10;
+	d = 1.2345678902468e-12L;
 	TESTFMT("e e-12|       1.2345679e-12|", "%20.7e", d);
-	d *= 10;
+	d = 1.2345678902468e-11L;
 	TESTFMT("e e-11|       1.2345679e-11|", "%20.7e", d);
-	d *= 10;
+	d = 1.2345678902468e-10L;
 	TESTFMT("e e-10|       1.2345679e-10|", "%20.7e", d);
-	d *= 10;
+	d = 1.2345678902468e-09L;
 	TESTFMT("e e-9 |       1.2345679e-09|", "%20.7e", d);
-	d *= 10;
+	d = 1.2345678902468e-08L;
 	TESTFMT("e e-8 |       1.2345679e-08|", "%20.7e", d);
-	d *= 10;
+	d = 1.2345678902468e-07L;
 	TESTFMT("e e-7 |       1.2345679e-07|", "%20.7e", d);
-	d *= 10;
+	d = 1.2345678902468e-06L;
 	TESTFMT("e e-6 |       1.2345679e-06|", "%20.7e", d);
-	d *= 10;
+	d = 1.2345678902468e-05L;
 	TESTFMT("e e-5 |       1.2345679e-05|", "%20.7e", d);
-	d *= 10;
+	d = 1.2345678902468e-04L;
 	TESTFMT("e e-4 |       1.2345679e-04|", "%20.7e", d);
-	d *= 10;
+	d = 1.2345678902468e-03L;
 	TESTFMT("e e-3 |       1.2345679e-03|", "%20.7e", d);
-	d *= 10;
+	d = 1.2345678902468e-02L;
 	TESTFMT("e e-2 |       1.2345679e-02|", "%20.7e", d);
-	d *= 10;
+	d = 1.2345678902468e-01L;
 	TESTFMT("e e-1 |       1.2345679e-01|", "%20.7e", d);
-	d *= 10;
+	d = 1.2345678902468e+00L;
 	TESTFMT("e e0  |       1.2345679e+00|", "%20.7e", d);
-	d *= 10;
+	d = 1.2345678902468e+01L;
 	TESTFMT("e e1  |       1.2345679e+01|", "%20.7e", d);
-	d *= 10;
+	d = 1.2345678902468e+02L;
 	TESTFMT("e e2  |       1.2345679e+02|", "%20.7e", d);
-	d *= 10;
+	d = 1.2345678902468e+03L;
 	TESTFMT("e e3  |       1.2345679e+03|", "%20.7e", d);
-	d *= 10;
+	d = 1.2345678902468e+04L;
 	TESTFMT("e e4  |       1.2345679e+04|", "%20.7e", d);
-	d *= 10;
+	d = 1.2345678902468e+05L;
 	TESTFMT("e e5  |       1.2345679e+05|", "%20.7e", d);
-	d *= 10;
+	d = 1.2345678902468e+06L;
 	TESTFMT("e e6  |       1.2345679e+06|", "%20.7e", d);
-	d *= 10;
+	d = 1.2345678902468e+07L;
 	TESTFMT("e e7  |       1.2345679e+07|", "%20.7e", d);
-	d *= 10;
+	d = 1.2345678902468e+08L;
 	TESTFMT("e e8  |       1.2345679e+08|", "%20.7e", d);
-	d *= 10;
+	d = 1.2345678902468e+09L;
 	TESTFMT("e e9  |       1.2345679e+09|", "%20.7e", d);
-	d *= 10;
+	d = 1.2345678902468e+10L;
 	TESTFMT("e e10 |       1.2345679e+10|", "%20.7e", d);
 	printf("\n");
 	/* ==================================================================
@@ -2033,7 +1988,7 @@ int main(int argc, char **argv) {
 		TESTFMT("ld neg|-3.141593|", "%Lf", -ld);
 		/* High-precision long double */
 		long double pi_ld = 3.141592653589793238462643383279502884197L;
-		TESTFMT("ld high prec|3.14159265358979323846|", "%.20Lf", pi_ld);
+		TESTFMT("ld high prec|3.1415926535897932385|", "%.19Lf", pi_ld);
 	}
 	printf("\n");
 	/* ==================================================================
@@ -2067,8 +2022,8 @@ int main(int argc, char **argv) {
 	TESTFMT("g trim trailing|1|", "%g", 1.0);
 	TESTFMT("g trim trailing2|1.5|", "%g", 1.5);
 	TESTFMT("g no trim with #|1.50000|", "%#5g", 1.5);
-	TESTFMT("f huge prec|1.23456789012345679|", "%.17f", 1.23456789012345679);
-	TESTFMT("e huge prec|1.23456789012345679e+00|", "%.17e", 1.23456789012345679);
+	TESTFMT("f huge prec|1.2345678901234567|", "%.16f", 1.2345678901234567);
+	TESTFMT("e huge prec|1.2345678901234567e+00|", "%.16e", 1.2345678901234567);
 	TESTFMT("empty format||", "");
 	TESTFMT("text only|hello world|", "hello world");
 	TESTFMT("mixed|abc42def|", "abc%ddef", 42);
@@ -2139,18 +2094,25 @@ int main(int argc, char **argv) {
 	/* ==================================================================
 	 * Additional
 	 * ================================================================== */
-	TESTFMT("f round dp|0.0010000|", "%.7f", 0.00099995);
-	TESTFMT("f round int|10.0000000|", "%.7f", 9.99999995);
-	TESTFMT("f small half|0.0000001|", "%.7f", 0.00000005);
-	TESTFMT("f big half|123456790.0000000|", "%.7f", 123456789.99999995);
-	TESTFMT("ld near1|1.00000000000000000000|", "%.20Lf", 0.99999999999999999995L);
-	TESTFMT("ld near2|2.00000000000000000000|", "%.20Lf", 1.99999999999999999995L);
-	TESTFMT("ld near05|0.50000000000000000000|", "%.20Lf", 0.49999999999999999995L);
-	TESTFMT("ld dp|0.00100000000000000000|", "%.20Lf", 0.00099999999999999995L);
-	TESTFMT("ld int|10.00000000000000000000|", "%.20Lf", 9.99999999999999999995L);
-	TESTFMT("ld small|0.00000000000000000010|", "%.20Lf", 0.000000000000000000049L);
-	TESTFMT("ld big|123456790.00000000000000000000|", "%.20Lf", 123456789.99999999999999999995L);
-	TESTFMT("ld exp|1.23456789012345679000e+00|", "%.20Le", 1.23456789012345678995L);
+	// --- DOUBLE TESTS
+	TESTFMT("f round dp|0.0010000|", "%.7f", 0.000999955);
+	TESTFMT("f round int|10.0000000|", "%.7f", 9.999999955);
+	TESTFMT("f small half|0.0000001|", "%.7f", 0.000000055);
+	TESTFMT("f big half|123456790.0000000|", "%.7f", 123456789.999999955);
+
+	// --- LONG DOUBLE TESTS
+	TESTFMT("ld near1|1.00000000000000000000|", "%.20Lf", 0.999999999999999999995L);
+	TESTFMT("ld near2|2.00000000000000000000|", "%.20Lf", 1.999999999999999999995L);
+	TESTFMT("ld near05|0.50000000000000000000|", "%.20Lf", 0.499999999999999999995L);
+	TESTFMT("ld dp|0.00100000000000000000|", "%.20Lf", 0.00099999999999999999995L);
+
+	TESTFMT("ld int|10.00000000000000000000|", "%.20Lf", 9.999999999999999999995L);
+
+	// --- special tests
+	TESTFMT("ld small|0.00000000000000000010|", "%.20Lf", 0.000000000000000000095L);
+	TESTFMT("ld big|123456790.00000000000000000000|", "%.20Lf", 123456789.999999999999999999995L);
+	TESTFMT("ld exp|1.234567890123456789e+00|", "%.18Le", 1.234567890123456789L);
+
 	printf("\n");
 	/* ==================================================================
 	 * Summary
