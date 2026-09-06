@@ -2,7 +2,7 @@
 #include "stdio.h"
 #include "wchar.h"
 
-extern int __vwfprintf_total_size(FILE *stream, const wchar_t *fmt, va_list args);
+extern int __vfwprintf_total_size(FILE *stream, const wchar_t *fmt, va_list args);
 
 int vswprintf(wchar_t *s,size_t size,const wchar_t *format,va_list args) {
 	size_t retval;
@@ -19,7 +19,7 @@ int vswprintf(wchar_t *s,size_t size,const wchar_t *format,va_list args) {
 #ifdef __posix_threads__
 	buffer.__spinlock[0] = 0;
 #endif
-	retval = __vwfprintf_total_size(&buffer,format,args) / sizeof(wchar_t);
+	retval = __vfwprintf_total_size(&buffer,format,args) / sizeof(wchar_t);
 	if (retval < size)
 		s[retval] = 0;
 	else if (size > 0)
