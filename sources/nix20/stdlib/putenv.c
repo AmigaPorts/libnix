@@ -38,17 +38,20 @@ int setenv(const char *name, const char *value, int overwrite) {
 		// insert
 		char ** neu;
 		if (environ_ptr__data != __dummy_env)
-			neu = (char **)realloc(environ_ptr__data, (p - environ_ptr__data + 1) * sizeof(char *));
+			neu = (char **)realloc(environ_ptr__data, (p - environ_ptr__data + 2) * sizeof(char *));
 		else
 			neu = (char **)malloc(2 * sizeof(char *));
 
-		if (!neu)
-			return ENOMEM;
+		if (!neu) {
+			errno = ENOMEM;
+			return -1;
+		}
 
 		if (environ_ptr__data != __dummy_env)
 			p = neu + (p - environ_ptr__data);
 		else
 			p = neu;
+		environ_ptr__data = neu;
 
 		*p++ = concat(name, "=", value, 0);
 		*p = 0;
