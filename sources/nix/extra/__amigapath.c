@@ -86,4 +86,7 @@ void __initamigapath(void)
     __pathconv=1;
 }
 
-ADD2INIT(__initamigapath,-10);
+/* Constructors run from the lowest priority up, and __fillenviron (-2)
+   is what makes getenv() see the shell's variables, so this must come
+   after it or NOIXPATHS is never seen.  */
+ADD2INIT(__initamigapath,-1);
