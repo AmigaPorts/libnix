@@ -6,9 +6,7 @@
 #include <sys/statvfs.h>
 
 extern void __seterrno(void);
-#ifdef IXPATHS
-extern char *__amigapath(const char *path);
-#endif
+#include "amigapath.h"
 
 static unsigned long
 positive_or_zero(LONG value)
@@ -57,10 +55,8 @@ statvfs(const char *name, struct statvfs *buf)
 		return -1;
 	}
 
-#ifdef IXPATHS
 	if ((name = __amigapath(name)) == NULL)
 		return -1;
-#endif
 
 	/* Match stat(): avoid DOS requesters while probing the volume. */
 	wptr = &((struct Process *)FindTask(NULL))->pr_WindowPtr;
