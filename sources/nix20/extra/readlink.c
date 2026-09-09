@@ -3,12 +3,15 @@
 #include <unistd.h>
 #include <errno.h>
 #include <string.h>
+#include "amigapath.h"
 
 ssize_t readlink(const char *path, char *buf, size_t bufsiz) {
 	struct DevProc *dp = NULL;
 	BPTR lock = 0;
 	int retval = -1;
 
+	if ((path = __amigapath(path)) == NULL)
+		return -1;
 	lock = Open((CONST_STRPTR)path, MODE_OLDFILE);
 	if (lock == 0) {
 		errno = ENOENT;

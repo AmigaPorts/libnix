@@ -6,6 +6,7 @@
 #include <proto/dos.h>
 #include <dos/exall.h>
 #include <dos/dosextens.h>
+#include "amigapath.h"
 
 #include <strsup.h>
 
@@ -90,6 +91,8 @@ ExAll (BPTR lock, STRPTR buffer, LONG size, LONG type, struct ExAllControl *cont
 DIR* opendir(const char *dirname) {
 	DIR *dirp;
 
+	if ((dirname = __amigapath(dirname)) == NULL)
+		return NULL;
 	if ((dirp = (DIR*) AllocVec(sizeof(DIR), MEMF_PUBLIC | MEMF_CLEAR)) != NULL) {
 		dirp->d_lock = (void *)Lock(dirname, SHARED_LOCK);
 		if (dirp->d_lock != (void*)0) {

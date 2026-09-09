@@ -5,6 +5,8 @@
 
 #include "stabs.h"
 
+#include "amigapath.h"
+
 extern void __seterrno(void);
 
 static BPTR oldlock;
@@ -15,6 +17,8 @@ int chdir(const char *path)
   BPTR fl;
   int ret;
 
+  if((path=__amigapath(path))==NULL)
+    return -1;
   if ((fl=Lock((STRPTR)path,SHARED_LOCK)))
   {
     UnLock(CurrentDir(fl)); ret=0;

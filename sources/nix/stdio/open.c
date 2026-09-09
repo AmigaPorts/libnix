@@ -4,6 +4,7 @@
 #include <errno.h>
 #include <limits.h>
 #include <proto/dos.h>
+#include "amigapath.h"
 
 extern StdFileDes **__stdfiledes;
 extern unsigned __stdfilesize;
@@ -20,13 +21,10 @@ extern void __seterrno(void);
  * @return the file descriptor.
  */
 int open(const char *path, int flags, ...) {
-	extern char *__amigapath(const char *path);
 	StdFileDes *sfd;
 
-#ifdef IXPATHS
 	if((path=__amigapath(path))==NULL)
 	return -1;
-#endif
 	if ((sfd = __allocfd())) {
 		long mode;
 
