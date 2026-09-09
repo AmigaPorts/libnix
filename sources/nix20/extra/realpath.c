@@ -3,6 +3,7 @@
 #include <errno.h>
 #include <sys/param.h>
 #include <stdlib.h>
+#include "amigapath.h"
 
 extern void __seterrno(void);
 
@@ -12,11 +13,8 @@ char *realpath(const char *name, char *resolved) {
 	BPTR lock;
 	char *buf;
 
-#ifdef IXPATHS
-	extern char *__amigapath(const char *path);
 	if ((name = __amigapath(name)) == NULL)
 		return NULL;
-#endif
 
 	lock = Lock((CONST_STRPTR)name, ACCESS_READ);
 	if (lock == 0) {

@@ -20,9 +20,7 @@ extern void FreeDosObject(long, void *);
 
 extern int __stat(struct stat *buf,struct FileInfoBlock *fib);
 extern void __seterrno(void);
-#ifdef IXPATHS
-extern char *__amigapath(const char *path);
-#endif
+#include "amigapath.h"
 
 asm("_lstat: .global _lstat");
 int stat(const char *name,struct stat *buf)
@@ -31,10 +29,8 @@ int stat(const char *name,struct stat *buf)
   BPTR lock;
   int ret=-1;
 
-#ifdef IXPATHS
   if((name=__amigapath(name))==NULL)
     return -1;
-#endif
 
   /* avoid possible dos-requesters ;-( */
 
