@@ -1,0 +1,16 @@
+# Host-side unit tests: libnix code that is plain C, compiled and run with
+# the build machine's compiler. The toolchain build itself is exercised by
+# toolchain-ci.yml through the ci-* labels.
+name: Tests
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  host:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v7
+      - name: Build and run the host tests
+        run: make -C test check
