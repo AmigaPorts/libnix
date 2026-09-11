@@ -27,6 +27,7 @@ __stdargs size_t strcspn(const char *, const char *);
 __stdargs char *strerror(int);
 __stdargs char *strcat(char *, const char *);
 __stdargs char *strncat(char *, const char *, size_t);
+__stdargs size_t strnlen(const char *, size_t);
 __stdargs int strcmp(const char *, const char *);
 __stdargs int strncmp(const char *, const char *, size_t);
 __stdargs char *strncpy(char *, const char *, size_t);
