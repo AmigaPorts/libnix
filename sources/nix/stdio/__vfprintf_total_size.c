@@ -178,8 +178,13 @@ extern unsigned char *__decimalpoint;
 #endif
 extern int __vfprintf_total_size(FILE *stream, const char *fmt, va_list args);
 /* Output one character and handle stream errors. */
+/* A string stream (the snprintf family) that is full keeps counting: C99 says
+ * the return value is the length the output would have had, and callers size a
+ * buffer with vsnprintf(NULL, 0, ...) on the strength of that. putc on a full
+ * __SSTR stream returns EOF from __swbuf without touching the buffer, so only
+ * the count goes on. EOF from a real stream is still an error. */
 #define OUT(c)  do { \
-    if (putc((c), stream) == EOF) { \
+    if (putc((c), stream) == EOF && !(stream->_flags & __SSTR)) { \
         __STDIO_UNLOCK(stream); \
         return -1; \
     } \
@@ -1575,6 +1580,33 @@ int main(int argc, char **argv) {
 	 * ================================================================== */
 	printf("=== Test Summary ===\n");
 	printf("  Run:     %d\n", tests_run);
+	/* Truncation, C99 7.19.6.5: the return value is the length the output
+	 * would have had, the buffer gets size-1 characters and a NUL, and
+	 * (NULL, 0) is the sizing idiom. Before the __SSTR case in OUT() every
+	 * one of these returned -1. */
+	{
+		char tb[8];
+		int n;
+		memset(tb, 'x', sizeof(tb));
+		n = snprintf(tb, sizeof(tb), "hello world");
+		tests_run++;
+		if (n == 11 && strcmp(tb, "hello w") == 0) { tests_passed++; printf("OK: truncation returns full length\n"); }
+		else { tests_failed++; printf("FAIL: truncation returns full length: n=%d tb=\"%s\"\n", n, tb); }
+		memset(tb, 'x', sizeof(tb));
+		n = snprintf(tb, 0, "abc");
+		tests_run++;
+		if (n == 3 && tb[0] == 'x') { tests_passed++; printf("OK: size 0 writes nothing, returns length\n"); }
+		else { tests_failed++; printf("FAIL: size 0: n=%d tb[0]=%c\n", n, tb[0]); }
+		n = snprintf(NULL, 0, "%d/%s", 42, "xy");
+		tests_run++;
+		if (n == 5) { tests_passed++; printf("OK: (NULL, 0) sizing idiom\n"); }
+		else { tests_failed++; printf("FAIL: (NULL, 0) sizing idiom: n=%d\n", n); }
+		n = snprintf(tb, 7, "abcdef");
+		tests_run++;
+		if (n == 6 && strcmp(tb, "abcdef") == 0) { tests_passed++; printf("OK: exact fit\n"); }
+		else { tests_failed++; printf("FAIL: exact fit: n=%d tb=\"%s\"\n", n, tb); }
+	}
+
 	printf("  Passed:  %d\n", tests_passed);
 	printf("  Failed:  %d\n", tests_failed);
 	printf("\n");
