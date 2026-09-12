@@ -82,6 +82,21 @@ __MY_INLINE__ __stdargs char *stpcpy(char *dst,const char *src)
 	while((*dst++=*src++)){} return(--dst);
 }
 
+__MY_INLINE__ __stdargs size_t strlcpy(char *dst, const char *src, size_t dsize)
+{
+	const char * p = src;
+	if (dsize) {
+	  while (dsize--) {
+			if ((*dst++ = *p++) == 0)
+				break;
+	  }
+	  dst[-1] = 0;
+	}
+	while (*p)
+		++p;
+	return p - src;
+}
+
 __MY_INLINE__ __stdargs void *mempcpy(void *to, const void *from, size_t sz) {
 	return sz + (char *)memcpy(to, from, sz);
 }
