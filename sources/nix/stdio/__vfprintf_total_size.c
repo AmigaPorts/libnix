@@ -1038,6 +1038,7 @@ int __vfprintf_total_size(FILE *stream, const char *format, va_list args) {
  * ==================================================================== */
 #ifdef TESTME
 #include <string.h>
+#include <errno.h>
 /* Test counter */
 static int tests_run = 0;
 static int tests_passed = 0;
@@ -1575,11 +1576,6 @@ int main(int argc, char **argv) {
 	TESTFMT("ld big|123456790.00000000000000000000|", "%.20Lf", 123456789.99999999999999999995L);
 	TESTFMT("ld exp|1.23456789012345679000e+00|", "%.20Le", 1.23456789012345678995L);
 	printf("\n");
-	/* ==================================================================
-	 * Summary
-	 * ================================================================== */
-	printf("=== Test Summary ===\n");
-	printf("  Run:     %d\n", tests_run);
 	/* Truncation, C99 7.19.6.5: the return value is the length the output
 	 * would have had, the buffer gets size-1 characters and a NUL, and
 	 * (NULL, 0) is the sizing idiom. Before the __SSTR case in OUT() every
@@ -1605,8 +1601,25 @@ int main(int argc, char **argv) {
 		tests_run++;
 		if (n == 6 && strcmp(tb, "abcdef") == 0) { tests_passed++; printf("OK: exact fit\n"); }
 		else { tests_failed++; printf("FAIL: exact fit: n=%d tb=\"%s\"\n", n, tb); }
+		/* errno: a filled string buffer sets EPERM inside __swbuf; a
+		 * successful truncating call must not leak that to the caller. */
+		errno = 0;
+		n = snprintf(tb, sizeof(tb), "hello world");
+		tests_run++;
+		if (n == 11 && errno == 0) { tests_passed++; printf("OK: truncation leaves errno untouched\n"); }
+		else { tests_failed++; printf("FAIL: truncation errno: n=%d errno=%d\n", n, errno); }
+		errno = 4242;
+		n = snprintf(NULL, 0, "%d", 7);
+		tests_run++;
+		if (n == 1 && errno == 4242) { tests_passed++; printf("OK: sizing preserves a caller's errno\n"); }
+		else { tests_failed++; printf("FAIL: sizing errno: n=%d errno=%d (want 1/4242)\n", n, errno); }
 	}
 
+	/* ==================================================================
+	 * Summary
+	 * ================================================================== */
+	printf("=== Test Summary ===\n");
+	printf("  Run:     %d\n", tests_run);
 	printf("  Passed:  %d\n", tests_passed);
 	printf("  Failed:  %d\n", tests_failed);
 	printf("\n");
