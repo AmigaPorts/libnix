@@ -1,3 +1,4 @@
+#define __NO_INLINE__
 #include <ctype.h>
 #include <string.h>
 
