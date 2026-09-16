@@ -2,7 +2,7 @@
 #include "stdio.h"
 #include "wchar.h"
 
-extern int __vfwprintf_total_size(FILE *stream, const char *fmt, va_list args);
+extern int __vfwprintf_total_size(FILE *stream, const wchar_t *fmt, va_list args);
 
 int vfwprintf(FILE *stream, const wchar_t *fmt, va_list args)
 {
