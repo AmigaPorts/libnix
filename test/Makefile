@@ -5,6 +5,17 @@
 CC ?= cc
 CFLAGS ?= -O -Wall
 
+# Tests that run on the target, built with the cross compiler against the
+# sources here (not the installed library) and run under a simulator.
+# They are not part of `check` because they need the toolchain and vamos:
+#   make check-target
+#   make check-target SIM=volamos SIMFLAGS="--stack 4K --sanitize"
+
+CROSS_CC ?= m68k-amigaos-gcc
+CROSS_CFLAGS ?= -O2 -fomit-frame-pointer -noixemul
+SIM ?= vamos
+SIMFLAGS ?= -s 4
+
 all: check
 
 amigapath: amigapath.c ../sources/nix/extra/__amigapath.c ../sources/headers/amigapath.h stabs.h
@@ -13,7 +24,18 @@ amigapath: amigapath.c ../sources/nix/extra/__amigapath.c ../sources/headers/ami
 check: amigapath
 	./amigapath
 
-clean:
-	rm -f amigapath
+# swapstack.c is compiled the way Makefile.gcc6 does it and linked ahead
+# of libnix, so the module under test is the one in ../sources.
+swapstack.o: ../sources/misc/swapstack.c
+	$(CROSS_CC) $(CROSS_CFLAGS) -I../sources/headers -fno-builtin -D__libnix__ -c -o $@ $<
 
-.PHONY: all check clean
+stack: stack.c swapstack.o
+	$(CROSS_CC) $(CROSS_CFLAGS) -Wall -o $@ stack.c swapstack.o
+
+check-target: stack
+	$(SIM) $(SIMFLAGS) ./stack
+
+clean:
+	rm -f amigapath stack swapstack.o
+
+.PHONY: all check check-target clean
