@@ -1,6 +1,6 @@
 #include <stdlib.h>
 
-asm("_ldiv: .global _ldiv");
+asm(".global _ldiv; _ldiv = _div");
 div_t div(int numer, int denom) {
 	div_t r;
 	r.quot = numer / denom;

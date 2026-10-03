@@ -10,7 +10,7 @@
 
 extern int iswxdigit(wint_t c);
 
-asm("_strtoumax: .global _strtoumax");
+asm(".global _strtoumax; _strtoumax = _strtoull");
 unsigned long long strtoull(const char *nptr, char **endptr, int base) {
 	const char *p = nptr, *q;
 	char c = 0;

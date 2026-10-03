@@ -1,7 +1,7 @@
 #include <ctype.h>
 #include <string.h>
 
-asm("_strcasecmp: .global _strcasecmp");
+asm(".global _strcasecmp; _strcasecmp = _stricmp");
 int stricmp(const char *s1,const char *s2)
 { unsigned char c1,c2;
   int r;

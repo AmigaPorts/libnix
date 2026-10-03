@@ -1,6 +1,6 @@
 #include <string.h>
 
-asm("_index: .global _index");
+asm(".global _index; _index = _strchr");
 char *strchr(const char *s,int c)
 {
   while (*s!=(char)c)

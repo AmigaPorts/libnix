@@ -1,6 +1,6 @@
 #include <string.h>
 
-asm("_rindex: .global _rindex");
+asm(".global _rindex; _rindex = _strrchr");
 char *strrchr(const char *s,int c)
 { char *c1=(char *)0;
   do

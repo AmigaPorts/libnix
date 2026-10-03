@@ -7,7 +7,7 @@ process started.
 #include <stdlib.h>
 #include <time.h>
 
-asm("_getruntime: .global _getruntime");
+asm(".global _getruntime; _getruntime = _get_run_time");
 long get_run_time (void)
 {
   /* Fall back on clock since it's correctly implemented. */

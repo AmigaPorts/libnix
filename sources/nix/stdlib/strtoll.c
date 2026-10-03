@@ -11,7 +11,7 @@
 #define LLONG_MAX 0x7fffffffffffffffL
 #endif
 
-asm("_strtoimax: .global _strtoimax");
+asm(".global _strtoimax; _strtoimax = _strtoll");
 signed long long strtoll(const char *nptr,char **endptr,int base)
 { const char *p=nptr;
   char *q;

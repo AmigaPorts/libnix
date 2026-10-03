@@ -464,7 +464,7 @@ getopt (int argc, char *const argv[], const char *optstring)
 }
 
 #ifdef __amiga__
-asm("_getopt_long_only: .globl _getopt_long_only\n");
+asm(".globl _getopt_long_only; _getopt_long_only = _getopt_long");
 #endif
 int
 getopt_long (int argc, char *const argv[], const char *shortopts,
@@ -494,8 +494,8 @@ getopt_long_only (int argc, char *const argv[], const char *shortopts,
 #endif
 
 #ifdef __amiga__
-asm("___getopt_long_only_r: .globl ___getopt_long_only_r\n");
-asm("___getopt_long_r: .globl ___getopt_long_r\n");
+asm(".globl ___getopt_long_only_r; ___getopt_long_only_r = ___getopt_r");
+asm(".globl ___getopt_long_r; ___getopt_long_r = ___getopt_r");
 #endif
 int
 __getopt_r (int argc, char *const argv[], const char *optstring,
