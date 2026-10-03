@@ -1,7 +1,7 @@
 /**
  * written by nonarkitten - enhanced by bebbo
  */
-asm("_ultoa: .global _ultoa");
+asm(".global _ultoa; _ultoa = _utoa");
 char* utoa(unsigned int value, char *str, int base) {
 	// our digits for any base from 2-16
 	static const char *__digits = "0123456789ABCDEF";

@@ -2,7 +2,7 @@
 #include <unistd.h>
 #include "amigapath.h"
 
-asm("_link: .global _link");
+asm(".global _link; _link = _symlink");
 int symlink(const char *from, const char *to) {
 	/* the link name is resolved by dos.library now, the target when the
 	   link is followed; both get the Unix path syntax rewritten */

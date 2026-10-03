@@ -1,6 +1,6 @@
 #define __NO_INLINE__
 #include <string.h>
-asm("_bcmp: .global _bcmp");
+asm(".global _bcmp; _bcmp = _memcmp");
 __stdargs int memcmp(const void *s1, const void *s2, size_t n) {
 	const unsigned char *p1, *p2;
 

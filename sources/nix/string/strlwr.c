@@ -1,6 +1,6 @@
 #define __NO_INLINE__
 #include <string.h>
-asm("_strlwr: .global _strlwr");
+asm(".global _strlwr; _strlwr = _strlower");
 char *strlower(char *s) {
 	unsigned char *s1 = (unsigned char *) s;
 
