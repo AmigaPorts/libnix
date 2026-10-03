@@ -1,5 +1,5 @@
 #include <string.h>
-asm("_strupr: .global _strupr");
+asm(".global _strupr; _strupr = _strupper");
 char *strupper(char *s)
 { unsigned char *s1=(unsigned char *)s;
 

@@ -23,7 +23,7 @@ int execvp(const char *file, char *const argv[]) {
 	return execv(file, argv);
 }
 #endif
-asm("_execvp: .globl _execvp\n");
+asm(".globl _execvp; _execvp = _execv");
 int execv(const char *path, char *const argv[]) {
 	char *const*p;
 	char *cmd;

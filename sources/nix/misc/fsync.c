@@ -1,6 +1,6 @@
 #include <unistd.h>
 
-asm("_fdatasync: .global _fdatasync");
+asm(".global _fdatasync; _fdatasync = _fsync");
 int fsync(int fd) {
 	return 0;
 }

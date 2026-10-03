@@ -22,7 +22,7 @@ extern int __stat(struct stat *buf,struct FileInfoBlock *fib);
 extern void __seterrno(void);
 #include "amigapath.h"
 
-asm("_lstat: .global _lstat");
+asm(".global _lstat;_lstat = _stat");
 int stat(const char *name,struct stat *buf)
 { APTR oldwin,*wptr=&((struct Process *)FindTask(NULL))->pr_WindowPtr;
   struct FileInfoBlock *fib;

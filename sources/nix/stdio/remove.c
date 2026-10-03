@@ -5,8 +5,8 @@
 
 extern void __seterrno(void);
 
-asm("_rmdir: .global _rmdir");
-asm("_unlink: .global _unlink");
+asm(".global _rmdir; _rmdir = _remove");
+asm(".global _unlink; _unlink = _remove");
 int remove(const char *filename)
 { 
   if((filename=__amigapath(filename))==NULL)
