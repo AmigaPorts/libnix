@@ -51,6 +51,7 @@ __stdargs void *memccpy(void *, const void *, int, size_t);
 __stdargs char *rindex(const char *, int);
 __stdargs int strcasecmp(const char *, const char *);
 __stdargs char *strdup(const char *);
+__stdargs char *strndup(const char *, size_t);
 __stdargs void strmode(int, char *);
 __stdargs int strncasecmp(const char *, const char *, size_t);
 __stdargs char *strsep(char **, const char *);
