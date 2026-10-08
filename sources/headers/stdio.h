@@ -1,7 +1,15 @@
 #ifndef _STDIO_H
 #define _STDIO_H
-#include <string.h>
+#include <stddef.h>
+#include <sys/_types.h>
+/* only __gnuc_va_list: stdio.h must not define va_start and friends */
+#define __need___va_list
 #include <stdarg.h>
+
+#ifndef _SSIZE_T_DECLARED
+typedef _ssize_t ssize_t;
+#define _SSIZE_T_DECLARED
+#endif
 
 #ifdef __cplusplus
 extern "C" {
@@ -111,11 +119,11 @@ extern __stdargs FILE *freopen(const char *filename, const char *mode, FILE *str
 extern __stdargs FILE *fdopen(int filedes, const char *mode);
 extern __stdargs int fclose(FILE *stream);
 extern __stdargs int ungetc(int c, FILE *stream);
-extern __stdargs int vsprintf(char *s, const char *format, va_list args);
-extern __stdargs int vfprintf(FILE *stream, const char *format, va_list args);
-extern __stdargs int vsscanf(const char *s, const char *format, va_list args);
-extern __stdargs int vfscanf(FILE *stream, const char *format, va_list args);
-extern __stdargs int vsnprintf(char *s, size_t size, const char *format, va_list args);
+extern __stdargs int vsprintf(char *s, const char *format, __gnuc_va_list args);
+extern __stdargs int vfprintf(FILE *stream, const char *format, __gnuc_va_list args);
+extern __stdargs int vsscanf(const char *s, const char *format, __gnuc_va_list args);
+extern __stdargs int vfscanf(FILE *stream, const char *format, __gnuc_va_list args);
+extern __stdargs int vsnprintf(char *s, size_t size, const char *format, __gnuc_va_list args);
 extern __stdargs int fseek(FILE *stream, long int offset, int whence);
 extern __stdargs char *fgets(char *s, int size, FILE *stream);
 extern __stdargs int fputs(const char *s, FILE *stream);
@@ -167,9 +175,9 @@ extern __stdargs int fputc(int c, FILE *stream);
 extern __stdargs int fsetpos(FILE *stream, fpos_t *pos);
 extern __stdargs int getchar();
 extern __stdargs char *gets(char *s);
-extern __stdargs int vprintf(const char *format, va_list args);
+extern __stdargs int vprintf(const char *format, __gnuc_va_list args);
 extern __stdargs int putchar(int c);
-extern __stdargs int vscanf(const char *format, va_list args);
+extern __stdargs int vscanf(const char *format, __gnuc_va_list args);
 extern __stdargs void rewind(FILE *stream);
 extern __stdargs int setbuf(FILE *stream, char *buf);
 #else
@@ -210,13 +218,13 @@ __MY_INLINE__ __stdargs int getchar()
 __MY_INLINE__ __stdargs char *gets(char *s)
 {	return fgets(s, 0, stdin);}
 
-__MY_INLINE__ __stdargs int vprintf(const char *format,va_list args)
+__MY_INLINE__ __stdargs int vprintf(const char *format,__gnuc_va_list args)
 {	return vfprintf(stdout,format,args);}
 
 __MY_INLINE__ __stdargs int putchar(int c)
 {	return putc(c, stdout);}
 
-__MY_INLINE__ __stdargs int vscanf(const char *format,va_list args)
+__MY_INLINE__ __stdargs int vscanf(const char *format,__gnuc_va_list args)
 {	return vfscanf(stdin,format,args);}
 
 __MY_INLINE__ __stdargs void rewind(FILE *stream)
@@ -246,13 +254,14 @@ struct StandardPacket;
 #define LX_ATTY   0x02
 
 struct _StdFileDes;
+struct _types_fd_set; /* fd_set, without pulling in sys/types.h */
 struct _StdFileFx {
 	ssize_t __stdargs (*lx_read)(struct _StdFileDes *, void *, size_t);
 	ssize_t __stdargs (*lx_write)(struct _StdFileDes *, const void *, size_t);
 	int __stdargs (*lx_close)(struct _StdFileDes *);
 	int __stdargs (*lx_dup)(struct _StdFileDes *);
 	int __stdargs (*lx_fstat)(struct _StdFileDes *, struct stat *);
-	int __stdargs (*lx_select)(struct _StdFileDes *sfd, int select_cmd, int io_mode, struct fd_set *, unsigned long *);
+	int __stdargs (*lx_select)(struct _StdFileDes *sfd, int select_cmd, int io_mode, struct _types_fd_set *, unsigned long *);
 };
 
 typedef struct _StdFileDes {
