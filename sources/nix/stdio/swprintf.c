@@ -1,5 +1,6 @@
 #include "stdio.h"
 #include "wchar.h"
+#include <stdarg.h>
 int swprintf(wchar_t *s,size_t size,const wchar_t *format,...)
 { int retval;
   va_list args;
