@@ -164,14 +164,14 @@ extern __stdargs int fgetc(FILE *stream);
 extern __stdargs int fgetpos(FILE *stream, fpos_t *pos);
 extern __stdargs int fileno(FILE *file);
 extern __stdargs int fputc(int c, FILE *stream);
-extern __stdargs int fsetpos(FILE *stream, fpos_t *pos);
+extern __stdargs int fsetpos(FILE *stream, const fpos_t *pos);
 extern __stdargs int getchar();
 extern __stdargs char *gets(char *s);
 extern __stdargs int vprintf(const char *format, va_list args);
 extern __stdargs int putchar(int c);
 extern __stdargs int vscanf(const char *format, va_list args);
 extern __stdargs void rewind(FILE *stream);
-extern __stdargs int setbuf(FILE *stream, char *buf);
+extern __stdargs void setbuf(FILE *stream, char *buf);
 #else
 
 #if defined(__STDC_VERSION__) && (__STDC_VERSION__ >= 199901L)
@@ -201,7 +201,7 @@ __MY_INLINE__ __stdargs int fileno(FILE *file)
 __MY_INLINE__ __stdargs int fputc(int c,FILE *stream)
 {	return putc(c,stream);}
 
-__MY_INLINE__ __stdargs int fsetpos(FILE *stream,fpos_t *pos)
+__MY_INLINE__ __stdargs int fsetpos(FILE *stream,const fpos_t *pos)
 {	return fseek(stream,*pos,SEEK_SET);}
 
 __MY_INLINE__ __stdargs int getchar()
@@ -222,8 +222,8 @@ __MY_INLINE__ __stdargs int vscanf(const char *format,va_list args)
 __MY_INLINE__ __stdargs void rewind(FILE *stream)
 {	fseek(stream,0,SEEK_SET);}
 
-__MY_INLINE__ __stdargs int setbuf(FILE *stream,char *buf)
-{	return setvbuf(stream,buf,buf?_IOFBF:_IONBF,BUFSIZ);}
+__MY_INLINE__ __stdargs void setbuf(FILE *stream,char *buf)
+{	setvbuf(stream,buf,buf?_IOFBF:_IONBF,BUFSIZ);}
 #endif
 
 static inline __stdargs int fileno_unlocked(FILE *file) {
@@ -288,7 +288,10 @@ typedef struct _StdFileDes {
 
 extern __stdargs StdFileDes *_lx_fhfromfd(int fd);
 
-#define L_tmpnam 8
+/* tmpnam() writes "T:tempfile_2_<task>_<count>", up to 35 bytes. */
+#define L_tmpnam 64
+#define TMP_MAX 26
+#define FOPEN_MAX 20
 
 #ifdef __FILENAME_MAX__
 #define FILENAME_MAX    __FILENAME_MAX__
