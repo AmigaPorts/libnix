@@ -1,3 +1,4 @@
+#define _GNU_SOURCE /* this file defines the GNU strerror_r */
 #include <stdlib.h>
 
 const char * __sys_errlist__data[] = {
