@@ -296,12 +296,37 @@ extern __stdargs StdFileDes *_lx_fhfromfd(int fd);
 #define	FILENAME_MAX	1024
 #endif
 
+#if __LARGEFILE_VISIBLE || __POSIX_VISIBLE >= 200112
+#include <sys/_types.h>
+#ifndef _OFF_T_DECLARED
+typedef __off_t off_t;
+#define _OFF_T_DECLARED
+#endif
+extern __stdargs int fseeko(FILE *stream, off_t offset, int whence);
+extern __stdargs off_t ftello(FILE *stream);
+#endif
+
+#if __POSIX_VISIBLE >= 200809
+extern __stdargs int dprintf(int fd, const char *format, ...);
+extern __stdargs int vdprintf(int fd, const char *format, __gnuc_va_list args);
+#endif
+
 // define inlines for the unlocked stuff
 #if __MISC_VISIBLE || __POSIX_VISIBLE
 static inline __stdargs int	getc_unlocked (FILE *f) { return getc(f);}
 static inline __stdargs int	getchar_unlocked (void) { return getchar();}
 static inline __stdargs int	putc_unlocked (int c, FILE *f) { return putc(c, f);}
 static inline __stdargs int	putchar_unlocked (int c) { return putchar(c);}
+#endif
+#if __MISC_VISIBLE
+static inline __stdargs int	fgetc_unlocked (FILE *f) { return fgetc(f);}
+static inline __stdargs int	fputc_unlocked (int c, FILE *f) { return fputc(c, f);}
+static inline __stdargs int	fflush_unlocked (FILE *f) { return fflush(f);}
+static inline __stdargs int	feof_unlocked (FILE *f) { return feof(f);}
+static inline __stdargs int	ferror_unlocked (FILE *f) { return ferror(f);}
+static inline __stdargs void	clearerr_unlocked (FILE *f) { clearerr(f);}
+static inline __stdargs size_t	fread_unlocked (void *p, size_t s, size_t n, FILE *f) { return fread(p, s, n, f);}
+static inline __stdargs size_t	fwrite_unlocked (const void *p, size_t s, size_t n, FILE *f) { return fwrite(p, s, n, f);}
 #endif
 
 #ifdef __cplusplus
