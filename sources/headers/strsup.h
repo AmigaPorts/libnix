@@ -5,10 +5,12 @@
 
 #ifndef __NO_INLINE__
 
-#if defined(__STDC_VERSION__) && (__STDC_VERSION__ >= 199901L) && !defined(__MY_INLINE__)
+#ifndef __MY_INLINE__
+#if defined(__STDC_VERSION__) && (__STDC_VERSION__ >= 199901L)
 #define __MY_INLINE__ static inline
 #else
 #define __MY_INLINE__ extern inline
+#endif
 #endif
 
 __MY_INLINE__ __stdargs void *memmove(void *s1,const void *s2,size_t n)

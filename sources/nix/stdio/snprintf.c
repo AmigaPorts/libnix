@@ -1,4 +1,5 @@
 #include "stdio.h"
+#include <stdarg.h>
 int snprintf(char *s,size_t size,const char *format,...)
 { int retval;
   va_list args;

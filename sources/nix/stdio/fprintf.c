@@ -1,4 +1,5 @@
 #include "stdio.h"
+#include <stdarg.h>
 int fprintf(FILE *stream,const char *format,...)
 { int retval;
   va_list args;
