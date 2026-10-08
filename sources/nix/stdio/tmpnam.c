@@ -4,7 +4,7 @@
 #include <proto/dos.h>
 #include "stdio.h"
 
-static char namebuffer[34];
+static char namebuffer[L_tmpnam];
 
 char *tmpnam(char *s) {
 	BPTR filelock;
