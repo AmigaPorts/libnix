@@ -8,7 +8,7 @@
  */
 
 #include <sys/cdefs.h>
-#include <sys/types.h>
+#include <sys/_types.h>
 #include <stddef.h>
 
 #ifndef	NULL
@@ -55,6 +55,11 @@ __stdargs char *strndup(const char *, size_t);
 __stdargs void strmode(int, char *);
 __stdargs int strncasecmp(const char *, const char *, size_t);
 __stdargs char *strsep(char **, const char *);
+/* for swab(); the rest of sys/types.h stays out of string.h */
+#ifndef _SSIZE_T_DECLARED
+typedef _ssize_t ssize_t;
+#define _SSIZE_T_DECLARED
+#endif
 __stdargs void swab(const void *, void *, ssize_t);
 __stdargs int stricmp(const char *, const char *);
 __stdargs int strnicmp(const char *, const char *, size_t);
