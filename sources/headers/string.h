@@ -64,7 +64,15 @@ __stdargs void swab(const void *, void *, ssize_t);
 __stdargs int stricmp(const char *, const char *);
 __stdargs int strnicmp(const char *, const char *, size_t);
 
+/* Two strerror_r variants, selected as glibc and newlib do: _GNU_SOURCE
+   gets the GNU one returning the message, otherwise the POSIX one
+   returning an error number. */
+#if __GNU_VISIBLE
 __stdargs char *strerror_r(int errnum, char *buf, size_t buflen);
+#else
+__stdargs int strerror_r(int errnum, char *buf, size_t buflen)
+	__asm__(__ASMNAME("__xpg_strerror_r"));
+#endif
 #endif 
 
 #ifdef __NO_INLINE__
