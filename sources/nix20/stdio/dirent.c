@@ -42,7 +42,6 @@ LONG
 ExAll (BPTR lock, STRPTR buffer, LONG size, LONG type, struct ExAllControl *control) {
 	struct FileInfoBlock *fib, *fib1, *fib2;
 	struct ExAllData *ead, *next;
-	STRPTR nextBuffer;
 	unsigned count, needed;
 
 	count = 0;

@@ -146,8 +146,7 @@ static __inline APTR __GetBssStart(void)
 
 APTR
 LibInit(REG(a0,LONG SegList),REG(d0,__LIB lib),REG(a6,struct Library *SysBase))
-{ ULONG size;
-
+{
   /* set up header data */
 
   lib->LibNode.lib_Node.ln_Type = NT_LIBRARY;
@@ -168,6 +167,7 @@ LibInit(REG(a0,LONG SegList),REG(d0,__LIB lib),REG(a6,struct Library *SysBase))
 
   /* clear the bss part */
 
+  ULONG size;
   if ((size=__BSize())) {
 
     ULONG *p = __GetBssStart();
