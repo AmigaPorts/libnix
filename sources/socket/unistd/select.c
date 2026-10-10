@@ -89,7 +89,7 @@ static inline int net_select(int s, fd_set *in, fd_set *out, fd_set *exc, struct
 }
 
 static inline int lx_select(int nfd, fd_set *ifd, fd_set *ofd, fd_set *efd, struct timeval *timeout, u_long *mask)
-{ int i, waitin, waitout, waitexc, dotout, result, skipped_wait;
+{ int i, dotout, result, skipped_wait;
   u_long net_nfds, wait_sigs, recv_wait_sigs=0, origmask = mask ? *mask : 0;
   StdFileDes *f;
 
@@ -103,22 +103,17 @@ static inline int lx_select(int nfd, fd_set *ifd, fd_set *ofd, fd_set *efd, stru
    * for a descriptor to be ready to read, while the descriptor was only
    * opened for writing, the requested bit is immediately cleared
    */
-  waitin = waitout = waitexc = 0;
   /*if (nfd > NOFILE) nfd = NOFILE;*/
 
   for (i = 0; i < nfd; i++) {
     if (ifd && FD_ISSET(i, ifd) && (f = _lx_fhfromfd(i))) {
       if (!f->lx_fx)
         FD_CLR(i, ifd);
-      else
-        ++waitin;
     }
 
     if (ofd && FD_ISSET(i, ofd) && (f = _lx_fhfromfd(i))) {
 	if (!f->lx_fx)
         FD_CLR(i, ofd);
-      else
-        ++waitout;
     }
 
     if (efd && FD_ISSET(i, efd) && (f = _lx_fhfromfd(i))) {
@@ -126,8 +121,6 @@ static inline int lx_select(int nfd, fd_set *ifd, fd_set *ofd, fd_set *efd, stru
        * write-only fd?? */
     	if (!f->lx_fx)
         FD_CLR(i, efd);
-      else
-        ++waitexc;
     }
   }
 

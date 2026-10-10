@@ -87,6 +87,9 @@ endif
 ifeq (,$(kind))
 
 CFLAGS += -I$(root)/sources/headers -fno-builtin -ffast-math -D__libnix__
+# AmigaOS APIs take STRPTR (unsigned char) strings, so -Wpointer-sign
+# would flag every call that passes a plain char string.
+CFLAGS += -Wall -Wno-pointer-sign
 
 ifneq (,$(lc))
 CFLAGS += -D__libnix__

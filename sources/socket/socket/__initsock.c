@@ -113,7 +113,7 @@ static int __stdargs _sock_fstat(struct _StdFileDes *fp,struct stat *sb)
 }
 
 static int __stdargs _sock_poll(struct _StdFileDes *fp,int io_mode,struct SocketSettings *lss)
-{ struct timeval tv = {0, 0};
+{ struct timeval tv = { .tv_sec = 0, .tv_usec = 0 };
   fd_set in, out, exc;
   int rc;
 

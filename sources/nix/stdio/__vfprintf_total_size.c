@@ -215,6 +215,7 @@ extern unsigned __ulldivus(unsigned long long *llp, unsigned short n);
  * For GCC >= 16, returns long double for full precision.
  * For older GCC, returns double (long double math is broken on m68k).
  */
+#ifdef FULL_SPECIFIERS
 #if USE_LDOUBLE_MATH
 static long double pow10_ld(int n)
 {
@@ -285,6 +286,7 @@ static double pow10_ld(int n) {
 	return result;
 }
 #endif
+#endif /* FULL_SPECIFIERS */
 /*
  * How many significant decimal digits each source format genuinely
  * carries.  Digit extraction goes this deep (plus one guard digit) so
@@ -338,10 +340,12 @@ int __vfprintf_total_size(FILE *stream, const char *format, va_list args) {
 			char subtype = 'i';
 			char buffer1[4]; /* sign / radix prefix slot */
 			char buffer[REQUIREDBUFFER + 8];
+#ifdef FULL_SPECIFIERS
 			char outbuffer[REQUIREDBUFFER + 128]; /* Buffer used for output and left padding. */
 			char *outp = outbuffer;
 			char outexponent[8]; /* Separate buffer for the exponent, such as e+1234. */
 			char *oute = 0; /* Set only when an exponent is emitted. */
+#endif
 			char *buffer2 = buffer;
 			size_t size1 = 0, size2 = 0;
 			const char *ptr = format + 1;
@@ -659,7 +663,7 @@ int __vfprintf_total_size(FILE *stream, const char *format, va_list args) {
 				 * ---------------------------------------------------- */
 				{
 					int pos = 0;
-					int startPos;
+					int startPos = 0;
 					short leading = 1;
 					short killZero = 0;
 					int digits_to_compute = MEANINGFUL_DIGITS;
@@ -792,9 +796,6 @@ int __vfprintf_total_size(FILE *stream, const char *format, va_list args) {
 									exponent = (short) (lu.b.exp - 16383);
 									buffer[0] = '1';
 								}
-								/* Extract mantissa for long double */
-								unsigned x = (unsigned) (lu.b.mant >> 32);
-								unsigned y = (unsigned) (lu.b.mant & 0xFFFFFFFFULL);
 								/* Full 64-bit mantissa including explicit integer bit */
 								unsigned long long mant = lu.b.mant;
 								/* Drop the explicit integer bit (bit 63) */

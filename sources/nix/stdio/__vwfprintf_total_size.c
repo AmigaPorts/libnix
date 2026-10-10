@@ -315,7 +315,7 @@ int __vwfprintf_total_size(FILE *stream, const wchar_t *format, va_list args) {
 				// e, E : one digit before dot, preci digits behind dot = 1 + preci
 				// g, G : preci digits total
 				int startPos = 1; // first digit
-				short stopPos; // behind last digit
+				short stopPos = 0; // behind last digit
 				short leading = 1; // digits until dot is inserted
 				short dotZero = 0; // insert zeroes after dot
 				short postZero = 0; // append zeroes at end
