@@ -32,10 +32,22 @@ swapstack.o: ../sources/misc/swapstack.c
 stack: stack.c swapstack.o
 	$(CROSS_CC) $(CROSS_CFLAGS) -Wall -o $@ stack.c swapstack.o
 
-check-target: stack
+# The wide printf modules, compiled as libm builds them (with float
+# formatting) and linked ahead of libm and libnix.
+vwfprintf.o: ../sources/nix/stdio/__vwfprintf_total_size.c
+	$(CROSS_CC) $(CROSS_CFLAGS) -I../sources/headers -fno-builtin -D__libnix__ -DFULL_SPECIFIERS -c -o $@ $<
+
+vswprintf.o: ../sources/nix/stdio/vswprintf.c
+	$(CROSS_CC) $(CROSS_CFLAGS) -I../sources/headers -fno-builtin -D__libnix__ -DFULL_SPECIFIERS -c -o $@ $<
+
+wprintf: wprintf.c vswprintf.o vwfprintf.o
+	$(CROSS_CC) $(CROSS_CFLAGS) -Wall -o $@ wprintf.c vswprintf.o vwfprintf.o -lm
+
+check-target: stack wprintf
 	$(SIM) $(SIMFLAGS) ./stack
+	$(SIM) $(SIMFLAGS) ./wprintf
 
 clean:
-	rm -f amigapath stack swapstack.o
+	rm -f amigapath stack swapstack.o wprintf vswprintf.o vwfprintf.o
 
 .PHONY: all check check-target clean
