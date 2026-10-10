@@ -28,10 +28,11 @@ extern int __vwfprintf_total_size(FILE *stream, const wchar_t *fmt, va_list args
 /* a little macro to make life easier */
 
 #define OUT(c)  do {                         \
-                  putc((c >> 24),stream);    \
-                  putc((c >> 16),stream);    \
-                  putc((c >>  8),stream);    \
-                  putc((c      ),stream);    \
+                  long out_c = (c);          \
+                  putc(out_c >> 24,stream);  \
+                  putc(out_c >> 16,stream);  \
+                  putc(out_c >>  8,stream);  \
+                  putc(out_c,stream);        \
                   outcount += 4;             \
                 }while(0)
 
