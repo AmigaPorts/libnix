@@ -43,11 +43,24 @@ vswprintf.o: ../sources/nix/stdio/vswprintf.c
 wprintf: wprintf.c vswprintf.o vwfprintf.o
 	$(CROSS_CC) $(CROSS_CFLAGS) -Wall -o $@ wprintf.c vswprintf.o vwfprintf.o -lm
 
-check-target: stack wprintf
+# The soft-float comparisons, compiled as libm builds them and linked
+# ahead of libm.
+eqdf2.o: ../sources/math/math/__eqdf2.c
+	$(CROSS_CC) $(CROSS_CFLAGS) -I../sources/headers -fno-builtin -ffast-math -D__libnix__ -c -o $@ $<
+
+eqsf2.o: ../sources/math/math/__eqsf2.c
+	$(CROSS_CC) $(CROSS_CFLAGS) -I../sources/headers -fno-builtin -ffast-math -D__libnix__ -c -o $@ $<
+
+fcmp: fcmp.c eqdf2.o eqsf2.o
+	$(CROSS_CC) $(CROSS_CFLAGS) -m68000 -Wall -o $@ fcmp.c eqdf2.o eqsf2.o -lm
+
+check-target: stack wprintf fcmp
 	$(SIM) $(SIMFLAGS) ./stack
 	$(SIM) $(SIMFLAGS) ./wprintf
+	$(SIM) $(SIMFLAGS) ./fcmp
 
 clean:
-	rm -f amigapath stack swapstack.o wprintf vswprintf.o vwfprintf.o
+	rm -f amigapath stack swapstack.o wprintf vswprintf.o vwfprintf.o \
+	  fcmp eqdf2.o eqsf2.o
 
 .PHONY: all check check-target clean
