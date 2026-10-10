@@ -48,7 +48,7 @@ u_long
 inet_network(const char *cp)
 {
   u_long parts[4], val, base, n, i, *pp = parts;
-  char c;
+  unsigned char c;
 
 again:
   val = 0; base = 10;
@@ -75,7 +75,7 @@ again:
     *pp++ = val, cp++;
     goto again;
   }
-  if (*cp && !isspace(*cp))
+  if (*cp && !isspace((unsigned char)*cp))
     return (u_long)-1;
   *pp++ = val;
   n = pp - parts;
