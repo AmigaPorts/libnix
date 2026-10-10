@@ -65,7 +65,7 @@ int
 inet_aton(const char *cp, struct in_addr *addr)
 {
   u_long parts[4], val, base, n, *pp = parts;
-  char c;
+  unsigned char c;
 
   for (;;) {
     /*
@@ -111,7 +111,7 @@ inet_aton(const char *cp, struct in_addr *addr)
   /*
    * Check for trailing characters.
    */
-  if (*cp && (!isascii(*cp) || !isspace(*cp)))
+  if (*cp && (!isascii(*cp) || !isspace((unsigned char)*cp)))
     return (0);
 
   /*
