@@ -15,8 +15,18 @@ asm(
 "	btst	#1,d0;"
 "	jeq	error;"
 "	move.l	#0x68881,d1;"
+#if defined(mc68060)
+/* AFF_FPU40 without AFF_68881 is an 040/060 FPU whose emulation library
+   is not loaded.  Code built for the 68060 does not use the instructions
+   only that library provides, so the FPU alone is enough.  */
+"	btst	#6,d0;"
+"	jne	1f;"
+#endif
 "	btst	#4,d0;"
 "	jeq	error;"
+#if defined(mc68060)
+"1:;"
+#endif
 );
 
 // init rounding
