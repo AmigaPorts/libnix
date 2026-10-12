@@ -22,6 +22,7 @@ amigapath: amigapath.c ../sources/nix/extra/__amigapath.c ../sources/headers/ami
 	$(CC) $(CFLAGS) -iquote . -iquote ../sources/headers -o $@ amigapath.c
 
 check: amigapath
+	python3 run-atan2-zero.py
 	./amigapath
 
 # swapstack.c is compiled the way Makefile.gcc6 does it and linked ahead
@@ -42,6 +43,20 @@ vswprintf.o: ../sources/nix/stdio/vswprintf.c
 
 wprintf: wprintf.c vswprintf.o vwfprintf.o
 	$(CROSS_CC) $(CROSS_CFLAGS) -Wall -o $@ wprintf.c vswprintf.o vwfprintf.o -lm
+
+# Compile the implementations with the library's fast-math setting, but
+# keep the bit-pattern assertions free of fast-math and compiler builtins.
+atan2.o: ../sources/math/trans/atan2.c
+	$(CROSS_CC) $(CROSS_CFLAGS) -fno-builtin -ffast-math -c -o $@ $<
+
+atan2f.o: ../sources/math/trans/atan2f.c
+	$(CROSS_CC) $(CROSS_CFLAGS) -fno-builtin -ffast-math -c -o $@ $<
+
+atan2-zero: atan2-zero.c atan2.o
+	$(CROSS_CC) $(CROSS_CFLAGS) -fno-fast-math -fno-builtin -Wall -o $@ $^ -lm
+
+atan2f-zero: atan2f-zero.c atan2f.o
+	$(CROSS_CC) $(CROSS_CFLAGS) -fno-fast-math -fno-builtin -Wall -o $@ $^ -lm
 
 # The soft-float comparisons, compiled as libm builds them and linked
 # ahead of libm.
@@ -68,14 +83,17 @@ inet_network.o: ../sources/socket/arpa/inet_network.c
 inet: inet.c inet_aton.o inet_network.o
 	$(CROSS_CC) $(CROSS_CFLAGS) -Wall -o $@ inet.c inet_aton.o inet_network.o
 
-check-target: stack wprintf fcmp inet
+check-target: stack wprintf fcmp inet atan2-zero atan2f-zero
 	$(SIM) $(SIMFLAGS) ./stack
 	$(SIM) $(SIMFLAGS) ./wprintf
 	$(SIM) $(SIMFLAGS) ./fcmp
 	$(SIM) $(SIMFLAGS) ./inet
+	$(SIM) $(SIMFLAGS) ./atan2-zero
+	$(SIM) $(SIMFLAGS) ./atan2f-zero
 
 clean:
 	rm -f amigapath stack swapstack.o wprintf vswprintf.o vwfprintf.o \
-	  fcmp eqdf2.o eqsf2.o inet inet_aton.o inet_network.o
+	  fcmp eqdf2.o eqsf2.o inet inet_aton.o inet_network.o atan2-zero atan2f-zero atan2.o atan2f.o
+
 
 .PHONY: all check check-target clean
