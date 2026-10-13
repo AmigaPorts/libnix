@@ -54,13 +54,24 @@ eqsf2.o: ../sources/math/math/__eqsf2.c
 fcmp: fcmp.c eqdf2.o eqsf2.o
 	$(CROSS_CC) $(CROSS_CFLAGS) -m68000 -Wall -o $@ fcmp.c eqdf2.o eqsf2.o -lm
 
-check-target: stack wprintf fcmp
+# The address parsers, compiled as libsocket builds them.
+inet_aton.o: ../sources/socket/arpa/inet_aton.c
+	$(CROSS_CC) $(CROSS_CFLAGS) -I../sources/headers -fno-builtin -D__libnix__ -c -o $@ $<
+
+inet_network.o: ../sources/socket/arpa/inet_network.c
+	$(CROSS_CC) $(CROSS_CFLAGS) -I../sources/headers -fno-builtin -D__libnix__ -c -o $@ $<
+
+inet: inet.c inet_aton.o inet_network.o
+	$(CROSS_CC) $(CROSS_CFLAGS) -Wall -o $@ inet.c inet_aton.o inet_network.o
+
+check-target: stack wprintf fcmp inet
 	$(SIM) $(SIMFLAGS) ./stack
 	$(SIM) $(SIMFLAGS) ./wprintf
 	$(SIM) $(SIMFLAGS) ./fcmp
+	$(SIM) $(SIMFLAGS) ./inet
 
 clean:
 	rm -f amigapath stack swapstack.o wprintf vswprintf.o vwfprintf.o \
-	  fcmp eqdf2.o eqsf2.o
+	  fcmp eqdf2.o eqsf2.o inet inet_aton.o inet_network.o
 
 .PHONY: all check check-target clean
