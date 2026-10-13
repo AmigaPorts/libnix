@@ -54,12 +54,16 @@ eqsf2.o: ../sources/math/math/__eqsf2.c
 fcmp: fcmp.c eqdf2.o eqsf2.o
 	$(CROSS_CC) $(CROSS_CFLAGS) -m68000 -Wall -o $@ fcmp.c eqdf2.o eqsf2.o -lm
 
-# The address parsers, compiled as libsocket builds them.
+# The address parsers, compiled as libsocket builds them. The ctype macros
+# warn when passed a plain char, which the run cannot reliably catch: an
+# out-of-range lookup reads whatever precedes the table.
+INET_CFLAGS = -Wall -Werror=char-subscripts
+
 inet_aton.o: ../sources/socket/arpa/inet_aton.c
-	$(CROSS_CC) $(CROSS_CFLAGS) -I../sources/headers -fno-builtin -D__libnix__ -c -o $@ $<
+	$(CROSS_CC) $(CROSS_CFLAGS) $(INET_CFLAGS) -I../sources/headers -fno-builtin -D__libnix__ -c -o $@ $<
 
 inet_network.o: ../sources/socket/arpa/inet_network.c
-	$(CROSS_CC) $(CROSS_CFLAGS) -I../sources/headers -fno-builtin -D__libnix__ -c -o $@ $<
+	$(CROSS_CC) $(CROSS_CFLAGS) $(INET_CFLAGS) -I../sources/headers -fno-builtin -D__libnix__ -c -o $@ $<
 
 inet: inet.c inet_aton.o inet_network.o
 	$(CROSS_CC) $(CROSS_CFLAGS) -Wall -o $@ inet.c inet_aton.o inet_network.o

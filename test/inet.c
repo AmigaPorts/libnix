@@ -9,7 +9,7 @@
 
 static int aton(const char *cp, int want_ok, unsigned long want)
 {
-	struct in_addr a;
+	struct in_addr a = { 0 };
 	int ok = inet_aton(cp, &a);
 
 	if (ok == want_ok && (!ok || a.s_addr == want))
