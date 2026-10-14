@@ -3,10 +3,10 @@
 Run the host tests with `make -C test check`, or just the math regressions:
 
 ```
-python3 test/run-atan2-zero.py
+make -C test check-atan2
 ```
 
-The runner compiles both actual library sources, stubbing only the Amiga
+The Makefile compiles both actual library sources, stubbing only the Amiga
 IEEEDPAtan/IEEESPAtan calls. It checks normal and `-ffast-math` builds.
 Each precision has 24 cases: signed-zero pairs, zero y with finite/infinite
 x, vertical axes, quadrants, and NaN x with zero y. Assertions compare

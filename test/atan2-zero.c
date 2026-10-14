@@ -1,4 +1,4 @@
-/* Run against the real Amiga libm, or test/run-atan2-zero.py on a host. */
+/* Run against the real Amiga libm, or make -C test check-atan2 on a host. */
 #include <math.h>
 #include <stdint.h>
 #include <stdio.h>

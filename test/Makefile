@@ -21,8 +21,36 @@ all: check
 amigapath: amigapath.c ../sources/nix/extra/__amigapath.c ../sources/headers/amigapath.h stabs.h
 	$(CC) $(CFLAGS) -iquote . -iquote ../sources/headers -o $@ amigapath.c
 
-check: amigapath
-	python3 run-atan2-zero.py
+# Host-only names keep these objects separate from the target builds.
+HOST_MATH_CFLAGS = $(CFLAGS) -std=c99 -fno-builtin -fno-fast-math
+HOST_ATAN_TESTS = host-atan2-zero host-atan2-zero-fast host-atan2f-zero host-atan2f-zero-fast
+HOST_ATAN_HEADERS = host/proto/mathieeesingtrans.h host/proto/mathieeedoubtrans.h
+
+host-atan-stub.o: host/atan-stub.c $(HOST_ATAN_HEADERS)
+	$(CC) $(HOST_MATH_CFLAGS) -c -o $@ $<
+
+host-%-test.o: %-zero.c
+	$(CC) $(HOST_MATH_CFLAGS) -DLIBNIX_HOST_TEST -c -o $@ $<
+
+host-%-normal.o: ../sources/math/trans/%.c $(HOST_ATAN_HEADERS)
+	$(CC) $(HOST_MATH_CFLAGS) -D$*=libnix_$* -Ihost -c -o $@ $<
+
+host-%-fast.o: ../sources/math/trans/%.c $(HOST_ATAN_HEADERS)
+	$(CC) $(HOST_MATH_CFLAGS) -ffast-math -D$*=libnix_$* -Ihost -c -o $@ $<
+
+host-%-zero: host-%-test.o host-%-normal.o host-atan-stub.o
+	$(CC) $(HOST_MATH_CFLAGS) $(LDFLAGS) -o $@ $^ -lm $(LDLIBS)
+
+host-%-zero-fast: host-%-test.o host-%-fast.o host-atan-stub.o
+	$(CC) $(HOST_MATH_CFLAGS) $(LDFLAGS) -o $@ $^ -lm $(LDLIBS)
+
+check-atan2: $(HOST_ATAN_TESTS)
+	./host-atan2-zero
+	./host-atan2-zero-fast
+	./host-atan2f-zero
+	./host-atan2f-zero-fast
+
+check: amigapath check-atan2
 	./amigapath
 
 # swapstack.c is compiled the way Makefile.gcc6 does it and linked ahead
@@ -92,8 +120,10 @@ check-target: stack wprintf fcmp inet atan2-zero atan2f-zero
 	$(SIM) $(SIMFLAGS) ./atan2f-zero
 
 clean:
+	rm -f $(HOST_ATAN_TESTS) host-atan-stub.o host-atan2-test.o host-atan2f-test.o host-atan2-normal.o host-atan2f-normal.o host-atan2-fast.o host-atan2f-fast.o
 	rm -f amigapath stack swapstack.o wprintf vswprintf.o vwfprintf.o \
 	  fcmp eqdf2.o eqsf2.o inet inet_aton.o inet_network.o atan2-zero atan2f-zero atan2.o atan2f.o
 
 
-.PHONY: all check check-target clean
+
+.PHONY: all check check-atan2 check-target clean
