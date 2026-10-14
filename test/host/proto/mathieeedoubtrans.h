@@ -1,0 +1,1 @@
+double IEEEDPAtan(double);
