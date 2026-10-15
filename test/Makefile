@@ -86,6 +86,12 @@ atan2-zero: atan2-zero.c atan2.o
 atan2f-zero: atan2f-zero.c atan2f.o
 	$(CROSS_CC) $(CROSS_CFLAGS) -fno-fast-math -fno-builtin -Wall -o $@ $^ -lm
 
+frexpl.o: ../sources/math/extra/frexpl.c
+	$(CROSS_CC) $(CROSS_CFLAGS) -fno-builtin -ffast-math -c -o $@ $<
+
+frexpl: frexpl.c frexpl.o
+	$(CROSS_CC) $(CROSS_CFLAGS) -fno-fast-math -fno-builtin -Wall -o $@ $^
+
 # The soft-float comparisons, compiled as libm builds them and linked
 # ahead of libm.
 eqdf2.o: ../sources/math/math/__eqdf2.c
@@ -129,7 +135,7 @@ popen.o: ../sources/nix20/stdio/popen.c
 popen: popen.c popen.o
 	$(CROSS_CC) $(CROSS_CFLAGS) -Wall -o $@ popen.c popen.o
 
-check-target: stack wprintf fcmp inet atan2-zero atan2f-zero ftw
+check-target: stack wprintf fcmp inet atan2-zero atan2f-zero ftw frexpl
 	$(SIM) $(SIMFLAGS) ./stack
 	$(SIM) $(SIMFLAGS) ./wprintf
 	$(SIM) $(SIMFLAGS) ./fcmp
@@ -137,12 +143,13 @@ check-target: stack wprintf fcmp inet atan2-zero atan2f-zero ftw
 	$(SIM) $(SIMFLAGS) ./atan2-zero
 	$(SIM) $(SIMFLAGS) ./atan2f-zero
 	$(SIM) $(SIMFLAGS) ./ftw
+	$(SIM) $(SIMFLAGS) ./frexpl
 
 clean:
 	rm -f $(HOST_ATAN_TESTS) host-atan-stub.o host-atan2-test.o host-atan2f-test.o host-atan2-normal.o host-atan2f-normal.o host-atan2-fast.o host-atan2f-fast.o
 	rm -f amigapath stack swapstack.o wprintf vswprintf.o vwfprintf.o \
 	  fcmp eqdf2.o eqsf2.o inet inet_aton.o inet_network.o atan2-zero atan2f-zero atan2.o atan2f.o \
-	  ftw ftw.o nftw.o popen popen.o
+	  ftw ftw.o nftw.o popen popen.o frexpl frexpl.o
 
 
 
