@@ -254,14 +254,15 @@ struct StandardPacket;
 #define LX_ATTY   0x02
 
 struct _StdFileDes;
-struct _types_fd_set; /* fd_set, without pulling in sys/types.h */
 struct _StdFileFx {
 	ssize_t __stdargs (*lx_read)(struct _StdFileDes *, void *, size_t);
 	ssize_t __stdargs (*lx_write)(struct _StdFileDes *, const void *, size_t);
 	int __stdargs (*lx_close)(struct _StdFileDes *);
 	int __stdargs (*lx_dup)(struct _StdFileDes *);
 	int __stdargs (*lx_fstat)(struct _StdFileDes *, struct stat *);
-	int __stdargs (*lx_select)(struct _StdFileDes *sfd, int select_cmd, int io_mode, struct _types_fd_set *, unsigned long *);
+	/* the fd_set * is passed as void *, so this header does not depend on
+	   how newlib names the struct behind fd_set */
+	int __stdargs (*lx_select)(struct _StdFileDes *sfd, int select_cmd, int io_mode, void *fdset, unsigned long *);
 };
 
 typedef struct _StdFileDes {
