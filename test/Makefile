@@ -121,6 +121,14 @@ nftw.o: ../sources/nix/extra/nftw.c ../sources/headers/ftw.h
 ftw: ftw.c ftw.o nftw.o
 	$(CROSS_CC) $(CROSS_CFLAGS) -I../sources/headers -Wall -o $@ ftw.c ftw.o nftw.o
 
+# Needs PIPE: and a shell, which the simulators lack: build it with
+# `make popen` and run it on AmigaOS, see popen.c.
+popen.o: ../sources/nix20/stdio/popen.c
+	$(CROSS_CC) $(CROSS_CFLAGS) -I../sources/headers -fno-builtin -D__libnix__ -c -o $@ $<
+
+popen: popen.c popen.o
+	$(CROSS_CC) $(CROSS_CFLAGS) -Wall -o $@ popen.c popen.o
+
 check-target: stack wprintf fcmp inet atan2-zero atan2f-zero ftw
 	$(SIM) $(SIMFLAGS) ./stack
 	$(SIM) $(SIMFLAGS) ./wprintf
@@ -134,7 +142,7 @@ clean:
 	rm -f $(HOST_ATAN_TESTS) host-atan-stub.o host-atan2-test.o host-atan2f-test.o host-atan2-normal.o host-atan2f-normal.o host-atan2-fast.o host-atan2f-fast.o
 	rm -f amigapath stack swapstack.o wprintf vswprintf.o vwfprintf.o \
 	  fcmp eqdf2.o eqsf2.o inet inet_aton.o inet_network.o atan2-zero atan2f-zero atan2.o atan2f.o \
-	  ftw ftw.o nftw.o
+	  ftw ftw.o nftw.o popen popen.o
 
 
 
