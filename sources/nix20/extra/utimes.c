@@ -63,8 +63,10 @@ int SetFileDate(char const * file, struct DateStamp const * ds) {
 int utimes(const char *file, const struct timeval *times) {
 	struct DateStamp d;
 
-	if ((file = __amigapath(file)) == NULL)
-		return -1;
+#ifdef IXPATHS
+	if((file=__amigapath(file))==NULL)
+	return -1;
+#endif	
 	if (times) {
 		struct timeval modtime = times[1];
 		time_t t;

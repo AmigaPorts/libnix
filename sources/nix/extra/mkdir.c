@@ -11,8 +11,10 @@ int mkdir(const char *name, mode_t mode)
   BPTR fl;
   int ret;
 
-  if((name=__amigapath(name))==NULL)
-    return -1;
+#ifdef IXPATHS
+	if((name=__amigapath(name))==NULL)
+	return -1;
+#endif
   if ((fl=CreateDir((STRPTR)name)))
   {
     UnLock(fl); ret=chmod(name,mode);

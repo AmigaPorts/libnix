@@ -10,8 +10,10 @@ ssize_t readlink(const char *path, char *buf, size_t bufsiz) {
 	BPTR lock = 0;
 	int retval = -1;
 
-	if ((path = __amigapath(path)) == NULL)
-		return -1;
+#ifdef IXPATHS
+	if((path=__amigapath(path))==NULL)
+	return -1;
+#endif
 	lock = Open((CONST_STRPTR)path, MODE_OLDFILE);
 	if (lock == 0) {
 		errno = ENOENT;

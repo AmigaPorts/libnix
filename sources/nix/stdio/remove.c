@@ -9,8 +9,10 @@ asm(".global _rmdir; _rmdir = _remove");
 asm(".global _unlink; _unlink = _remove");
 int remove(const char *filename)
 { 
-  if((filename=__amigapath(filename))==NULL)
-    return -1;
+#ifdef IXPATHS
+	if((filename=__amigapath(filename))==NULL)
+	return -1;
+#endif
   if(DeleteFile((CONST_STRPTR)filename))
     return 0;
   else

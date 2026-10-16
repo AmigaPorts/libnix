@@ -90,9 +90,11 @@ ExAll (BPTR lock, STRPTR buffer, LONG size, LONG type, struct ExAllControl *cont
 DIR* opendir(const char *dirname) {
 	DIR *dirp;
 
-	if ((dirname = __amigapath(dirname)) == NULL)
+#ifdef IXPATHS
+	if((dirname=__amigapath(dirname))==NULL)
 		return NULL;
-	if ((dirp = (DIR*) AllocVec(sizeof(DIR), MEMF_PUBLIC | MEMF_CLEAR)) != NULL) {
+#endif
+	if (dirname && (dirp = (DIR*) AllocVec(sizeof(DIR), MEMF_PUBLIC | MEMF_CLEAR)) != NULL) {
 		dirp->d_lock = (void *)Lock(dirname, SHARED_LOCK);
 		if (dirp->d_lock != (void*)0) {
 //			dirp->d_count = 0;

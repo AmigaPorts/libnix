@@ -9,8 +9,10 @@ extern void __seterrno(void);
 int access(const char *name, int mode) {
 	BPTR lock;
 
+#ifdef IXPATHS
 	if((name=__amigapath(name))==NULL)
 	return -1;
+#endif
 
 	lock = Lock((CONST_STRPTR )name, mode&(O_WRONLY|O_RDWR)?ACCESS_WRITE:ACCESS_READ);
 	if (lock != 0l) {
