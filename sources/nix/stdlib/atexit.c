@@ -24,12 +24,14 @@ int atexit(void (*func)(void))
     return 0; }
 }
 
+/* Unlink each function before calling it: if it calls exit(), the exit
+   list runs again and must go on with the next one, not loop forever.  */
 void __exitatexit(void)
 {
-  struct atexitnode *thisf=__funclist;
-  while(thisf!=NULL)
-  { (*thisf->func)();
-    thisf=thisf->next; }
+  struct atexitnode *thisf;
+  while((thisf=__funclist)!=NULL)
+  { __funclist=thisf->next;
+    (*thisf->func)(); }
 }
 
 ADD2EXIT(__exitatexit,0);
