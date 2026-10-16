@@ -111,18 +111,30 @@ inet_network.o: ../sources/socket/arpa/inet_network.c
 inet: inet.c inet_aton.o inet_network.o
 	$(CROSS_CC) $(CROSS_CFLAGS) -Wall -o $@ inet.c inet_aton.o inet_network.o
 
-check-target: stack wprintf fcmp inet atan2-zero atan2f-zero
+# The directory walkers, compiled against the libnix headers and sources.
+ftw.o: ../sources/nix/extra/ftw.c ../sources/headers/ftw.h
+	$(CROSS_CC) $(CROSS_CFLAGS) -I../sources/headers -fno-builtin -D__libnix__ -c -o $@ $<
+
+nftw.o: ../sources/nix/extra/nftw.c ../sources/headers/ftw.h
+	$(CROSS_CC) $(CROSS_CFLAGS) -I../sources/headers -fno-builtin -D__libnix__ -c -o $@ $<
+
+ftw: ftw.c ftw.o nftw.o
+	$(CROSS_CC) $(CROSS_CFLAGS) -I../sources/headers -Wall -o $@ ftw.c ftw.o nftw.o
+
+check-target: stack wprintf fcmp inet atan2-zero atan2f-zero ftw
 	$(SIM) $(SIMFLAGS) ./stack
 	$(SIM) $(SIMFLAGS) ./wprintf
 	$(SIM) $(SIMFLAGS) ./fcmp
 	$(SIM) $(SIMFLAGS) ./inet
 	$(SIM) $(SIMFLAGS) ./atan2-zero
 	$(SIM) $(SIMFLAGS) ./atan2f-zero
+	$(SIM) $(SIMFLAGS) ./ftw
 
 clean:
 	rm -f $(HOST_ATAN_TESTS) host-atan-stub.o host-atan2-test.o host-atan2f-test.o host-atan2-normal.o host-atan2f-normal.o host-atan2-fast.o host-atan2f-fast.o
 	rm -f amigapath stack swapstack.o wprintf vswprintf.o vwfprintf.o \
-	  fcmp eqdf2.o eqsf2.o inet inet_aton.o inet_network.o atan2-zero atan2f-zero atan2.o atan2f.o
+	  fcmp eqdf2.o eqsf2.o inet inet_aton.o inet_network.o atan2-zero atan2f-zero atan2.o atan2f.o \
+	  ftw ftw.o nftw.o
 
 
 
