@@ -12,7 +12,7 @@
 __stdargs int ioctl(int s, unsigned long cmd, ...)
 { struct SocketSettings *lss;
   StdFileDes *fp = _lx_fhfromfd(s);
-  int arglen,inout,rc;
+  int rc;
   caddr_t data;
   va_list va;
 
@@ -21,8 +21,8 @@ __stdargs int ioctl(int s, unsigned long cmd, ...)
   }
   
   va_start(va, cmd);
-  inout = va_arg(va, int);
-  arglen = va_arg(va, int);
+  (void)va_arg(va, int); /* inout */
+  (void)va_arg(va, int); /* arglen */
   data = va_arg(va, caddr_t);
   va_end(va);
 

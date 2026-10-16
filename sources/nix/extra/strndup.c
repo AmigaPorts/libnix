@@ -1,15 +1,22 @@
 #include <stdlib.h>
 #include <string.h>
 
-char* strndup(const char *s, size_t n) {
-	int l = strlen_plus_one(s);
-	if (++n < l)
-		l = n;
-	char *s1 = malloc(l);
-	if (s1) {
-		--l;
-		memcpy(s1, s, l);
-		s1[l] = 0;
+/*
+ * Same as newlib's _strndup_r: only the first n bytes are examined,
+ * so an unterminated buffer is safe.
+ */
+char *strndup(const char *str, size_t n) {
+	const char *ptr = str;
+	size_t len;
+	char *copy;
+
+	while (n-- > 0 && *ptr)
+		ptr++;
+	len = ptr - str;
+	copy = malloc(len + 1);
+	if (copy) {
+		memcpy(copy, str, len);
+		copy[len] = 0;
 	}
-	return s1;
+	return copy;
 }

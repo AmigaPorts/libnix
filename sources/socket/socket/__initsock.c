@@ -113,7 +113,7 @@ static int __stdargs _sock_fstat(struct _StdFileDes *fp,struct stat *sb)
 }
 
 static int __stdargs _sock_poll(struct _StdFileDes *fp,int io_mode,struct SocketSettings *lss)
-{ struct timeval tv = {0, 0};
+{ struct timeval tv = { .tv_sec = 0, .tv_usec = 0 };
   fd_set in, out, exc;
   int rc;
 
@@ -153,8 +153,9 @@ static int __stdargs _sock_poll(struct _StdFileDes *fp,int io_mode,struct Socket
   return ((rc == 1) ? 1 : 0);
 }
 
-static int __stdargs _sock_select(struct _StdFileDes *fp,int select_cmd,int io_mode,fd_set *set,u_long *nfds)
+static int __stdargs _sock_select(struct _StdFileDes *fp,int select_cmd,int io_mode,void *fdset,u_long *nfds)
 { struct SocketSettings *lss = _lx_get_socket_settings();
+  fd_set *set = fdset;
   
   if (select_cmd == SELCMD_PREPARE) {
     FD_SET(fp->lx_sock, set);

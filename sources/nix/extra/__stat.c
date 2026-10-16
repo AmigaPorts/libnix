@@ -26,7 +26,12 @@ int __stat(struct stat *buf,struct FileInfoBlock *fib)
    buf->st_atime=buf->st_mtime=buf->st_ctime=
      ((fib->fib_Date.ds_Days+2922)*1440+fib->fib_Date.ds_Minute)*60+
      fib->fib_Date.ds_Tick/TICKS_PER_SECOND;
+#ifdef st_atime
+   /* newlib since 2019: st_atim and friends are struct timespec */
+   buf->st_atim.tv_nsec=buf->st_mtim.tv_nsec=buf->st_ctim.tv_nsec=0;
+#else
    buf->st_spare1=buf->st_spare2=buf->st_spare3=0;
+#endif
    buf->st_blksize=512;
    buf->st_blocks=fib->fib_NumBlocks;
    return 0;

@@ -1,4 +1,5 @@
 #include "stdio.h"
+#include <stdarg.h>
 int sscanf(const char *s,const char *format,...)
 { int retval;
   va_list args;

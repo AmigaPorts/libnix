@@ -2,6 +2,8 @@
 #include <sys/types.h>
 #include <sys/stat.h>
 
+#include "amigapath.h"
+
 extern void __seterrno(void);
 
 int mkdir(const char *name, mode_t mode)
@@ -9,6 +11,8 @@ int mkdir(const char *name, mode_t mode)
   BPTR fl;
   int ret;
 
+  if((name=__amigapath(name))==NULL)
+    return -1;
   if ((fl=CreateDir((STRPTR)name)))
   {
     UnLock(fl); ret=chmod(name,mode);

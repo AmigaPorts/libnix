@@ -1,4 +1,5 @@
 #include <stdlib.h>
+#include <string.h>
 
 void* calloc(size_t nmemb, size_t size) {
 	size_t l = nmemb * size;

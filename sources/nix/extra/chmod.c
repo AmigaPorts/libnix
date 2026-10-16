@@ -6,16 +6,12 @@
 #include <sys/stat.h>
 
 extern void __seterrno(void);
-#ifdef IXPATHS
-extern char *__amigapath(const char *path);
-#endif
+#include "amigapath.h"
 
 int chmod(const char *name, mode_t mode)
 {
-#ifdef IXPATHS
   if((name=__amigapath(name))==NULL)
     return -1;
-#endif
   unsigned amode = ((mode&S_IRUSR?0:FIBF_READ)|
           (mode&S_IWUSR?0:FIBF_WRITE|FIBF_DELETE)|
           (mode&S_IXUSR?0:FIBF_EXECUTE)|

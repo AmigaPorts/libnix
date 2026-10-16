@@ -40,11 +40,12 @@ int seteuid(uid_t uid)
 
 int setreuid(uid_t truid, uid_t teuid)
 {
-  if (truid != -1)
-    ruid = (uid_t)truid;
+  /* uid_t is unsigned short: -1 arrives as 0xffff, never as -1 */
+  if (truid != (uid_t)-1)
+    ruid = truid;
 
-  if (teuid != -1)
-    euid = (uid_t)teuid;
+  if (teuid != (uid_t)-1)
+    euid = teuid;
 
   /* just always succeed... */
   return 0;
@@ -65,11 +66,11 @@ int setegid(gid_t tgid)
 
 int setregid(gid_t trgid, gid_t tegid)
 {
-  if (trgid != -1)
-    rgid = (gid_t)trgid;
+  if (trgid != (gid_t)-1)
+    rgid = trgid;
 
-  if (tegid != -1) {
-    egid = (gid_t)tegid;
+  if (tegid != (gid_t)-1) {
+    egid = tegid;
     grouplist[0] = egid;
   }
 

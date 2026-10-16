@@ -1,4 +1,6 @@
+#define _GNU_SOURCE /* this file defines the GNU strerror_r */
 #include <stdlib.h>
+#include <string.h>
 
 const char * __sys_errlist__data[] = {
 	"No error",
@@ -162,6 +164,7 @@ const char * __sys_errlist__data[] = {
 const char ** __sys_errlist = __sys_errlist__data;
 
 #define sys_nerr (sizeof(__sys_errlist__data)/sizeof(__sys_errlist__data[0]))
+const int __sys_nerr = sys_nerr;
 extern int
 #ifdef __posix_threads__
 __thread

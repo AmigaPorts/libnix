@@ -64,11 +64,14 @@ int setenv(const char *name, const char *value, int overwrite) {
 	if (*p && !overwrite)
 		return 0;
 
-	entry = concat(name, "=", value, 0);
+	entry = malloc(l + strlen(value) + 2);
 	if (!entry) {
 		errno = ENOMEM;
 		return -1;
 	}
+	memcpy(entry, name, l);
+	entry[l] = '=';
+	strcpy(entry + l + 1, value);
 
 	if (!*p) {
 		/* insert: p points at the terminator, make room for the new entry

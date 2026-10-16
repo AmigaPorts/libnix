@@ -75,8 +75,10 @@ short __export_stubs_start = -1;
 
 "
 
-# get last word = var name of exported functions
-(if [[ "${1%%.def}" != "$deffile" ]]; then cat $deffile; else m68k-amigaos-objdump -t $* | grep "0000 01 "; fi) | while read line; do
+# get last word = var name of exported functions. Windows-hosted binutils use
+# CRLF, and existing definition files may contain it too; never carry the CR
+# into generated C identifiers or string literals.
+(if [[ "${1%%.def}" != "$deffile" ]]; then cat "$deffile"; else m68k-amigaos-objdump -t "$@" | grep "0000 01 "; fi) | tr -d '\r' | while IFS= read -r line; do
 
 n=$(echo $line | awk '{ print $NF }' | grep -v __initlibraries | grep -v __initcpp )
 n=${n:1}

@@ -44,8 +44,8 @@ UBYTE **ArgArrayInit(long argc, UBYTE **argv)
   else
     if ((dObj=GetDiskObject(((struct WBStartup *)argv)->sm_ArgList->wa_Name)))
       return (UBYTE **)dObj->do_ToolTypes;
+
   return NULL;
-    
 }
 
 STRPTR ArgString(UBYTE **tt, STRPTR entry, STRPTR defstr)
