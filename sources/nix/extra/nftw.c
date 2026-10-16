@@ -39,6 +39,7 @@
 #include <dirent.h>
 #include <sys/stat.h>
 #include <errno.h>
+#include <stdlib.h>
 #include <unistd.h>
 #include <string.h>
 #include <limits.h>
@@ -167,7 +168,8 @@ static int do_nftw(char *path, int dtype, nftw_fn fn, int flags, struct history 
 __stdargs int nftw(const char *path, nftw_fn fn, int fd_limit, int flags)
 {
 	size_t l;
-	char pathbuf[PATH_MAX+1];
+	char *pathbuf;
+	int r;
 
 	if (fd_limit <= 0) return 0;
 
@@ -176,7 +178,15 @@ __stdargs int nftw(const char *path, nftw_fn fn, int fd_limit, int flags)
 		errno = ENAMETOOLONG;
 		return -1;
 	}
+	/* Not on the stack: PATH_MAX can be 4096, the size of a default
+	   AmigaOS stack.  */
+	if ((pathbuf = malloc(PATH_MAX+1)) == NULL) {
+		errno = ENOMEM;
+		return -1;
+	}
 	memcpy(pathbuf, path, l+1);
 
-	return do_nftw(pathbuf, DT_UNKNOWN, fn, flags, NULL);
+	r = do_nftw(pathbuf, DT_UNKNOWN, fn, flags, NULL);
+	free(pathbuf);
+	return r;
 }
