@@ -30,3 +30,15 @@ make -C test check-target CROSS_CFLAGS="-O2 -fomit-frame-pointer -noixemul -m680
 ```
 
 Both math tests should report PASS (24 cases).
+
+Build `make -C test setlocale_threads` and run the resulting program on
+AmigaOS to exercise concurrent locale changes. It requires Exec tasks,
+libpthread, and a libnix built by a thread-enabled compiler so
+`__posix_threads__` enables the semaphore; it
+should print `setlocale_threads OK`.
+
+Build `make -C test cxa-dtors` with a thread-enabled GCC/libstdc++ and
+run it on AmigaOS. It checks that thread-local destructors run when a
+thread exits and that static destructors interleave with `atexit()` in
+reverse registration order. The test explicitly uses `-fuse-cxa-atexit`
+and should print `dtors OK`.
