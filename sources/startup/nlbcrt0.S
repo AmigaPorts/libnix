@@ -100,8 +100,8 @@ __exit:
 
 __Exit: .globl	__Exit
 ____exit: .globl	____exit
+		movel	sp@(4:L),d7		| the exit code, before sp is restored
 		movel	a4@(___SaveSP:L),sp
-		movel	sp@(4:L),d7
 
 		movel	a4@(_SysBase:L),a6
 		movel	a4@(__WBenchMsg:L),d2
