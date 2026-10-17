@@ -30,7 +30,7 @@ extern struct MinList ___filelist; /* List of all fopen'ed files */
 
 extern struct ExecBase * SysBase;
 
-extern unsigned *__BUFSIZE;
+extern unsigned long *__BUFSIZE;
 
 /*
  * SBF: I put all functions into this file which are linked anyway if stdio is used.
