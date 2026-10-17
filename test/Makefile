@@ -145,9 +145,16 @@ check-target: stack wprintf fcmp inet atan2-zero atan2f-zero ftw frexpl
 	$(SIM) $(SIMFLAGS) ./ftw
 	$(SIM) $(SIMFLAGS) ./frexpl
 
+# Exec tasks are required; vamos cannot run this pthread test.
+setlocale_threads: setlocale_threads.c
+	$(CROSS_CC) $(CROSS_CFLAGS) -Wall -o $@ $< -lpthread -lm
+
+cxa-dtors: cxa-dtors.cpp
+	m68k-amigaos-g++ $(CROSS_CFLAGS) -fuse-cxa-atexit -std=gnu++23 -o $@ $< -lpthread -latomic
+
 clean:
 	rm -f $(HOST_ATAN_TESTS) host-atan-stub.o host-atan2-test.o host-atan2f-test.o host-atan2-normal.o host-atan2f-normal.o host-atan2-fast.o host-atan2f-fast.o
-	rm -f amigapath stack swapstack.o wprintf vswprintf.o vwfprintf.o \
+	rm -f amigapath stack swapstack.o setlocale_threads cxa-dtors wprintf vswprintf.o vwfprintf.o \
 	  fcmp eqdf2.o eqsf2.o inet inet_aton.o inet_network.o atan2-zero atan2f-zero atan2.o atan2f.o \
 	  ftw ftw.o nftw.o popen popen.o frexpl frexpl.o
 
