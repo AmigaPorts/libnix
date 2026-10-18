@@ -37,8 +37,17 @@ CC = $(target)-gcc
 AR = $(target)-ar --target=amiga
 AS = $(target)-as
 
-VARIANTS_TO_BUILD = info lib libb libm020 libm020bb libm020bb32 libm881 libm020bb881 libm020bb32881 \
-	libm060 libm060bb libm060bb32 libm060881 libm060bb881 libm060bb32881
+# The multilibs are the compiler's: -print-multi-lib lists one library
+# directory per line with the options that select it after a ';', each
+# prefixed with '@' (libb/libm020;@fbaserel@m68020-60).  The base directory
+# '.' is built in lib/, every other one in a directory of its own name, and
+# the FPU directories (m68881) only get libm: nothing else depends on the FPU.
+MULTILIBS := $(shell $(CC) -print-multi-lib)
+multilib_dir = $(word 1,$(subst ;, ,$1))
+multilib_flags = $(strip $(subst @, -,$(word 2,$(subst ;, ,$1))))
+multilib_kind = $(if $(filter .,$(call multilib_dir,$1)),lib,$(call multilib_dir,$1))
+
+VARIANTS_TO_BUILD = info $(foreach m,$(MULTILIBS),$(call multilib_kind,$m))
 LIBS_TO_BUILD ?= libnix libnix13 libnix20 libnixmain libnix_main libm libsocket libstub
 STARTUPS ?= lib/devinit.o lib/libinit.o lib/libinitb.o lib/libinitr.o lib/ncrt0.o lib/nbcrt0.o lib/nlbcrt0.o lib/nrcrt0.o lib/nlrcrt0.o lib/init_shared.o
 
@@ -99,109 +108,40 @@ endif
 
 .PHONY: all one rest clean install install_one
 
-.PHONY: lib libb libm020 libm020bb libm020bb32 libm881 libm020bb881 libm020bb32881 lc
-.PHONY: libm060 libm060bb libm060bb32 libm060881 libm060bb881 libm060bb32881
+.PHONY: $(VARIANTS_TO_BUILD) lc
 all: $(VARIANTS_TO_BUILD)
 
 $(VARIANTS_TO_BUILD): $(STARTUPS)
 
-# the desired kinds to be build
+# the base multilib, in lib/
 lib:
 	@mkdir -p $@
 	$(MAKE) one kind=$@
 	if [ -e lib/libstubs.a ] && [ "$$($(AR) t lib/libstubs.a | grep __initlib)" != "" ]; then rm -f lib/libstubs.a; fi
-		
-libb:
-	@mkdir -p $@
-	$(MAKE) one kind=$@ flags="-fbaserel"
-		
-libm020:
-	@mkdir -p $@
-	$(MAKE) one kind=$@ flags="-m68020"
 
-libm020bb:
-	@mkdir -p $@
-	$(MAKE) one kind=$@ flags="-fbaserel -m68020"
-
-libm020bb32:
-	@mkdir -p $@
-	$(MAKE) one kind=$@ flags="-fbaserel32 -m68020"
-
-libm881:
-	@mkdir -p $@
-	$(MAKE) one kind=$@ flags="-m68020 -m68881 -mhard-float" LIBS_TO_BUILD=libm
-
-libm020bb881:
-	@mkdir -p $@
-	$(MAKE) one kind=$@ flags="-fbaserel -m68020 -m68881 -mhard-float" LIBS_TO_BUILD=libm
-
-libm020bb32881:
-	@mkdir -p $@
-	$(MAKE) one kind=$@ flags="-fbaserel32 -m68020 -m68881 -mhard-float" LIBS_TO_BUILD=libm
-
-libm060:
-	@mkdir -p $@
-	$(MAKE) one kind=$@ flags="-m68060"
-
-libm060bb:
-	@mkdir -p $@
-	$(MAKE) one kind=$@ flags="-fbaserel -m68060"
-
-libm060bb32:
-	@mkdir -p $@
-	$(MAKE) one kind=$@ flags="-fbaserel32 -m68060"
-
-libm060881:
-	@mkdir -p $@
-	$(MAKE) one kind=$@ flags="-m68060 -m68881 -mhard-float" LIBS_TO_BUILD=libm
-
-libm060bb881:
-	@mkdir -p $@
-	$(MAKE) one kind=$@ flags="-fbaserel -m68060 -m68881 -mhard-float" LIBS_TO_BUILD=libm
-
-libm060bb32881:
-	@mkdir -p $@
-	$(MAKE) one kind=$@ flags="-fbaserel32 -m68060 -m68881 -mhard-float" LIBS_TO_BUILD=libm
+# every other multilib: build in its directory, install into the same
+# directory under $(PREFIX)/$(target)/libnix/lib
+define multilib_rules
+.PHONY: $(1) install_$(subst /,_,$(1))
+$(1):
+	@mkdir -p $$@
+	$$(MAKE) one kind=$$@ flags="$(2)" $(if $(findstring m68881,$(2)),LIBS_TO_BUILD=libm)
+install_$(subst /,_,$(1)):
+	$$(MAKE) install_one kind=$(1) to="$(1)/"
+endef
+$(foreach m,$(filter-out .;%,$(MULTILIBS)),$(eval $(call multilib_rules,$(call multilib_dir,$m),$(call multilib_flags,$m))))
 
 # the libs to build for each kind
 one: $(LIBS_TO_BUILD)
 
 # install all kinds into the prefix
-.PHONY: install_lib install_libb install_libm020 install_libm020bb install_libm020bb32 install_libm881 install_libm020bb881 install_libm020bb32881
-.PHONY: install_libm060 install_libm060bb install_libm060bb32 install_libm060881 install_libm060bb881 install_libm060bb32881
-install: install_lib install_libb install_libm020 install_libm020bb install_libm020bb32 install_libm881 install_libm020bb881 install_libm020bb32881 \
-	install_libm060 install_libm060bb install_libm060bb32 install_libm060881 install_libm060bb881 install_libm060bb32881
+.PHONY: install_lib
+install: $(foreach m,$(MULTILIBS),install_$(subst /,_,$(call multilib_kind,$m)))
 	cp $(root)/mkstub $(PREFIX)/bin
-	
+
 install_lib:
 	$(MAKE) install_one kind=lib to=""
-	mv $(PREFIX)/$(target)/libnix/lib/libstubs.a $(PREFIX)/$(target)/lib/ 
-install_libb: 
-	$(MAKE) install_one kind=libb to="libb/"
-install_libm020:
-	$(MAKE) install_one kind=libm020 to="libm020/"
-install_libm020bb:
-	$(MAKE) install_one kind=libm020bb to="libb/libm020/"
-install_libm020bb32:
-	$(MAKE) install_one kind=libm020bb32 to="libb32/libm020/"
-install_libm881:
-	$(MAKE) install_one kind=libm881 to="libm020/libm881/"
-install_libm020bb881:
-	$(MAKE) install_one kind=libm020bb881 to="libb/libm020/libm881/"
-install_libm020bb32881:
-	$(MAKE) install_one kind=libm020bb32881 to="libb32/libm020/libm881/"
-install_libm060:
-	$(MAKE) install_one kind=libm060 to="libm060/"
-install_libm060bb:
-	$(MAKE) install_one kind=libm060bb to="libb/libm060/"
-install_libm060bb32:
-	$(MAKE) install_one kind=libm060bb32 to="libb32/libm060/"
-install_libm060881:
-	$(MAKE) install_one kind=libm060881 to="libm060/libm881/"
-install_libm060bb881:
-	$(MAKE) install_one kind=libm060bb881 to="libb/libm060/libm881/"
-install_libm060bb32881:
-	$(MAKE) install_one kind=libm060bb32881 to="libb32/libm060/libm881/"
+	mv $(PREFIX)/$(target)/libnix/lib/libstubs.a $(PREFIX)/$(target)/lib/
 
 # install the files for the given $(kind) into $(to)
 install_one:
