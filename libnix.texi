@@ -1,5 +1,6 @@
 \input texinfo
 @setfilename libnix.info
+@documentencoding UTF-8
 @settitle libnix - a static library for GCC on the amiga
 @setchapternewpage odd
 
@@ -81,7 +82,7 @@ Matthias Fleischer
 Gunther Nikl
 @*gnikl@@informatik.uni-rostock.de
 
-Special thanks go to Gerhard Müller for writing gerlib, Philippe Brand for
+Special thanks go to Gerhard MÃ¼ller for writing gerlib, Philippe Brand for
 finding a name for this beast and Kriton Kyrimis who contributed some
 of the non-ANSI functions and a lot of ideas.
 
@@ -691,6 +692,20 @@ get the terminal, if you redirect your output to @samp{NIL:} you get @samp{NIL:}
 If this didn't work too (you never know) or your program was started from WB
 you simply get the same stream as in @samp{stdout}.
 @end enumerate
+
+Every stream opened with @samp{fopen()}, as well as @samp{stdin} and
+@samp{stdout}, gets a buffer of 8192 bytes; @samp{stderr} is unbuffered.
+A bigger buffer means fewer calls to the filesystem, a smaller one less
+memory per open file. Like the stack size, you can choose your own by
+defining both
+
+@samp{unsigned __BUFSIZ__data=@{buffer size@};}
+
+@samp{unsigned *__BUFSIZE=&__BUFSIZ__data;}
+
+somewhere in your code. @samp{setvbuf()} still changes the buffer of a single
+stream, and @samp{BUFSIZ} stays 1024: it is the size @samp{setbuf()} assumes
+for a buffer the program provides.
 
 @node Signal handling,setjmp longjmp,Standard I/O,libnix.a
 @subsection Signal handling
