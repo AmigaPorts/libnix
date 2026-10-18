@@ -7,38 +7,32 @@
 
 extern int __fflush(FILE*);
 
-int __srget(FILE *stream) /* Get next input block */
+/* Get a stream ready to read from its file: fail on a stream in error or
+   at EOF, flush pending output, bring back ungetc() data (which then is in
+   the buffer, with _r > 0), refuse a string stream, and flush the line
+   buffered output streams before reading an unbuffered or line buffered
+   one (ANSI).  Returns EOF when there is nothing to read; the caller holds
+   the stream lock.  fread() uses it to read straight into a caller's
+   memory; __srget() to refill the buffer.  */
+int __sprepread(FILE *stream)
 {
-	int r;
-	__STDIO_LOCK(stream);
-
 	if (stream->_flags & (__SERR | __SEOF)) /* Error on stream / EOF */
 	{
 		stream->_r = 0;
 		errno = EPERM;
-		__STDIO_UNLOCK(stream);
 		return EOF;
 	}
 	if (stream->_flags & __SWR) {
-		if (__fflush(stream)) {
-			__STDIO_UNLOCK(stream);
+		if (__fflush(stream))
 			return EOF;
-		}
 	} else if (stream->tmpp != NULL) /* File is in ungetc mode */
 	{
 		stream->_p = stream->tmpp;
 		stream->_r = stream->tmpinc;
 		stream->tmpp = NULL;
-		if (--stream->_r >= 0) {
-			r = *stream->_p++;
-			__STDIO_UNLOCK(stream);
-			return r;
-		}
 	}
-	if (stream->_flags & __SSTR) /* it's a sscanf buffer */{
-		__STDIO_UNLOCK(stream);
+	if (stream->_flags & __SSTR) /* it's a sscanf buffer */
 		return EOF;
-	}
 	if (stream->_flags & (__SNBF | __SLBF)) /* Before reading from line- or unbuffered input file */
 	{ /* fflush all line buffered output files (ANSI) */
 		struct filenode *fp = (struct filenode*) ___filelist.mlh_Head;
@@ -47,6 +41,25 @@ int __srget(FILE *stream) /* Get next input block */
 				__fflush(&fp->theFILE); /* Don't return EOF if this fails */
 			fp = (struct filenode*) fp->node.mln_Succ;
 		}
+	}
+	return 0;
+}
+
+int __srget(FILE *stream) /* Get next input block */
+{
+	int r;
+	__STDIO_LOCK(stream);
+
+	if (__sprepread(stream)) {
+		__STDIO_UNLOCK(stream);
+		return EOF;
+	}
+	if (stream->_r > 0) /* ungetc() data */
+	{
+		stream->_r--;
+		r = *stream->_p++;
+		__STDIO_UNLOCK(stream);
+		return r;
 	}
 	stream->_flags |= __SRD;
 	stream->_r = read(stream->file, stream->_bf._base, stream->_bf._size);

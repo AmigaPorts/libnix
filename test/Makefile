@@ -135,7 +135,7 @@ popen.o: ../sources/nix20/stdio/popen.c
 popen: popen.c popen.o
 	$(CROSS_CC) $(CROSS_CFLAGS) -Wall -o $@ popen.c popen.o
 
-check-target: stack wprintf fcmp inet atan2-zero atan2f-zero ftw frexpl
+check-target: stack wprintf fcmp inet atan2-zero atan2f-zero ftw frexpl fread
 	$(SIM) $(SIMFLAGS) ./stack
 	$(SIM) $(SIMFLAGS) ./wprintf
 	$(SIM) $(SIMFLAGS) ./fcmp
@@ -144,6 +144,11 @@ check-target: stack wprintf fcmp inet atan2-zero atan2f-zero ftw frexpl
 	$(SIM) $(SIMFLAGS) ./atan2f-zero
 	$(SIM) $(SIMFLAGS) ./ftw
 	$(SIM) $(SIMFLAGS) ./frexpl
+	$(SIM) $(SIMFLAGS) ./fread
+
+# fread() reading large requests straight into the caller's memory
+fread: fread.c
+	$(CROSS_CC) $(CROSS_CFLAGS) -Wall -o $@ fread.c
 
 # Exec tasks are required; vamos cannot run this pthread test.
 setlocale_threads: setlocale_threads.c
@@ -156,7 +161,7 @@ clean:
 	rm -f $(HOST_ATAN_TESTS) host-atan-stub.o host-atan2-test.o host-atan2f-test.o host-atan2-normal.o host-atan2f-normal.o host-atan2-fast.o host-atan2f-fast.o
 	rm -f amigapath stack swapstack.o setlocale_threads cxa-dtors wprintf vswprintf.o vwfprintf.o \
 	  fcmp eqdf2.o eqsf2.o inet inet_aton.o inet_network.o atan2-zero atan2f-zero atan2.o atan2f.o \
-	  ftw ftw.o nftw.o popen popen.o frexpl frexpl.o
+	  ftw ftw.o nftw.o popen popen.o frexpl frexpl.o fread
 
 
 
