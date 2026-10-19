@@ -61,16 +61,42 @@ swapstack.o: ../sources/misc/swapstack.c
 stack: stack.c swapstack.o
 	$(CROSS_CC) $(CROSS_CFLAGS) -Wall -o $@ stack.c swapstack.o
 
-# The wide printf modules, compiled as libm builds them (with float
-# formatting) and linked ahead of libm and libnix.
-vwfprintf.o: ../sources/nix/stdio/__vwfprintf_total_size.c
-	$(CROSS_CC) $(CROSS_CFLAGS) -I../sources/headers -fno-builtin -D__libnix__ -DFULL_SPECIFIERS -c -o $@ $<
+# ---------------------------------------------------------------------------
+# The printf engines.  Their shared FP math core lives in math/stdio/, the
+# header in headers/, and the engine sources in nix/stdio/.  Compiled as
+# libm builds them (with float formatting), against the sources here so the
+# module under test is the one in ../sources, and linked ahead of libm and
+# libnix.
+# ---------------------------------------------------------------------------
+PRINTF_INC = -I../sources/headers
+PRINTF_DEFS = -fno-builtin -D__libnix__ -DFULL_SPECIFIERS
 
-vswprintf.o: ../sources/nix/stdio/vswprintf.c
-	$(CROSS_CC) $(CROSS_CFLAGS) -I../sources/headers -fno-builtin -D__libnix__ -DFULL_SPECIFIERS -c -o $@ $<
+ami_printf_math.o: ../sources/math/stdio/ami_printf_math.c ../sources/headers/ami_printf_math.h
+	$(CROSS_CC) $(CROSS_CFLAGS) $(PRINTF_INC) $(PRINTF_DEFS) -c -o $@ $<
 
-wprintf: wprintf.c vswprintf.o vwfprintf.o
-	$(CROSS_CC) $(CROSS_CFLAGS) -Wall -o $@ wprintf.c vswprintf.o vwfprintf.o -lm
+vfprintf.o: ../sources/nix/stdio/__vfprintf_total_size.c ../sources/headers/ami_printf_math.h
+	$(CROSS_CC) $(CROSS_CFLAGS) $(PRINTF_INC) $(PRINTF_DEFS) -c -o $@ $<
+
+vwfprintf.o: ../sources/nix/stdio/__vfwprintf_total_size.c ../sources/headers/ami_printf_math.h
+	$(CROSS_CC) $(CROSS_CFLAGS) $(PRINTF_INC) $(PRINTF_DEFS) -c -o $@ $<
+
+vswprintf.o: ../sources/nix/stdio/vswprintf.c ../sources/headers/ami_printf_math.h
+	$(CROSS_CC) $(CROSS_CFLAGS) $(PRINTF_INC) $(PRINTF_DEFS) -c -o $@ $<
+
+# The wide engine driver.  Links against the wide engine, the swprintf
+# wrapper, and the shared FP math core.
+wprintf: wprintf.c vswprintf.o vwfprintf.o ami_printf_math.o
+	$(CROSS_CC) $(CROSS_CFLAGS) -Wall -o $@ wprintf.c vswprintf.o vwfprintf.o ami_printf_math.o -lm
+
+# Standalone self-tests for the narrow and wide engines.  These replace the
+# #ifdef TESTME blocks that used to live inside the engine sources; the test
+# drivers are compiled here with -DTESTME and linked against the engine
+# object and the shared math core.
+vfprintf-test: vfprintf_test.c vfprintf.o ami_printf_math.o
+	$(CROSS_CC) $(CROSS_CFLAGS) $(PRINTF_INC) -DFULL_SPECIFIERS -Wall -o $@ vfprintf_test.c vfprintf.o ami_printf_math.o -lm
+
+vfwprintf-test: vfwprintf_test.c vwfprintf.o ami_printf_math.o
+	$(CROSS_CC) $(CROSS_CFLAGS) $(PRINTF_INC) -DFULL_SPECIFIERS -Wall -o $@ vfwprintf_test.c vwfprintf.o ami_printf_math.o -lm
 
 # Compile the implementations with the library's fast-math setting, but
 # keep the bit-pattern assertions free of fast-math and compiler builtins.
@@ -90,7 +116,7 @@ frexpl.o: ../sources/math/extra/frexpl.c
 	$(CROSS_CC) $(CROSS_CFLAGS) -fno-builtin -ffast-math -c -o $@ $<
 
 frexpl: frexpl.c frexpl.o
-	$(CROSS_CC) $(CROSS_CFLAGS) -fno-fast-math -fno-builtin -Wall -o $@ $^
+	$(CROSS_CC) $(CROSS_CFLAGS) -fno-fast-math -fno-builtin -Wall -o $@ $^ -lm
 
 # The soft-float comparisons, compiled as libm builds them and linked
 # ahead of libm.
@@ -135,8 +161,10 @@ popen.o: ../sources/nix20/stdio/popen.c
 popen: popen.c popen.o
 	$(CROSS_CC) $(CROSS_CFLAGS) -Wall -o $@ popen.c popen.o
 
-check-target: stack wprintf fcmp inet atan2-zero atan2f-zero ftw frexpl
+check-target: stack wprintf vfprintf-test vfwprintf-test fcmp inet atan2-zero atan2f-zero ftw frexpl
 	$(SIM) $(SIMFLAGS) ./stack
+	$(SIM) $(SIMFLAGS) ./vfprintf-test
+	$(SIM) $(SIMFLAGS) ./vfwprintf-test
 	$(SIM) $(SIMFLAGS) ./wprintf
 	$(SIM) $(SIMFLAGS) ./fcmp
 	$(SIM) $(SIMFLAGS) ./inet
@@ -147,10 +175,9 @@ check-target: stack wprintf fcmp inet atan2-zero atan2f-zero ftw frexpl
 
 clean:
 	rm -f $(HOST_ATAN_TESTS) host-atan-stub.o host-atan2-test.o host-atan2f-test.o host-atan2-normal.o host-atan2f-normal.o host-atan2-fast.o host-atan2f-fast.o
-	rm -f amigapath stack swapstack.o wprintf vswprintf.o vwfprintf.o \
+	rm -f amigapath stack swapstack.o wprintf vswprintf.o vwfprintf.o vfprintf.o ami_printf_math.o \
+	  vfprintf-test vfwprintf-test \
 	  fcmp eqdf2.o eqsf2.o inet inet_aton.o inet_network.o atan2-zero atan2f-zero atan2.o atan2f.o \
 	  ftw ftw.o nftw.o popen popen.o frexpl frexpl.o
-
-
 
 .PHONY: all check check-atan2 check-target clean

@@ -1,9 +1,9 @@
 /* ==========================================================================
- *  stdio vfprintf.c
+ *  stdio vfwprintf.c
  *
- *  Minimal printf engine for AmigaOS / m68k (big-endian).
+ *  Minimal wide-char printf engine for AmigaOS / m68k (big-endian).
  *
- *  Conversions : d i o p u x X c s n %
+ *  Conversions : d i o p u x X c s S n %
  *                plus a A e E f F g G when FULL_SPECIFIERS is defined,
  *                including long double (length modifier 'L').
  *
@@ -11,6 +11,20 @@
  *      bytes 0-1  : sign | 15-bit biased exponent (bias 16383)
  *      bytes 2-3  : padding -- completely ignored by the FPU
  *      bytes 4-11 : 64-bit mantissa with EXPLICIT integer bit in b63
+ *
+ * --------------------------------------------------------------------------
+ *  Copyright and license
+ * --------------------------------------------------------------------------
+ *
+ *  This file is part of the libnix C library for AmigaOS / m68k.
+ *
+ *  libnix is public domain.  As far as the law allows, this software comes
+ *  as is, without any warranty or condition, and no contributor will be
+ *  liable to anyone for any damages related to this software or this
+ *  license, under any kind of legal claim.
+ *
+ *  Author: Stefan "Bebbo" Franke
+ *
  * ========================================================================== */
 #include <ctype.h>
 #include <stdlib.h>
@@ -19,593 +33,66 @@
 #include <limits.h>
 #include <math.h>
 #include <float.h>
-#include "stdio.h"
-#include "wchar.h"
-#include "wctype.h"
+#include <stdio.h>
+#include <wchar.h>
+#include <wctype.h>
+
+#include "ami_printf_math.h"
 
 /* ======================================================================
- * SECTION 1: bit-pattern views onto floating point values
- * ==================================================================== */
-/*
- * binary64 ("double"), big-endian memory image:
- *
- *   byte 0..3 : seeeeeee eee(more) ffffffff ffffffff
- *   byte 4..7 : remaining fraction bits
- */
-union _d_bits {
-	double d;
-	struct {
-		unsigned sign :1;
-		unsigned exp :11; /* biased by 1023                     */
-		unsigned frac0 :20; /* fraction bits 51..32               */
-		unsigned frac1 :32; /* fraction bits 31..0                */
-	} b;
-	unsigned u;
-};
-/*
- * m68k extended precision ("long double"):
- *
- *   bytes 0-1 : s eeeeeeeeeeeeeee      sign:1, exp:15 (bias 16383)
- *   bytes 2-3 : <pad>                  hardware never reads these bits
- *   bytes 4-11: 64-bit mantissa, integer bit explicitly stored in b63
- *
- * Special patterns:
- *   inf  : exp $7FFF, mant $8000000000000000
- *   NaN  : exp $7FFF, any other mantissa  (b62 = quiet flag)
- *   zero : exp 0, mant 0                  (both polarities possible)
- */
-typedef
-union _ld_bits {
-	long double ld;
-	struct {
-		unsigned sign :1;
-		unsigned exp :15;
-		unsigned pad :16; /* never interpret me   */
-		unsigned long long mant :64;
-	} b;
-	struct {
-		unsigned short exp;
-		unsigned short pad;
-		unsigned long middle;
-		unsigned long lower;
-	} l;
-	struct {
-		unsigned long upper;
-		unsigned long middle;
-		unsigned long lower;
-	} w;
-} LDL;
-
-/* Unpack a standard IEEE-754 64-bit double into the local 64-bit LDL view.
- *
- * This routine extracts the fields, handles denormals by shifting them into
- * a normal alignment, restores the implicit hidden bit (b52) for normal inputs,
- * and repositions the mantissa to match the native Motorola 80-bit hardware layout
- * where the integer bit is explicitly located at position b63 (bit 31 of middle).
- *
- * Assumptions:
- *   - The input double layout is big-endian.
- *   - The target r.l.bottom word is explicitly zeroed out for clean 64-bit operation.
- */
-static inline LDL __LDL_from_double(double d) {
-	union _d_bits u;
-	u.d = d;
-
-	LDL r;
-
-	/* Exact zero */
-	if (u.b.exp == 0 && u.b.frac0 == 0 && u.b.frac1 == 0) {
-		r.l.exp = 0;
-		r.l.pad = 0;
-		r.l.middle = 0;
-		r.l.lower = 0;
-		return r;
-	}
-
-	unsigned long long mant;
-	int exp;
-
-	if (u.b.exp == 0) {
-		/* Subnormal double: exponent = -1022, no hidden bit */
-		mant = ((unsigned long long) u.b.frac0 << 32) | u.b.frac1;
-		exp = -1022;
-
-		/* Normalize until bit 52 becomes 1 */
-		while ((mant >> 52) == 0) {
-			mant <<= 1;
-			exp--;
-		}
-	} else {
-		/* Normal double: add hidden bit */
-		mant = (1ULL << 52) | ((unsigned long long) u.b.frac0 << 32) | u.b.frac1;
-		exp = (int) u.b.exp - 1023;
-	}
-
-	/* Convert 53 bit mantissa into 64 bit Motorola format
-	 by shifting it so that bit 63 becomes the integer bit. */
-	unsigned long long mant64 = mant << (63 - 52);
-
-	r.l.exp = (unsigned short) (exp + 16383);
-	r.l.pad = 0;
-	r.l.middle = (unsigned long) (mant64 >> 32);
-	r.l.lower = (unsigned long) (mant64 & 0xFFFFFFFFUL);
-
-	return r;
-}
-
-/* Unpack an m68k Extended Precision 80-bit (packed into 96-bit) long double.
- *
- * This routine copies the explicit bits straight out of the long double representation.
- * For normal numbers, fields are mapped directly. For subnormal inputs, the mantissa
- * is shifted left until the explicit integer bit (b63) is restored, adjusting the
- * exponent accordingly.
- *
- * Assumptions:
- *   - Follows Motorola 80-bit hardware storage layout.
- *   - The target r.l.bottom is ignored/cleared to remain strictly inside 64-bit mantissa scope.
- */
-static inline LDL __LDL_from_long_double(long double ld)
-{
-    union _ld_bits u;
-    u.ld = ld;
-
-    LDL r;
-
-    unsigned short E = u.b.exp;
-    unsigned long long mant = u.b.mant;
-
-    /* Exact zero */
-    if (E == 0 && mant == 0) {
-        r.l.exp    = 0;
-        r.l.pad    = 0;
-        r.l.middle = 0;
-        r.l.lower  = 0;
-        return r;
-    }
-
-    /* Subnormal long double: normalize mantissa */
-    if (E == 0) {
-        int exp = -16382;
-
-        /* Shift until integer bit (bit 63) becomes 1 */
-        while ((mant & 0x8000000000000000ULL) == 0) {
-            mant <<= 1;
-            exp--;
-        }
-
-        r.l.exp    = (unsigned short)(exp + 16383);
-        r.l.pad    = 0;
-        r.l.middle = (unsigned long)(mant >> 32);
-        r.l.lower  = (unsigned long)(mant & 0xFFFFFFFFUL);
-        return r;
-    }
-
-    /* Normal long double: copy fields directly */
-    r.l.exp    = E;
-    r.l.pad    = 0;
-    r.l.middle = (unsigned long)(mant >> 32);
-    r.l.lower  = (unsigned long)(mant & 0xFFFFFFFFUL);
-
-    return r;
-}
-
-/* Multiply two LDL values (Motorola 80-bit extended format, signless).
- *
- * This routine performs a full 64x64 -> 128-bit mantissa multiply,
- * normalizes the product so that the integer bit is in position 63,
- * adds the unbiased exponents, and rounds the result to nearest-even.
- *
- * Assumptions:
- * - LDL contains only normal numbers or zero. Subnormals have already
- *   been converted by the LDL creation functions.
- * - Mantissas always contain the explicit integer bit (bit 63).
- * - No sign bit is stored or processed.
- * - Underflow cannot occur because all operations stay within the
- *   numeric range [0 .. 10). Therefore no exponent shifting or
- *   subnormal generation is required.
- * - Overflow into INF is not required because the caller guarantees
- *   that the exponent stays within the valid Motorola 80-bit range.
- *
- * Returns:
- *   A new LDL value representing (a * b) in Motorola 80-bit format.
- */
-static inline
-LDL __LDL_mul(LDL a, LDL b)
-{
-    /* Zero */
-    if (a.l.middle == 0)
-    	return a;
-
-    if (b.l.middle == 0)
-    	return b;
-
-#ifdef __mc68881__
-    LDL r;
-    r.ld = a.ld * b.ld;
-    return r;
-#else
-    int exp_a = a.l.exp - 16383;
-    int exp_b = b.l.exp - 16383;
-
-    /* Add exponents */
-    int exp_r = exp_a + exp_b;
-
-    unsigned long long hi, lo;
-    unsigned long long mant_r;
-    unsigned int guard = 0, sticky = 0;
-
-    /* 64x64 -> 128-bit multiply */
-    unsigned int a_lo = a.l.lower;
-    unsigned int a_hi = a.l.middle;
-    unsigned int b_lo = b.l.lower;
-    unsigned int b_hi = b.l.middle;
-
-    unsigned long long p0 = (unsigned long long)a_lo * b_lo;
-    unsigned long long p1 = (unsigned long long)a_lo * b_hi;
-    unsigned long long p2 = (unsigned long long)a_hi * b_lo;
-    unsigned long long p3 = (unsigned long long)a_hi * b_hi;
-
-    unsigned long long mid =
-        (p0 >> 32) +
-        (p1 & 0xFFFFFFFFULL) +
-        (p2 & 0xFFFFFFFFULL);
-
-    hi = p3 + (p1 >> 32) + (p2 >> 32) + (mid >> 32);
-    lo = (mid << 32) | (p0 & 0xFFFFFFFFULL);
-
-    /* Normalize product so that mant_r has integer bit at 63 */
-    if (hi & 0x8000000000000000ULL) {
-        mant_r = hi;
-        guard  = (unsigned int)(lo >> 63);
-        sticky = (lo & 0x7FFFFFFFFFFFFFFFULL) != 0;
-        exp_r++;
-    } else {
-        mant_r = (hi << 1) | (lo >> 63);
-        {
-            unsigned long long lo_shifted = lo << 1;
-            guard  = (unsigned int)(lo_shifted >> 63);
-            sticky = (lo_shifted & 0x7FFFFFFFFFFFFFFFULL) != 0;
-        }
-    }
-
-    /* Round to nearest even */
-    if (guard && (sticky || (mant_r & 1ULL))) {
-        mant_r++;
-        if (mant_r == 0) {
-            mant_r = 0x8000000000000000ULL;
-            exp_r++;
-        }
-    }
-
-    LDL r;
-    r.l.exp    = exp_r + 16383;
-    r.l.pad    = 0;
-    r.l.middle = (mant_r >> 32);
-    r.l.lower  = mant_r;
-
-    return r;
-#endif
-}
-
-/* Multiply an LDL value by 10.0 (Motorola 80-bit extended format, signless).
- *
- * This routine implements a fast multiply-by-10 using the identity:
- *     10 = 8 + 2 = 8 + (1/4 * 8)
- * which allows the mantissa to be scaled using only shifts and adds.
- *
- * Steps:
- *   1. Check for zero (mantissa == 0).
- *   2. Compute x/4 by performing a 64-bit right shift by 2.
- *   3. Add x + x/4 using 64-bit mantissa arithmetic.
- *   4. Detect 64-bit overflow of the mantissa and renormalize by
- *      shifting right one bit and incrementing the exponent.
- *   5. Multiply the result by 8 by adding 3 to the exponent.
- *
- * Assumptions:
- *   - LDL contains only normal numbers or zero. Subnormals have already
- *     been converted by the LDL creation functions.
- *   - Mantissas always contain the explicit integer bit (bit 63).
- *   - No sign bit is stored or processed.
- *   - Underflow cannot occur because all operations stay within the
- *     numeric range [0 .. 10).
- *   - Overflow into INF is not required because the caller guarantees
- *     that the exponent stays within the valid Motorola 80-bit range.
- *
- * Returns:
- *   A new LDL value representing (x * 10.0) in Motorola 80-bit format.
- */
-static inline LDL __LDL_mul_10(LDL x)
-{
-
-    /* Zero check */
-    if (x.l.middle == 0 && x.l.lower == 0)
-        return x;
-
-    LDL r = x;
-
-    unsigned long hi = x.l.middle;
-    unsigned long lo = x.l.lower;
-
-    /* 64-bit right shift by 2 (x / 4) */
-    unsigned long hi2 = hi >> 2;
-    unsigned long lo2 = (lo >> 2) | (hi << 30);
-
-    /* 64-bit addition: (x + x/4) */
-    unsigned long res_lo = lo + lo2;
-    unsigned long carry  = (res_lo < lo);
-    unsigned long res_hi = hi + hi2 + carry;
-
-    /* Check 64-bit overflow (bit 63 set) */
-    if (res_hi < hi || (res_hi == hi && hi2 > 0)) {
-        /* Shift right 1 bit to re-normalize */
-        res_lo = (res_lo >> 1) | (res_hi << 31);
-        res_hi = (res_hi >> 1) | 0x80000000;
-        r.l.exp += 1;
-    }
-
-    /* Scale by 8 (add 3 to exponent) */
-    r.l.exp += 3;
-
-    r.l.middle = res_hi;
-    r.l.lower  = res_lo;
-
-    return r;
-}
-
-/* Fast in-place multiply-by-10 and base-10 digit extractor (64-bit clean).
- *
- * This routine implements the binary shift-and-add identity: x * 10 = (x + x/4) * 8.
- * It operates strictly on the 64-bit mantissa (middle and lower), tracking the dynamic
- * exponent layout after the scaling iteration.
- *
- * Steps:
- *   1. Scale x by 1.25 via x + (x >> 2).
- *   2. Multiply by 8 via an effective 3-bit left shift across the 64-bit collective register.
- *   3. Extract the accumulated integer digit shifted above the virtual decimal point.
- *   4. Mask out the extracted integer slice, leaving a pure fractional remainder.
- *   5. Renormalize the fractional mantissa back to bit 31 of middle using fast __builtin_clz
- *      and adjust the raw exponent dynamically to guarantee tracking precision.
- *
- * Returns:
- *   Extracted single-digit integer value tightly bound within [0..9].
- */
-static inline int __LDL_mul_10_extract(LDL *x) {
-    int exp_raw = x->l.exp;
-    unsigned long hi = x->l.middle;
-    unsigned long lo = x->l.lower;
-
-    int exp = exp_raw - 16383;
-    unsigned long z = 0;
-
-    if (exp >= 0) {
-        /* 1. Extract the leading digit */
-        z = hi >> (31 - exp);
-
-        /* 2. Subtract the digit from the upper mantissa */
-        hi -= (z << (31 - exp));
-
-        /* 3. In-place normalization */
-        if (!hi) {
-            if (!lo) {
-                /* Exact integer without a fraction -> value becomes clean zero */
-                x->l.exp = 0;
-                /* Skip mul_10 entirely, fields are already zero */
-                return (int)z;
-            }
-
-            /* 'middle' is completely empty, pull remaining bits up from 'lower' */
-            int n = __builtin_clz(lo);
-            hi = lo << n;
-            exp_raw = exp + 16383 - 32 - n;
-        } else {
-            /* 'middle' still has bits but gained leading zeros from subtraction */
-            int n = __builtin_clz(hi);
-
-            /* Optimization: combine shifting logic using 64-bit casting
-               to let GCC emit optimized native 64-bit barrel shifts */
-            unsigned long long combined = ((unsigned long long)hi << 32) | lo;
-            combined <<= n;
-
-            hi = (unsigned long)(combined >> 32);
-            lo = (unsigned long)combined;
-            exp_raw = exp + 16383 - n;
-        }
-    }
-
-    /* 4. Fast inlined multiply-by-10: x * 10 = (x + x/4) * 8 */
-
-    /* Compute x / 4 via 64-bit right shift by 2 */
-    unsigned long hi2 = hi >> 2;
-    unsigned long lo2 = (lo >> 2) | (hi << 30);
-
-    /* 64-bit addition: x + x/4 */
-    unsigned long res_lo = lo + lo2;
-    unsigned long carry  = (res_lo < lo);
-    unsigned long res_hi = hi + hi2 + carry;
-
-    /* Handle 64-bit overflow (carry-out out of bit 63) */
-    if (res_hi < hi || (res_hi == hi && hi2 > 0)) {
-        /* Shift right by 1 bit to re-normalize */
-        res_lo = (res_lo >> 1) | (res_hi << 31);
-        res_hi = (res_hi >> 1) | 0x80000000UL;
-        exp_raw += 1;
-    }
-
-    /* Scale by 8 (+3 to exponent) and commit final structural updates */
-    x->l.exp    = (unsigned short)(exp_raw + 3);
-    x->l.middle = res_hi;
-    x->l.lower  = res_lo;
-
-    return (int)z;
-}
-
-
-/* Compare an LDL value against a hardcoded Motorola 80-bit constant.
- *
- * The comparison is performed lexicographically:
- *   1. Compare exponent.
- *   2. If equal, compare upper 32 mantissa bits.
- *   3. If equal, compare lower 32 mantissa bits.
- *
- * Assumptions:
- *   - LDL is signless and already normalized.
- *   - No NaN, INF, or subnormal handling is required.
- *   - Constants are provided in raw Motorola 80-bit format.
- *
- * Returns:
- *   -1  if a < constant
- *    0  if a == constant
- *    1  if a > constant
- */
-static inline int __LDL_cmp_const(const LDL *a,
-                                  unsigned short bexp,
-                                  unsigned long  bmid,
-                                  unsigned long  blow)
-{
-    /* Compare exponent */
-    if (a->l.exp != bexp)
-        return (a->l.exp < bexp) ? -1 : 1;
-
-    /* Compare middle mantissa */
-    if (a->l.middle != bmid)
-        return (a->l.middle < bmid) ? -1 : 1;
-
-    /* Compare lower mantissa */
-    if (a->l.lower != blow)
-        return (a->l.lower < blow) ? -1 : 1;
-
-    return 0;
-}
-
-/* Lexicographically check if an LDL value matches or exceeds the constant 10.0.
- *
- * Constant representation:
- *   - Biased Exponent: 16386 (0x4002) -> 2^3
- *   - 64-bit Mantissa: 1.25 (0xA0000000 00000000)
- *   - Combined Value:  1.25 * 2^3 = 10.0
- *
- * Returns:
- *   -1 if a < 10.0, 0 if a == 10.0, 1 if a > 10.0
- */
-static inline int __LDL_cmp_10(const LDL *a)
-{
-    return __LDL_cmp_const(a, 0x4000, 0xA0000000UL, 0x00000000UL);
-}
-
-/* Lexicographically check if an LDL value matches or exceeds the constant 5.0.
- *
- * THE ROUNDING HACK:
- * Mathematically, 5.0 is represented as Exp 0x4001, Mantissa 0xA0000000 00000000.
- * However, cumulative multiplication and scaling steps can leave trailing fractional
- * remainders marginally under-represented in binary format (e.g., 4.99999999999...).
- *
- * To prevent exact half-way tie-breaks from incorrectly rounding down, the comparison
- * threshold is dropped by a sub-LSB epsilon directly inside the hardware bit pattern.
- * Using 0x9FFFFFFF 0xFFFF0000 safely absorbs binary truncation drift and guarantees stable
- * Round-to-Nearest-Even execution without breaking integer boundary constraints.
- *
- * Returns:
- *   -1 if a < 5.0 (adjusted), 0 if a == 5.0 (adjusted), 1 if a > 5.0 (adjusted)
- */
-static inline int __LDL_cmp_5(const LDL *a)
-{
-    /* Threshold adjusted from 0xA0000000 0x00000000 to absorb truncation error */
-    return __LDL_cmp_const(a, 0x4001, 0x9fffffffUL, 0xffff0000UL);
-}
-
-
-/* Lexicographically check if an LDL value matches or exceeds the constant 1.0.
- *
- * Constant representation:
- *   - Biased Exponent: 16383 (0x3FFF) -> 2^0
- *   - 64-bit Mantissa: 1.00 (0x80000000 00000000)
- *   - Combined Value:  1.00 * 2^0 = 1.0
- *
- * Returns:
- *   -1 if a < 1.0, 0 if a == 1.0, 1 if a > 1.0
- */
-static inline int __LDL_cmp_1(const LDL *a)
-{
-    return __LDL_cmp_const(a, 0x3FFF, 0x80000000UL, 0x00000000UL);
-}
-
-/* Compile-time sanity checks for the assumed layouts (GCC).            */
-#if defined(__GNUC__)
-typedef char __chk_d_sz[(sizeof(double) == 8) ? 1 : -1];
-typedef char __chk_ld_sz[(sizeof(long double) >= 10) ? 1 : -1];
-#endif
-#define _D_EXP_ALLONES   0x7FF
-#define _LD_EXP_ALLONES  0x7FFF
-#define _LD_INTBIT       0x8000000000000000ULL
-/* ======================================================================
- * SECTION 2: software-only FP classification
- *
- * Pure integer bit tests: no FPU compare instructions, no libm calls.
- * Two flavours each: _xxx_(union) for hot paths that already hold a
- * bits-view, and <name>_<w>(value) convenience wrappers.
- * ==================================================================== */
-/* ----------------------- double ----------------------------------- */
-static inline int _d_signbit(union _d_bits u) {
-	return u.b.sign;
-}
-static inline int _d_isnan(union _d_bits u) {
-	return u.b.exp == _D_EXP_ALLONES && (u.b.frac0 | u.b.frac1) != 0;
-}
-static inline int _d_isinf(union _d_bits u) {
-	return u.b.exp == _D_EXP_ALLONES && u.b.frac0 == 0 && u.b.frac1 == 0;
-}
-/*
- * True only for exact zero (exp==0 AND fraction==0).
- * Denormals (exp==0, fraction!=0) intentionally report FALSE --
- * unlike ld == 0.0 they are genuinely nonzero values.
- */
-static inline int _d_iszero(union _d_bits u) {
-	return u.b.exp == 0 && u.b.frac0 == 0 && u.b.frac1 == 0;
-}
-/* ----------------------- long double ------------------------------ */
-static inline int _ld_signbit(union _ld_bits u) {
-	return u.b.sign;
-}
-/* With an explicit integer bit, infinity is the ONLY $7FFF/$8000...000
- * pattern; every other all-exponent value is a NaN.                     */
-static inline int _ld_isnan(union _ld_bits u) {
-	return u.b.exp == _LD_EXP_ALLONES && u.b.mant != _LD_INTBIT;
-}
-static inline int _ld_isinf(union _ld_bits u) {
-	return u.b.exp == _LD_EXP_ALLONES && u.b.mant == _LD_INTBIT;
-}
-static inline int _ld_iszero(union _ld_bits u) {
-	return u.b.exp == 0 && u.b.mant == 0;
-}
-
-/* Full long double precision math */
-typedef LDL work_float_t;
-static const LDL WORK_0_1 = {
-    .l = { 16383 + (-4), 0, 0xCCCCCCCCUL, 0xCCCCCCCCUL }
-};
-
-/* ======================================================================
- * SECTION 3: plumbing, flags, constants
+ * SECTION: plumbing, flags, constants
  * ==================================================================== */
 
 #ifdef FULL_SPECIFIERS
 extern unsigned char *__decimalpoint;
 #endif
 extern int __vfwprintf_total_size(FILE *stream, const wchar_t *fmt, va_list args);
-/* Output one character and handle stream errors. */
-#define OUT(c)  do {                         \
-                  putwc(c,stream);    \
-                  outcount += sizeof(wchar_t);             \
-                }while(0)
+
+/* Output one wide character and handle stream errors.
+ *
+ * A string stream (the swprintf family) that is full keeps counting: C99
+ * says the return value is the number of wide characters the output would
+ * have had, and callers size a buffer with swprintf(NULL, 0, ...) on the
+ * strength of that.  putwc on a full __SSTR stream returns WEOF from
+ * __swbuf without touching the buffer, so only the count goes on.  WEOF
+ * from a real stream is still an error.
+ *
+ * The count advances by one wide character per emitted character, matching
+ * the character-count return value that swprintf expects.  It must NOT be
+ * sizeof(wchar_t): that would return a byte count and break the sizing
+ * idiom. */
+#define OUT(c)  do { \
+    if (putwc((c), stream) == WEOF && !(stream->_flags & __SSTR)) { \
+        __STDIO_UNLOCK(stream); \
+        return -1; \
+    } \
+    outcount++; \
+} while(0)
 #define TOUT(c) *outp++ = (c)
 #define EOUT(c) *oute++ = (c)
+
 /* Worst-case byte requirements per numeric family -> shared scratch buf */
 #define MINFLOATSIZE   (DBL_DIG + 5)
 #define MININTSIZE     (sizeof(unsigned long long) * CHAR_BIT / 3 + 1)
 #define MINPOINTSIZE   (sizeof(void *) * CHAR_BIT / 4 + 1)
 #define REQUIREDBUFFER ((MININTSIZE > MINPOINTSIZE                                        \
                             ? (MININTSIZE > MINFLOATSIZE ? MININTSIZE : MINFLOATSIZE)    \
-                            : (MINPOINTSIZE > MINFLOATSIZE ? MINPOINTSIZE : MINFLOATSIZE))+400)
+                            : (MINPOINTSIZE > MINFLOATSIZE ? MINPOINTSIZE : MINFLOATSIZE))+8)
+
+/*
+ * Float-path buffer bounds (wide chars).  After the piece-list rework,
+ * outbuffer only holds bounded content (sign, "0x", mantissa hex, digits,
+ * L'.', exponent), and buffer[] holds only the digit string.  Nothing that
+ * grows with width or precision is buffered any more.
+ */
+#define FLOAT_DIGBUF   (LD_DIGS + 6)                /* digit buffer for %f/%e/%g    */
+#define FLOAT_OUTBUF   (FLOAT_DIGBUF + 24)          /* + sign, "0x", dot, exponent  */
+#if FLOAT_OUTBUF < 64
+# define FLOAT_OUTBUF_MIN 64
+#else
+# define FLOAT_OUTBUF_MIN FLOAT_OUTBUF
+#endif
+
 /* Flag bits; index in flagc[] == bit number.                           */
 #define ALTERNATEFLAG  1        /* '#'   */
 #define ZEROPADFLAG    2        /* '0'   */
@@ -616,142 +103,22 @@ extern int __vfwprintf_total_size(FILE *stream, const wchar_t *fmt, va_list args
 static const wchar_t flagc[] = { L'#', L'0', L'-', L' ', L'+' };
 extern unsigned __ulldivus(unsigned long long *llp, unsigned short n);
 
-/* Compute 10^n as an LDL value using precomputed 10^(2^bit) tables.
- *
- * This routine builds 10^n by decomposing |n| into its binary
- * representation and multiplying an LDL accumulator by 10^(2^bit)
- * for each set bit. Positive n uses the pow10_pos_table (10^(+2^bit)),
- * negative n uses the pow10_neg_table (10^(-2^bit)).
- *
- * Steps:
- *   1. Handle n == 0 by returning exactly 1.0 in LDL format.
- *   2. Initialize result to 1.0 (LDL with biased exponent 0x3FFF and
- *      mantissa 1.0).
- *   3. Take exp = |n| and iterate over its bits:
- *        - For each bit set, multiply result by the corresponding
- *          entry in pow10_pos_table or pow10_neg_table.
- *        - Shift exp right and increment bit index.
- *   4. Return the accumulated LDL value.
- *
- * Assumptions:
- *   - __LDL_mul implements normalized Motorola 80-bit multiplication
- *     without subnormal handling.
- *   - pow10_pos_table and pow10_neg_table contain correctly biased
- *     exponents (16383 + binexp) and normalized mantissas.
- *
- * Returns:
- *   LDL value representing 10^n in Motorola 80-bit extended format.
- */
-static LDL
-pow10_ld(LDL result, int n) {
-	/* 10^(2^bit) */
-	static const LDL pow10_pos_table[] = {
-	    /* 10^1 */
-	    { .l = { 16383 + 3,     0, 0xA0000000UL, 0x00000000UL } },
-	    /* 10^2 */
-	    { .l = { 16383 + 6,     0, 0xC8000000UL, 0x00000000UL } },
-	    /* 10^4 */
-	    { .l = { 16383 + 13,    0, 0x9C400000UL, 0x00000000UL } },
-	    /* 10^8 */
-	    { .l = { 16383 + 26,    0, 0xBEBC2000UL, 0x00000000UL } },
-	    /* 10^16 */
-	    { .l = { 16383 + 53,    0, 0x8E1BC9BFUL, 0x04000000UL } },
-	    /* 10^32 */
-	    { .l = { 16383 + 106,   0, 0x9DC5ADA8UL, 0x2B70B59DUL } },
-	    /* 10^64 */
-	    { .l = { 16383 + 212,   0, 0xC2781F49UL, 0xFFCFA6D5UL } },
-	    /* 10^128 */
-	    { .l = { 16383 + 425,   0, 0x93BA47C9UL, 0x80E98CDFUL } },
-	    /* 10^256 */
-	    { .l = { 16383 + 850,   0, 0xAA7EEBFBUL, 0x9DF9DE8DUL } },
-	    /* 10^512 */
-	    { .l = { 16383 + 1700,  0, 0xE319A0AEUL, 0xA60E91C6UL } },
-	    /* 10^1024 */
-	    { .l = { 16383 + 3401,  0, 0xC9767586UL, 0x81750C17UL } },
-	    /* 10^2048 */
-	    { .l = { 16383 + 6803,  0, 0x9E8B3B5DUL, 0xC53D5DE4UL } },
-	    /* 10^4096 */
-	    { .l = { 16383 + 13606, 0, 0xC4605202UL, 0x8A20979AUL } }
-	};
+/* A piece is a run of one repeated wide char, anchored at a wchar_t offset
+ * in outbuffer.  Pieces are emitted strictly left to right, interleaved with
+ * outbuffer content.  The array is kept sorted by startPos: the front pad
+ * (if reserved) sits at index 0, value pieces follow in increasing order,
+ * and a left-align tail pad (if any) is appended last. */
+#define MAX_PIECES 8
+struct piece {
+    int     startPos;
+    int     count;
+    wchar_t c;
+};
 
-	/* 1 / 10^(2^bit) */
-	static const LDL pow10_neg_table[] = {
-	    /* 10^-1 */
-	    { .l = { 16383 + (-4),     0, 0xCCCCCCCCUL, 0xCCCCCCCDUL } },
-	    /* 10^-2 */
-	    { .l = { 16383 + (-7),     0, 0xA3D70A3DUL, 0x70A3D70BUL } },
-	    /* 10^-4 */
-	    { .l = { 16383 + (-14),    0, 0xD1B71758UL, 0xE219652CUL } },
-	    /* 10^-8 */
-	    { .l = { 16383 + (-27),    0, 0xABCC7711UL, 0x8461CEFDUL } },
-	    /* 10^-16 */
-	    { .l = { 16383 + (-54),    0, 0xE69594BEUL, 0xC44DE15CUL } },
-	    /* 10^-32 */
-	    { .l = { 16383 + (-107),   0, 0xCFB11EADUL, 0x453994BBUL } },
-	    /* 10^-64 */
-	    { .l = { 16383 + (-213),   0, 0xA87FEA27UL, 0xA539E9A6UL } },
-	    /* 10^-128 */
-	    { .l = { 16383 + (-426),   0, 0xDDD0467CUL, 0x64BCE4A1UL } },
-	    /* 10^-256 */
-	    { .l = { 16383 + (-851),   0, 0xC0314325UL, 0x637A193AUL } },
-	    /* 10^-512 */
-	    { .l = { 16383 + (-1701),  0, 0x9049EE32UL, 0xDB23D21DUL } },
-	    /* 10^-1024 */
-	    { .l = { 16383 + (-3402),  0, 0xA2A682A5UL, 0xDA57C0BFUL } },
-	    /* 10^-2048 */
-	    { .l = { 16383 + (-6804),  0, 0xCEAE534FUL, 0x34362DE5UL } },
-	    /* 10^-4096 */
-	    { .l = { 16383 + (-13607), 0, 0xA6DD04C8UL, 0xD2CE9FDFUL } }
-	};
-
-
-    const LDL *table;
-    unsigned int exp;
-    unsigned int bit;
-
-    if (n == 0)
-        return result;
-
-	table = n < 0 ? pow10_neg_table : pow10_pos_table;
-    exp = (unsigned int)(n < 0 ? -n : n);
-
-    for (bit = 0; exp; ++bit, exp >>= 1) {
-        if (exp & 1) {
-            result = __LDL_mul(result, table[bit]);
-        }
-    }
-
-    return result;
-}
-
-/*
- * How many significant decimal digits each source format genuinely
- * carries.  Digit extraction goes this deep (plus one guard digit) so
- * that rounding at the requested precision is honest rather than limited
- * by an early cutoff.
- */
-#ifdef DBL_DECIMAL_DIG
-# define D_DIGS  DBL_DECIMAL_DIG        /* typically 17                    */
-#else
-# define D_DIGS  17
-#endif
-#ifdef LDBL_DECIMAL_DIG
-# define LD_DIGS LDBL_DECIMAL_DIG       /* 21 for 64-bit significand       */
-#else
-# define LD_DIGS 21                     /* m68k extended fallback          */
-#endif
-
-
-#define LOG10_2_Q32  1292913986U
 /* ======================================================================
- *  __vfprintf_total_size -- the formatter core.
- *  Returns the number of characters written, or -1 on stream error.
+ *  __vfwprintf_total_size -- the wide formatter core.
+ *  Returns the number of wide characters written, or -1 on stream error.
  * ==================================================================== */
-/**
- *  Differs from vfprintf such that it returns total number of bytes that
- *  would've been written if there were sufficient space in file.
- *  Required for vsnprintf
- */
 int __vfwprintf_total_size(FILE *stream, const wchar_t *format, va_list args) {
 	size_t outcount = 0;
 	__STDIO_LOCK(stream);
@@ -759,7 +126,7 @@ int __vfwprintf_total_size(FILE *stream, const wchar_t *format, va_list args) {
 		/* ============================================================
 		 * Ordinary characters: copy through unchanged.
 		 * ========================================================== */
-		if (*format != '%') {
+		if (*format != L'%') {
 			OUT(*format++);
 			continue;
 		}
@@ -767,19 +134,17 @@ int __vfwprintf_total_size(FILE *stream, const wchar_t *format, va_list args) {
 		 * A '%' conversion begins here.
 		 * ========================================================== */
 		{
-			static const char lowertabel[] = { '0', '1', '2', '3', '4', '5', '6', '7', '8', '9', 'a', 'b', 'c', 'd', 'e', 'f' };
-			static const char uppertabel[] = { '0', '1', '2', '3', '4', '5', '6', '7', '8', '9', 'A', 'B', 'C', 'D', 'E', 'F' };
+			static const wchar_t lowertabel[] = { L'0', L'1', L'2', L'3', L'4', L'5', L'6', L'7', L'8', L'9', L'a', L'b', L'c', L'd', L'e', L'f' };
+			static const wchar_t uppertabel[] = { L'0', L'1', L'2', L'3', L'4', L'5', L'6', L'7', L'8', L'9', L'A', L'B', L'C', L'D', L'E', L'F' };
 			short width = 0;
 			unsigned short preci = 0x7fff; /* Sentinel value: no precision was specified. */
 			short flags = 0;
-			char type;
-			char subtype = 'i';
+			wchar_t type;
+			wchar_t subtype = L'i';
 			wchar_t buffer1[4]; /* sign / radix prefix slot */
 			wchar_t buffer[REQUIREDBUFFER + 8];
-			wchar_t outbuffer[REQUIREDBUFFER + 128]; /* Buffer used for output and left padding. */
+			wchar_t outbuffer[FLOAT_OUTBUF_MIN]; /* Float-path buffered output. */
 			wchar_t *outp = outbuffer;
-			wchar_t outexponent[8]; /* Separate buffer for the exponent, such as e+1234. */
-			wchar_t *oute = 0; /* Set only when an exponent is emitted. */
 			wchar_t *buffer2 = buffer;
 			size_t size1 = 0, size2 = 0;
 			const wchar_t *ptr = format + 1;
@@ -789,15 +154,15 @@ int __vfwprintf_total_size(FILE *stream, const wchar_t *format, va_list args) {
 			 * (loop condition becomes false when i reaches the size).
 			 * --------------------------------------------------------- */
 			do {
-				for (i = 0; i < sizeof(flagc); i++)
+				for (i = 0; i < sizeof(flagc) / sizeof(flagc[0]); i++)
 					if (flagc[i] == *ptr) {
 						flags |= 1 << i;
 						ptr++;
 						break;
 					}
-			} while (i < sizeof(flagc));
+			} while (i < sizeof(flagc) / sizeof(flagc[0]));
 			/* ---- 2. field width: literal digits or '*' --------------- */
-			if (*ptr == '*') {
+			if (*ptr == L'*') {
 				signed int a;
 				ptr++;
 				a = va_arg(args, signed int);
@@ -808,13 +173,13 @@ int __vfwprintf_total_size(FILE *stream, const wchar_t *format, va_list args) {
 					width = a;
 			} else {
 				while (iswdigit(*ptr))
-					width = width * 10 + (*ptr++ - '0');
+					width = width * 10 + (*ptr++ - L'0');
 			}
 			/* ---- 3. precision: '.' digits or '.*' -------------------- */
-			if (*ptr == '.') {
+			if (*ptr == L'.') {
 				flags |= HAS_PRECI;
 				ptr++;
-				if (*ptr == '*') /* read precision from arguments */
+				if (*ptr == L'*') /* read precision from arguments */
 				{
 					signed int a;
 					ptr++;
@@ -824,16 +189,16 @@ int __vfwprintf_total_size(FILE *stream, const wchar_t *format, va_list args) {
 				} else {
 					preci = 0;
 					while (*ptr >= L'0' && *ptr <= L'9')
-						preci = preci * 10 + (*ptr++ - '0');
+						preci = preci * 10 + (*ptr++ - L'0');
 				}
 			}
 			/* ---- 4. length modifier ----------------------------------
 			 * Internal codes: 'h' = halfword, 'i' = hh (byte),
 			 * 'l' = long, 'm' = ll / intmax, 0 = none.
 			 * --------------------------------------------------------- */
-			if (*ptr == 'h' || *ptr == 'l' || *ptr == 'L' || *ptr == 'j' || *ptr == 'z' || *ptr == 't') {
+			if (*ptr == L'h' || *ptr == L'l' || *ptr == L'L' || *ptr == L'j' || *ptr == L'z' || *ptr == L't') {
 				subtype = *ptr++;
-				if (*ptr == 'h' || *ptr == 'l')
+				if (*ptr == L'h' || *ptr == L'l')
 					++ptr, ++subtype;
 			} else
 				subtype = 0;
@@ -842,55 +207,55 @@ int __vfwprintf_total_size(FILE *stream, const wchar_t *format, va_list args) {
 			/* ========================================================
 			 * Integer family: d i o p u x X
 			 *======================================================== */
-			case 'd':
-			case 'i':
-			case 'o':
-			case 'p':
-			case 'u':
-			case 'x':
-			case 'X': {
+			case L'd':
+			case L'i':
+			case L'o':
+			case L'p':
+			case L'u':
+			case L'x':
+			case L'X': {
 				unsigned long long v;
-				const char *tabel;
+				const wchar_t *tabel;
 				int base;
 				/* %p is spelled "%#lx" */
-				if (type == 'p') {
-					subtype = 'l'; /* This is written as %#lx */
-					type = 'x';
+				if (type == L'p') {
+					subtype = L'l'; /* This is written as %#lx */
+					type = L'x';
 					flags |= ALTERNATEFLAG;
 				}
-				if (type == 'd' || type == 'i') {
+				if (type == L'd' || type == L'i') {
 					/* ---- signed: magnitude -> v, prefix -> buffer1 ---- */
 					signed long long v2;
 					/* Extract the argument with proper type */
-					if (subtype == 'l')
+					if (subtype == L'l')
 						v2 = va_arg(args, signed long);
-					else if (subtype == 'm' || subtype == 'j')
+					else if (subtype == L'm' || subtype == L'j')
 						v2 = va_arg(args, signed long long);
 					else
 						v2 = va_arg(args, signed int);
 					/* Convert hh/h arguments to their specified width. */
-					if (subtype == 'h')
+					if (subtype == L'h')
 						v2 = (short) v2; /* Convert to signed short instead of masking the bits. */
-					else if (subtype == 'i')
+					else if (subtype == L'i')
 						v2 = (signed char) v2; /* Convert to signed char instead of masking the bits. */
 					/* Now v2 is correctly sign-extended */
 					if (v2 < 0) {
-						if (size1 < sizeof(buffer1))
-							buffer1[size1++] = '-';
+						if (size1 < sizeof(buffer1) / sizeof(buffer1[0]))
+							buffer1[size1++] = L'-';
 						/* -LLONG_MIN cannot be negated in signed math    */
 						v = (v2 == LLONG_MIN) ? (unsigned long long) LLONG_MAX + 1ULL : (unsigned long long) (-v2);
 					} else {
 						if (flags & SIGNFLAG)
-							buffer1[size1++] = '+';
+							buffer1[size1++] = L'+';
 						else if (flags & BLANKFLAG)
-							buffer1[size1++] = ' ';
+							buffer1[size1++] = L' ';
 						v = (unsigned long long) v2;
 					}
 				} else {
 					/* ---- unsigned family ---- */
-					if (subtype == 'l')
+					if (subtype == L'l')
 						v = va_arg(args, unsigned long);
-					else if (subtype == 'm' || subtype == 'j')
+					else if (subtype == L'm' || subtype == L'j')
 						v = va_arg(args, unsigned long long);
 					else
 						v = va_arg(args, unsigned int);
@@ -898,12 +263,12 @@ int __vfwprintf_total_size(FILE *stream, const wchar_t *format, va_list args) {
 					 * For unsigned types, bitmasks are correct because we want
 					 * to truncate to the specified width (0-255 for char, 0-65535 for short)
 					 */
-					if (subtype == 'h')
+					if (subtype == L'h')
 						v &= 0xffffULL;
-					else if (subtype == 'i')
+					else if (subtype == L'i')
 						v &= 0xffULL;
 					if (flags & ALTERNATEFLAG) {
-						if (type == 'o') {
+						if (type == L'o') {
 							/*
 							 * For octal with # flag:
 							 * - If value is 0: just output "0" (no extra prefix)
@@ -911,19 +276,19 @@ int __vfwprintf_total_size(FILE *stream, const wchar_t *format, va_list args) {
 							 * - Otherwise add '0' prefix
 							 */
 							if (preci == 0x7fff && v != 0) {
-								if (size1 < sizeof(buffer1))
-									buffer1[size1++] = '0';
+								if (size1 < sizeof(buffer1) / sizeof(buffer1[0]))
+									buffer1[size1++] = L'0';
 							} else if (preci != 0x7fff && v != 0) {
 								/* Precision specified and value non-zero: add prefix if needed */
-								if (size1 < sizeof(buffer1)) {
-									buffer1[size1++] = '0';
+								if (size1 < sizeof(buffer1) / sizeof(buffer1[0])) {
+									buffer1[size1++] = L'0';
 									--preci;
 								}
 							}
 							/* If v == 0, don't add prefix - just let the digit loop output "0" */
-						} else if ((type == 'x' || type == 'X') && v) {
-							if (size1 + 2 <= sizeof(buffer1)) {
-								buffer1[size1++] = '0';
+						} else if ((type == L'x' || type == L'X') && v) {
+							if (size1 + 2 <= sizeof(buffer1) / sizeof(buffer1[0])) {
+								buffer1[size1++] = L'0';
 								buffer1[size1++] = type;
 								if (preci != 0x7fff)
 									preci -= 2;
@@ -932,9 +297,9 @@ int __vfwprintf_total_size(FILE *stream, const wchar_t *format, va_list args) {
 					}
 				}
 				/* Divide down; digits land right-to-left in buffer.     */
-				buffer2 = &buffer[sizeof(buffer)];
-				base = (type == 'x' || type == 'X') ? 16 : (type == 'o') ? 8 : 10;
-				tabel = (type != 'X') ? lowertabel : uppertabel;
+				buffer2 = &buffer[sizeof(buffer) / sizeof(buffer[0])];
+				base = (type == L'x' || type == L'X') ? 16 : (type == L'o') ? 8 : 10;
+				tabel = (type != L'X') ? lowertabel : uppertabel;
 				do {
 					if (buffer2 <= buffer) /* Prevent writing before the start of the buffer. */
 						break;
@@ -952,9 +317,9 @@ int __vfwprintf_total_size(FILE *stream, const wchar_t *format, va_list args) {
 				/* ========================================================
 				 * %c
 				 *======================================================== */
-			case 'c': {
+			case L'c': {
 				wchar_t ch;
-				if (subtype == 'l')
+				if (subtype == L'l')
 					ch = (wchar_t) va_arg(args, long);
 				else
 					ch = (wchar_t) va_arg(args, int);
@@ -967,14 +332,14 @@ int __vfwprintf_total_size(FILE *stream, const wchar_t *format, va_list args) {
 			/* ========================================================
 			 * %s und %ls / %S  (NULL-safe)
 			 *======================================================== */
-			case 's':
-			case 'S': {
+			case L's':
+			case L'S': {
 				/* 'S' ->  %ls */
-				if (type == 'S') {
-					subtype = 'l';
+				if (type == L'S') {
+					subtype = L'l';
 				}
 
-				if (subtype == 'l') {
+				if (subtype == L'l') {
 					/* %ls -> wchar_t* */
 					buffer2 = va_arg(args, wchar_t*);
 					if (buffer2 == NULL) {
@@ -1010,7 +375,7 @@ int __vfwprintf_total_size(FILE *stream, const wchar_t *format, va_list args) {
 						size2 = preci;
 					}
 				}
-				preci = 0; /* Präzision wurde hier bereits vollständig angewendet */
+				preci = 0; /* Precision was already fully applied here */
 				break;
 			}
 #ifdef FULL_SPECIFIERS
@@ -1025,23 +390,23 @@ int __vfwprintf_total_size(FILE *stream, const wchar_t *format, va_list args) {
 				 *   S3  g/G style arbitration (fixed vs scientific)
 				 *   S4  digit extraction + round-half-up
 				 *   S5  trailing-zero trimming, width bookkeeping
-				 *   S6  padded emission
+				 *   S6  padded emission (piece-list interleave)
 				 *======================================================== */
-			case 'a':
-			case 'A':
-			case 'f':
-			case 'e':
-			case 'E':
-			case 'g':
-			case 'G': {
+			case L'a':
+			case L'A':
+			case L'f':
+			case L'e':
+			case L'E':
+			case L'g':
+			case L'G': {
 				union _d_bits d;
 				union _ld_bits lu; /* full-width ld operand */
 				work_float_t ld_val; /* working precision     */
-				int is_ld = (subtype == 'L');
+				int is_ld = (subtype == L'L');
 				short exponent = 0; /* power of ten          */
 				char sign = 0;
 				const char *infnan = 0;
-				char pad = ((flags & ZEROPADFLAG) && !(flags & LALIGNFLAG)) ? '0' : ' ';
+				wchar_t pad = ((flags & ZEROPADFLAG) && !(flags & LALIGNFLAG)) ? L'0' : L' ';
                 const int MEANINGFUL_DIGITS = is_ld ? LD_DIGS : D_DIGS;
 				/* -------- S1: load + make magnitude + specials ------- */
 				if (is_ld) {
@@ -1122,11 +487,30 @@ int __vfwprintf_total_size(FILE *stream, const wchar_t *format, va_list args) {
 					short killZero = 0;
 					int digits_to_compute = MEANINGFUL_DIGITS;
 					short isg = 0;
+					/* Piece list for this conversion.  Index 0 may be the
+					 * reserved front pad (right-align only); value pieces
+					 * follow in increasing startPos order; a left-align
+					 * tail pad is appended at step 9. */
+					struct piece pieces[MAX_PIECES];
+					int npieces = 0;
+#define PUSH(at, cnt, ch) do { \
+    if ((cnt) > 0 && npieces < MAX_PIECES) \
+        pieces[npieces++] = (struct piece){ .startPos = (at), .count = (cnt), .c = (ch) }; \
+} while (0)
+
+					/* 0. Reserve the front pad slot (always index 0) when
+					 *    the pad goes before the value.  Its count is set
+					 *    at step 9. */
+					if (width > 0 && !(flags & LALIGNFLAG)) {
+						int pad_at = (pad == L'0' && sign != 0) ? 1 : 0;
+						pieces[npieces++] = (struct piece){ .startPos = pad_at, .count = 0, .c = pad };
+					}
+
 					if (preci == 0x7fff) {
-						if (type == 'f' || type == 'F' || type == 'e' || type == 'E' || type == 'g' || type == 'G') {
+						if (type == L'f' || type == L'F' || type == L'e' || type == L'E' || type == L'g' || type == L'G') {
 							/* ISO C standard requires a default precision of 6 for floating-point formats */
 							preci = 6;
-						} else if (type == 'a' || type == 'A') {
+						} else if (type == L'a' || type == L'A') {
 							/* -1 signals the hex formatter to output enough digits for an exact value */
 							preci = -1;
 						} else {
@@ -1134,8 +518,8 @@ int __vfwprintf_total_size(FILE *stream, const wchar_t *format, va_list args) {
 						}
 					}
 					if (!infnan) {
-						if (type != 'a' && type != 'A') {
-							if (type == 'g' || type == 'G') {
+						if (type != L'a' && type != L'A') {
+							if (type == L'g' || type == L'G') {
 								int original_preci = (preci == 0) ? 1 : preci;
 								isg = 1;
 								if (exponent >= -4 && exponent < original_preci) {
@@ -1166,7 +550,7 @@ int __vfwprintf_total_size(FILE *stream, const wchar_t *format, va_list args) {
 								if (!(flags & ALTERNATEFLAG)) {
 									killZero = 1;
 								}
-							} else if (type == 'f' || type == 'F') {
+							} else if (type == L'f' || type == L'F') {
 								if (exponent >= 0) {
 									digits_to_compute = exponent + preci + 1;
 								} else {
@@ -1174,7 +558,7 @@ int __vfwprintf_total_size(FILE *stream, const wchar_t *format, va_list args) {
 									if (digits_to_compute < 0)
 										digits_to_compute = 0;
 								}
-							} else if (type == 'e' || type == 'E') {
+							} else if (type == L'e' || type == L'E') {
 								digits_to_compute = preci + 1;
 								if (digits_to_compute > MEANINGFUL_DIGITS)
 									digits_to_compute = MEANINGFUL_DIGITS;
@@ -1187,48 +571,37 @@ int __vfwprintf_total_size(FILE *stream, const wchar_t *format, va_list args) {
 								digits_to_compute = MEANINGFUL_DIGITS;
 							}
 							/* Use ld_val for digit extraction, not d.d */
-							buffer[0] = '0';
+							buffer[0] = L'0';
 							startPos = pos = 1;
 
-#if 0
-							/* Compute digits using ld_val */
-							for (; pos <= digits_to_compute && pos < sizeof(buffer); ++pos) {
-								unsigned int z = __LDL_fix_uint(ld_val);
-								if (z < 0) z = 0;
-								else if (z > 9) z = 9;
-								buffer[pos] = '0' + z;
-								ld_val = __LDL_mul_10(__LDL_sub_uint(ld_val, z));
+							for (; pos <= digits_to_compute && pos < FLOAT_DIGBUF; ++pos) {
+								buffer[pos] = L'0' + __LDL_mul_10_extract(&ld_val);
 							}
-#else
-							for (; pos <= digits_to_compute && pos < sizeof(buffer); ++pos) {
-								buffer[pos] = '0' + __LDL_mul_10_extract(&ld_val);
-							}
-#endif
 							/* Perform rounding */
 							if (__LDL_cmp_5(&ld_val) >= 0) {
 								int tpos = pos - 1;
 								while (tpos > 0) {
-									if (++buffer[tpos] <= '9')
+									if (++buffer[tpos] <= L'9')
 										break;
-									buffer[tpos--] = '0';
+									buffer[tpos--] = L'0';
 								}
 								/* Handle carry overflow (e.g., 9.99 -> 10.00 or 0.099 -> 0.100) */
 								if (tpos == 0) {
 									startPos = 0;
-									buffer[0] = '1';
+									buffer[0] = L'1';
 									exponent++; /* Exponent shifts up globally for all format paths */
 									if (exponent > 0) {
 										++leading;
 										++ digits_to_compute;
 									}
-								} else if (exponent + preci < 0 && buffer[tpos] == '5') {
+								} else if (exponent + preci < 0 && buffer[tpos] == L'5') {
 									startPos = 0;
-									buffer[0] = '1';
+									buffer[0] = L'1';
 									exponent++; /* Exponent shifts up globally for all format paths */
 								}
 							}
 							/* Set the number of integer digits; this matters only for %f. */
-							if (type == 'f' || type == 'F') {
+							if (type == L'f' || type == L'F') {
 								leading = (exponent >= 0) ? (exponent + 1) : 0;
 							} else {
 								leading = 1;
@@ -1237,10 +610,9 @@ int __vfwprintf_total_size(FILE *stream, const wchar_t *format, va_list args) {
 							/* 'a' 'A' format - pure bit operations */
 							if (!(flags & HAS_PRECI))
 								killZero = 1;
-							TOUT('0');
-							TOUT(type + ('X' - 'A'));
-							width -= 2;
-							buffer[0] = '0';
+							TOUT(L'0');
+							TOUT(type + (L'X' - L'A'));
+							buffer[0] = L'0';
 							startPos = 0;
 							pos = 1;
 							if (is_ld) {
@@ -1253,26 +625,23 @@ int __vfwprintf_total_size(FILE *stream, const wchar_t *format, va_list args) {
 									}
 								} else {
 									exponent = (short) (lu.b.exp - 16383);
-									buffer[0] = '1';
+									buffer[0] = L'1';
 								}
 								/* Extract mantissa for long double */
-								unsigned x = (unsigned) (lu.b.mant >> 32);
-								unsigned y = (unsigned) (lu.b.mant & 0xFFFFFFFFULL);
-								/* Full 64-bit mantissa including explicit integer bit */
 								unsigned long long mant = lu.b.mant;
 								/* Drop the explicit integer bit (bit 63) */
 								mant &= 0x7FFFFFFFFFFFFFFFULL;
 								/* Extract 16 hex digits (64 bits) */
 								for (int i = 0; i < 16; i++) {
 								    int digit = (mant >> (60 - 4*i)) & 0xF;
-								    buffer[pos++] = "0123456789abcdef"[digit];
+								    buffer[pos++] = L"0123456789abcdef"[digit];
 								}
 							} else {
 								if (!d.b.exp) {
 									exponent = 0;
 								} else {
 									exponent = d.b.exp - 1023;
-									buffer[0] = '1';
+									buffer[0] = L'1';
 								}
 								/* Extract 52-bit mantissa for double */
 								unsigned long long mant = ((unsigned long long)d.b.frac0 << 32) | d.b.frac1;
@@ -1281,57 +650,69 @@ int __vfwprintf_total_size(FILE *stream, const wchar_t *format, va_list args) {
 								/* Print 13 hex digits (52 bits) */
 								for (int i = 0; i < 13; i++) {
 								    int digit = (mant >> (48 - 4*i)) & 0xF;
-								    buffer[pos++] = "0123456789abcdef"[digit];
+								    buffer[pos++] = L"0123456789abcdef"[digit];
 								}
 							}
-							type += 'P' - 'A';
+							type += L'P' - L'A';
 							leading = 1;
 						}
 					}
 					if (preci > 0x3fff)
 						preci = 1;
 					/* -------- S6: Output generation -------- */
+					/*
+					 * Build a tiny piece list of unbounded runs (zeros / pad),
+					 * anchored at outbuffer offsets, then emit outbuffer
+					 * interleaved with those runs.  Only bounded content
+					 * (sign, "0x", digits, L'.', exponent) ever goes into
+					 * outbuffer, so any width or precision is safe.
+					 */
+					/* 1. Sign (bounded; stays in outbuffer[0]). */
 					if (sign != 0) {
 						TOUT(sign);
-						--width;
 					}
 					if (infnan) {
+						/* Specials are tiny; just emit inline.  The 0 flag
+						 * is ignored for inf/NaN, so the front pad (if any)
+						 * uses spaces. */
 						TOUT(infnan[0]);
 						TOUT(infnan[1]);
 						TOUT(infnan[2]);
-						width -= 3;
-						pad = ' ';
+						if (width > 0 && !(flags & LALIGNFLAG))
+							pieces[0].c = L' ';
 					} else {
-						int fractional_output = 0;
-						/* 1. Print digits before the decimal point */
-						if (exponent < 0 && (type == 'f' || type == 'F')) {
+						/* 2. Integer part. */
+						if (exponent < 0 && (type == L'f' || type == L'F')) {
 							/* For small fixed-point numbers (e.g., 0.00123), print the mandatory leading '0' */
-							TOUT('0');
-							--width;
+							TOUT(L'0');
 						} else {
 							if (isg)
 								preci -= leading;
 							int rpad = exponent - leading;
+							int int_start = startPos;
 							while (startPos < pos && leading-- > 0) {
-								TOUT(buffer[startPos++]);
-								--width;
 								if (isg && !(flags & ALTERNATEFLAG)) {
 									--preci;
 									if (preci > 0x3fff)
 										preci = 0;
 								}
+								++startPos;
 							}
-							while (leading-- > 0)
-								TOUT('0');
-							if (type == 'f' || type == 'F') {
-								while (rpad-- > 0)
-									TOUT('0');
+							/* Copy the integer digit span into outbuffer. */
+							for (int k = int_start; k < startPos; ++k)
+								TOUT(buffer[k]);
+							/* Remaining integer zeros go into a piece. */
+							if (leading > 0)
+								PUSH((int)(outp - outbuffer), leading, L'0');
+							if (type == L'f' || type == L'F') {
+								if (rpad > 0)
+									PUSH((int)(outp - outbuffer), rpad, L'0');
 							}
 						}
+						/* 3. Trim trailing zeros in the digit buffer (g/G). */
 						if (killZero) {
-							/* Remove trailing zeros from the complete digit buffer. */
 							int stop = pos - 1;
-							while (stop >= startPos && buffer[stop] == '0') {
+							while (stop >= startPos && buffer[stop] == L'0') {
 								stop--;
 							}
 							preci = stop - startPos + 1;   /* Number of significant digits. */
@@ -1339,124 +720,141 @@ int __vfwprintf_total_size(FILE *stream, const wchar_t *format, va_list args) {
 								preci = 0;
 							pos = stop + 1;
 						}
-						/* 2. Print the decimal point if required */
+						/* 4. Decimal point. */
 						if (preci || (flags & ALTERNATEFLAG) != 0) {
-							TOUT((__decimalpoint && __decimalpoint[0]) ? __decimalpoint[0] : '.');
-							--width;
+							TOUT((__decimalpoint && __decimalpoint[0]) ? (wchar_t)__decimalpoint[0] : L'.');
 						}
 						/* limit output */
 						if (pos > startPos + preci) {
 							pos = startPos + preci;
 						}
-						/* 3. Print leading fractional zeros for small %f numbers */
-						if (exponent < 0 && (type == 'f' || type == 'F')) {
+						/* 5. Leading fractional zeros for small %f numbers. */
+						if (exponent < 0 && (type == L'f' || type == L'F')) {
 							int fractional_zeros = -exponent - 1; /* e.g., exp = -3 -> 2 zeros */
-							while (fractional_zeros-- > 0 && preci > 0) {
-								TOUT('0');
-								--width;
+							if (fractional_zeros > preci)
+								fractional_zeros = preci;
+							if (fractional_zeros > 0) {
+								PUSH((int)(outp - outbuffer), fractional_zeros, L'0');
 								if (!isg)
-									--preci;
-								fractional_output++;
+									preci -= fractional_zeros;
 							}
 						}
-						/* 4. Print the remaining significant digits from the buffer */
-						while (preci > 0 && startPos < pos) {
-							TOUT(buffer[startPos++]);
-							--width;
-							--preci;
+						/* 6. Significant fractional digits from the buffer. */
+						{
+							int nfrac = pos - startPos;
+							for (int k = 0; k < nfrac; ++k)
+								TOUT(buffer[startPos + k]);
+							preci -= nfrac;
 						}
-						/* 5. Pad trailing zeros to satisfy the requested precision */
-						int zeros_to_add = 0;
-						if (!(type == 'f' || type == 'F')) {
-							/* For %e, %g (scientific), and %a: precision dictates exact trailing zeros */
-							zeros_to_add = preci - fractional_output;
-						} else {
-							/* For %f and %g (fixed-point): track against global preci constraint */
-							zeros_to_add = preci - fractional_output;
+						/* 7. Trailing zeros to satisfy precision. */
+						if (preci > 0) {
+							PUSH((int)(outp - outbuffer), preci, L'0');
+							preci = 0;
 						}
-						if (zeros_to_add < 0)
-							zeros_to_add = 0;
-						while (zeros_to_add-- > 0) {
-							TOUT('0');
-							--width;
-						}
-						if (!(type == 'f' || type == 'F')) {
+						/* 8. Exponent. */
+						if (!(type == L'f' || type == L'F')) {
 							int xout = 0;
-							char t_lower = (char) (type | 0x20); /* Convert to lowercase ('e' or 'p') */
-							oute = outexponent;
-							EOUT(type);
+							wchar_t t_lower = (wchar_t) (type | 0x20); /* Convert to lowercase ('e' or 'p') */
+							TOUT(type);
 							if (exponent < 0) {
-								EOUT('-');
+								TOUT(L'-');
 								exponent = -exponent;
 							} else {
-								EOUT('+');
+								TOUT(L'+');
 							}
 							/* Thousands digit (e.g., for long double extremes like e+4932) */
 							if (exponent > 999) {
 								int z = exponent / 1000;
-								EOUT('0' + z);
+								TOUT(L'0' + z);
 								exponent -= z * 1000;
 								xout = 1;
 							}
 							/* Hundreds digit */
 							if (xout || exponent > 99) {
 								int z = exponent / 100;
-								EOUT('0' + z);
+								TOUT(L'0' + z);
 								exponent -= z * 100;
 								xout = 1;
 							}
 							/* Tens digit: Forced to print for 'e'/'E' to guarantee at least 2 digits (e+00) */
-							if (xout || exponent > 9 || t_lower == 'e') {
+							if (xout || exponent > 9 || t_lower == L'e') {
 								int z = exponent / 10;
-								EOUT('0' + z);
+								TOUT(L'0' + z);
 								exponent -= z * 10;
 							}
 							/* Units digit (always printed) */
-							EOUT('0' + exponent);
+							TOUT(L'0' + exponent);
 						}
 					}
-					if (oute)
-						width -= oute - outexponent;
-					if ((flags & LALIGNFLAG) != 0) {
-						/* LEFT ALIGNED: print temp then pad */
-						for (wchar_t *p = outbuffer; p < outp; ++p)
-							OUT(*p);
-						if (oute) {
-							for (wchar_t *p = outexponent; p < oute; ++p)
-								OUT(*p);
-						}
-						while (--width >= 0)
-							OUT(' ');
-					} else {
-						/* RIGHT ALIGNED: pad then print */
-						wchar_t *qout = outbuffer;
-						/* check for sign */
-						if (pad == '0' && (*qout == '-' || *qout == '+' || *qout == ' ')) {
-							OUT(*qout++); /* Print the sign before zero padding. */
-							while (--width >= 0)
-								OUT('0');
-						} else {
-							while (--width >= 0)
-								OUT(pad);
-						}
-						for (; qout < outp; ++qout)
-							OUT(*qout);
-						if (oute) {
-							for (wchar_t *p = outexponent; p < oute; ++p)
-								OUT(*p);
+					/* 9. Fill in the pad count.
+					 *
+					 * width is the requested field width.  vlen is the
+					 * number of characters the value itself contributes
+					 * (everything already in outbuffer, plus the runs queued
+					 * as pieces -- including the reserved front pad, whose
+					 * count is still 0 at this point).  padcount is the
+					 * number of pad characters actually needed, clamped at 0.
+					 */
+					{
+						int vlen = (int)(outp - outbuffer);
+						int padcount;
+						int pi;
+
+						for (pi = 0; pi < npieces; ++pi)
+							vlen += pieces[pi].count;
+
+						padcount = (width > vlen) ? (width - vlen) : 0;
+						if (padcount > 0) {
+							if (flags & LALIGNFLAG) {
+								/* Tail pad: append at the end so its
+								 * startPos (== outp) is the largest. */
+								PUSH((int)(outp - outbuffer), padcount, L' ');
+							} else {
+								/* Front pad: the slot at index 0 was
+								 * reserved.  padcount > 0 implies
+								 * width > 0, and we are in the non-
+								 * LALIGNFLAG branch, so the slot is
+								 * guaranteed to exist. */
+								pieces[0].count = padcount;
+							}
 						}
 					}
+					/* 10. Emit: interleave outbuffer with pieces. */
+					{
+						int len = (int)(outp - outbuffer);
+						int pi = 0;
+						for (int k = 0; k < len; ++k) {
+							while (pi < npieces && pieces[pi].startPos == k) {
+								int cnt = pieces[pi].count;
+								wchar_t pc = pieces[pi].c;
+								for (int j = 0; j < cnt; ++j)
+									OUT(pc);
+								++pi;
+							}
+							OUT(outbuffer[k]);
+						}
+						/* Pieces anchored at the end (left-align tail,
+						 * or width pad when outbuffer is empty). */
+						while (pi < npieces) {
+							int cnt = pieces[pi].count;
+							wchar_t pc = pieces[pi].c;
+							for (int j = 0; j < cnt; ++j)
+								OUT(pc);
+							++pi;
+						}
+					}
+#undef PUSH
 					format = ptr;
 					continue;
 				}
 			}
 #endif
-			case '%':
+			case L'%':
 				buffer2 = L"%";
 				size2 = 1;
 				preci = 0;
 				break;
-			case 'n':
+			case L'n':
 				*va_arg(args, int*) = outcount;
 				width = preci = 0;
 				break;
@@ -1469,7 +867,7 @@ int __vfwprintf_total_size(FILE *stream, const wchar_t *format, va_list args) {
 				break;
 			}
 			if ((flags & HAS_PRECI) && !(flags & ALTERNATEFLAG)) {
-				if (size2 == 1 && !preci && buffer2[0] == '0')
+				if (size2 == 1 && !preci && buffer2[0] == L'0')
 					size2 = 0;
 			}
 			pad = size1 + (size2 >= preci ? size2 : preci); /* Calculate the number of characters */
@@ -1479,309 +877,20 @@ int __vfwprintf_total_size(FILE *stream, const wchar_t *format, va_list args) {
 					OUT(buffer1[i]);
 			if (!(flags & LALIGNFLAG)) /* Pad left */
 				for (i = 0; i < pad; i++)
-					OUT(flags&ZEROPADFLAG?'0':' ');
+					OUT(flags & ZEROPADFLAG ? L'0' : L' ');
 			if (!(flags & ZEROPADFLAG)) /* Print the sign when zero padding is not used. */
 				for (i = 0; i < size1; i++)
 					OUT(buffer1[i]);
 			for (i = size2; i < preci; i++) /* extend to precision */
-				OUT('0');
+				OUT(L'0');
 			for (i = 0; i < size2; i++) /* Print the converted value. */
 				OUT(buffer2[i]);
 			if (flags & LALIGNFLAG) /* Pad right */
 				for (i = 0; i < pad; i++)
-					OUT(' ');
+					OUT(L' ');
 			format = ptr;
 		}
 	}
 	__STDIO_UNLOCK(stream);
 	return outcount;
 }
-
-#ifdef TESTME
-#include <wchar.h>
-#include <string.h>
-
-/* Test counters for the wide framework execution */
-static int tests_run = 0;
-static int tests_passed = 0;
-static int tests_failed = 0;
-
-/*
- * Check that the wide formatter output matches the expected wide string exactly.
- * The 'combined' string uses the format: L"label|expected_result|"
- */
-static int check_fmt(const wchar_t *combined, const wchar_t *fmt, ...) {
-	wchar_t buf[512];
-	const wchar_t *expected;
-	const wchar_t *label;
-	const wchar_t *last_sep;
-	const wchar_t *first_sep;
-	size_t expected_len;
-	int ret;
-	va_list args;
-
-	/* Find the separators to isolate the label and expected string slice */
-	last_sep = wcsrchr(combined, L'|');
-	if (!last_sep) {
-		wprintf(L"BUG: no '|' in test spec: %ls\n", combined);
-		tests_run++;
-		tests_failed++;
-		return 0;
-	}
-
-	first_sep = wcschr(combined, L'|');
-	if (first_sep == last_sep) {
-		label = L"(unnamed)";
-		expected = combined;
-		expected_len = (size_t) (last_sep - combined);
-	} else {
-		label = combined;
-		expected = first_sep + 1;
-		expected_len = (size_t) (last_sep - expected);
-	}
-
-	/* Execute the format engine via the internal wide vararg pipeline */
-	va_start(args, fmt);
-	ret = vswprintf(buf, sizeof(buf) / sizeof(wchar_t), fmt, args);
-	va_end(args);
-
-	tests_run++;
-	if (ret == (int) expected_len && memcmp(buf, expected, expected_len * sizeof(wchar_t)) == 0) {
-		wprintf(L"OK: %ls\n", label);
-		tests_passed++;
-		return 1;
-	} else {
-		tests_failed++;
-		wprintf(L"FAIL: %ls\n", label);
-		wprintf(L"      fmt:      \"%ls\"\n", fmt);
-		wprintf(L"      expected: \"");
-		/* Note: writing wide strings directly to stdout */
-		for (size_t i = 0; i < expected_len; i++) wprintf(L"%s\n", expected[i]);
-		wprintf(L"\" (len=%zu)\n", expected_len);
-		wprintf(L"      got:      \"");
-		for (int i = 0; i < ret; i++) wprintf(L"%s\n", buf[i]);
-		wprintf(L"\" (len=%d)\n", ret);
-		return 0;
-	}
-}
-
-#define TESTFMT(desc, fmt, ...) \
-    check_fmt(desc, fmt, ##__VA_ARGS__)
-
-int main(int argc, char **argv) {
-	double d;
-	(void) argc;
-	(void) argv;
-
-	wprintf(L"=== wfprintf/vswprintf 64-bit validation suite ===\n\n");
-
-	/* ==================================================================
-	 * SECTION 1: Zero and alternate-form tests
-	 * ================================================================== */
-	wprintf(L"--- Zero / alternate-form tests ---\n");
-	TESTFMT(L"zero fixed left pad|0                   |", L"%-20.0f", 0.0);
-	TESTFMT(L"zero sci left pad|0e+00               |", L"%-20.0e", 0.0);
-	TESTFMT(L"zero g left pad|0                   |", L"%-20.1g", 0.0);
-	TESTFMT(L"zero fixed alt right pad|                  0.|", L"%#20.0f", 0.0);
-	TESTFMT(L"zero sci alt right pad|              0.e+00|", L"%#20.0e", 0.0);
-	TESTFMT(L"zero g alt right pad|                 0.0|", L"%#20.1g", 0.0);
-	TESTFMT(L"negative zero|-0|", L"%.0f", -0.0);
-	TESTFMT(L"zero with plus|+0|", L"%+.0f", 0.0);
-	TESTFMT(L"zero with space| 0|", L"% .0f", 0.0);
-	TESTFMT(L"zero prec 5|0.00000|", L"%.5f", 0.0);
-	TESTFMT(L"simple 5.0|5|", L"%.0f", 5.0);
-	wprintf(L"\n");
-
-	/* ==================================================================
-	 * SECTION 2: Fixed-point (%f) decade walk
-	 * ================================================================== */
-	wprintf(L"--- Fixed-point %%f decade walk ---\n");
-	d = 1.2345678902468e-13L;
-	TESTFMT(L"f e-13|           0.0000000|", L"%20.7f", d);
-	d = 1.2345678902468e-12L;
-	TESTFMT(L"f e-12|           0.0000000|", L"%20.7f", d);
-	d = 1.2345678902468e-11L;
-	TESTFMT(L"f e-11|           0.0000000|", L"%20.7f", d);
-	d = 1.2345678902468e-10L;
-	TESTFMT(L"f e-10|           0.0000000|", L"%20.7f", d);
-	d = 1.2345678902468e-09L;
-	TESTFMT(L"f e-9 |           0.0000000|", L"%20.7f", d);
-	d = 1.2345678902468e-08L;
-	TESTFMT(L"f e-8 |           0.0000000|", L"%20.7f", d);
-	d = 1.2345678902468e-07L;
-	TESTFMT(L"f e-7 |           0.0000001|", L"%20.7f", d);
-	d = 1.2345678902468e-06L;
-	TESTFMT(L"f e-6 |           0.0000012|", L"%20.7f", d);
-	d = 1.2345678902468e-05L;
-	TESTFMT(L"f e-5 |           0.0000123|", L"%20.7f", d);
-	d = 1.2345678902468e-04L;
-	TESTFMT(L"f e-4 |           0.0001235|", L"%20.7f", d);
-	d = 1.2345678902468e-03L;
-	TESTFMT(L"f e-3 |           0.0012346|", L"%20.7f", d);
-	d = 1.2345678902468e-02L;
-	TESTFMT(L"f e-2 |           0.0123457|", L"%20.7f", d);
-	d = 1.2345678902468e-01L;
-	TESTFMT(L"f e-1 |           0.1234568|", L"%20.7f", d);
-	d = 1.2345678902468e+00L;
-	TESTFMT(L"f e0  |           1.2345679|", L"%20.7f", d);
-	d = 1.2345678902468e+01L;
-	TESTFMT(L"f e1  |          12.3456789|", L"%20.7f", d);
-	d = 1.2345678902468e+02L;
-	TESTFMT(L"f e2  |         123.4567890|", L"%20.7f", d);
-	d = 1.2345678902468e+03L;
-	TESTFMT(L"f e3  |        1234.5678902|", L"%20.7f", d);
-	d = 1.2345678902468e+04L;
-	TESTFMT(L"f e4  |       12345.6789025|", L"%20.7f", d);
-	d = 1.2345678902468e+05L;
-	TESTFMT(L"f e5  |      123456.7890247|", L"%20.7f", d);
-	d = 1.2345678902468e+06L;
-	TESTFMT(L"f e6  |     1234567.8902468|", L"%20.7f", d);
-	d = 1.2345678902468e+07L;
-	TESTFMT(L"f e7  |    12345678.9024680|", L"%20.7f", d);
-	d = 1.2345678902468e+08L;
-	TESTFMT(L"f e8  |   123456789.0246800|", L"%20.7f", d);
-	d = 1.2345678902468e+09L;
-	TESTFMT(L"f e9  |  1234567890.2467999|", L"%20.7f", d);
-	d = 1.2345678902468e+10L;
-	TESTFMT(L"f e10 | 12345678902.4680000|", L"%20.7f", d);
-	wprintf(L"\n");
-
-	/* ==================================================================
-	 * SECTION 3: General (%g) decade walk
-	 * ================================================================== */
-	wprintf(L"--- General %%g decade walk ---\n");
-	d = 1.2345678902468e-13L;
-	TESTFMT(L"g e-13|        1.234568e-13|", L"%20.7g", d);
-	d = 1.2345678902468e-12L;
-	TESTFMT(L"g e-12|        1.234568e-12|", L"%20.7g", d);
-	d = 1.2345678902468e-11L;
-	TESTFMT(L"g e-11|        1.234568e-11|", L"%20.7g", d);
-	d = 1.2345678902468e-10L;
-	TESTFMT(L"g e-10|        1.234568e-10|", L"%20.7g", d);
-	d = 1.2345678902468e-09L;
-	TESTFMT(L"g e-9 |        1.234568e-09|", L"%20.7g", d);
-	d = 1.2345678902468e-08L;
-	TESTFMT(L"g e-8 |        1.234568e-08|", L"%20.7g", d);
-	d = 1.2345678902468e-07L;
-	TESTFMT(L"g e-7 |        1.234568e-07|", L"%20.7g", d);
-	d = 1.2345678902468e-06L;
-	TESTFMT(L"g e-6 |        1.234568e-06|", L"%20.7g", d);
-	d = 1.2345678902468e-05L;
-	TESTFMT(L"g e-5 |        1.234568e-05|", L"%20.7g", d);
-	d = 1.2345678902468e-04L;
-	TESTFMT(L"g e-4 |        0.0001234568|", L"%20.7g", d);
-	d = 1.2345678902468e-03L;
-	TESTFMT(L"g e-3 |         0.001234568|", L"%20.7g", d);
-	d = 1.2345678902468e-02L;
-	TESTFMT(L"g e-2 |          0.01234568|", L"%20.7g", d);
-	d = 1.2345678902468e-01L;
-	TESTFMT(L"g e-1 |           0.1234568|", L"%20.7g", d);
-	d = 1.2345678902468e+00L;
-	TESTFMT(L"g e0  |            1.234568|", L"%20.7g", d);
-	d = 1.2345678902468e+01L;
-	TESTFMT(L"g e1  |            12.34568|", L"%20.7g", d);
-	d = 1.2345678902468e+02L;
-	TESTFMT(L"g e2  |            123.4568|", L"%20.7g", d);
-	d = 1.2345678902468e+03L;
-	TESTFMT(L"g e3  |            1234.568|", L"%20.7g", d);
-	d = 1.2345678902468e+04L;
-	TESTFMT(L"g e4  |            12345.68|", L"%20.7g", d);
-	d = 1.2345678902468e+05L;
-	TESTFMT(L"g e5  |            123456.8|", L"%20.7g", d);
-	d = 1.2345678902468e+06L;
-	TESTFMT(L"g e6  |             1234568|", L"%20.7g", d);
-	d = 1.2345678902468e+07L;
-	TESTFMT(L"g e7  |        1.234568e+07|", L"%20.7g", d);
-	d = 1.2345678902468e+08L;
-	TESTFMT(L"g e8  |        1.234568e+08|", L"%20.7g", d);
-	d = 1.2345678902468e+09L;
-	TESTFMT(L"g e9  |        1.234568e+09|", L"%20.7g", d);
-	d = 1.2345678902468e+10L;
-	TESTFMT(L"g e10 |        1.234568e+10|", L"%20.7g", d);
-	wprintf(L"\n");
-
-	/* ==================================================================
-	 * SECTION 4: Scientific (%e) decade walk
-	 * ================================================================== */
-	wprintf(L"--- Scientific %%e decade walk ---\n");
-	d = 1.2345678902468e-13L;
-	TESTFMT(L"e e-13|       1.2345679e-13|", L"%20.7e", d);
-	d = 1.2345678902468e-12L;
-	TESTFMT(L"e e-12|       1.2345679e-12|", L"%20.7e", d);
-	d = 1.2345678902468e-11L;
-	TESTFMT(L"e e-11|       1.2345679e-11|", L"%20.7e", d);
-	d = 1.2345678902468e-10L;
-	TESTFMT(L"e e-10|       1.2345679e-10|", L"%20.7e", d);
-	d = 1.2345678902468e-09L;
-	TESTFMT(L"e e-9 |       1.2345679e-09|", L"%20.7e", d);
-	d = 1.2345678902468e-08L;
-	TESTFMT(L"e e-8 |       1.2345679e-08|", L"%20.7e", d);
-	d = 1.2345678902468e-07L;
-	TESTFMT(L"e e-7 |       1.2345679e-07|", L"%20.7e", d);
-	d = 1.2345678902468e-06L;
-	TESTFMT(L"e e-6 |       1.2345679e-06|", L"%20.7e", d);
-	d = 1.2345678902468e-05L;
-	TESTFMT(L"e e-5 |       1.2345679e-05|", L"%20.7e", d);
-	d = 1.2345678902468e-04L;
-	TESTFMT(L"e e-4 |       1.2345679e-04|", L"%20.7e", d);
-	d = 1.2345678902468e-03L;
-	TESTFMT(L"e e-3 |       1.2345679e-03|", L"%20.7e", d);
-	d = 1.2345678902468e-02L;
-	TESTFMT(L"e e-2 |       1.2345679e-02|", L"%20.7e", d);
-	d = 1.2345678902468e-01L;
-	TESTFMT(L"e e-1 |       1.2345679e-01|", L"%20.7e", d);
-	d = 1.2345678902468e+00L;
-	TESTFMT(L"e e0  |       1.2345679e+00|", L"%20.7e", d);
-	d = 1.2345678902468e+01L;
-	TESTFMT(L"e e1  |       1.2345679e+01|", L"%20.7e", d);
-	d = 1.2345678902468e+02L;
-	TESTFMT(L"e e2  |       1.2345679e+02|", L"%20.7e", d);
-	d = 1.2345678902468e+03L;
-	TESTFMT(L"e e3  |       1.2345679e+03|", L"%20.7e", d);
-	d = 1.2345678902468e+04L;
-	TESTFMT(L"e e4  |       1.2345679e+04|", L"%20.7e", d);
-	d = 1.2345678902468e+05L;
-	TESTFMT(L"e e5  |       1.2345679e+05|", L"%20.7e", d);
-	d = 1.2345678902468e+06L;
-	TESTFMT(L"e e6  |       1.2345679e+06|", L"%20.7e", d);
-	d = 1.2345678902468e+07L;
-	TESTFMT(L"e e7  |       1.2345679e+07|", L"%20.7e", d);
-	d = 1.2345678902468e+08L;
-	TESTFMT(L"e e8  |       1.2345679e+08|", L"%20.7e", d);
-	d = 1.2345678902468e+09L;
-	TESTFMT(L"e e9  |       1.2345679e+09|", L"%20.7e", d);
-	d = 1.2345678902468e+10L;
-	TESTFMT(L"e e10 |       1.2345679e+10|", L"%20.7e", d);
-	wprintf(L"\n");
-
-	/* ==================================================================
-	 * SECTION 5: Precision boundaries (Wide strings)
-	 * ================================================================== */
-	wprintf(L"--- Precision and Edge-case tests ---\n");
-	TESTFMT(L"f round dp|0.0010000|", L"%.7f", 0.000999955);
-	TESTFMT(L"f round int|10.0000000|", L"%.7f", 9.999999955);
-	TESTFMT(L"f small half|0.0000001|", L"%.7f", 0.000000055);
-	TESTFMT(L"f big half|123456790.0000000|", L"%.7f", 123456789.999999955);
-	TESTFMT(L"f huge prec|1.2345678901234567|", L"%.16f", 1.23456789012345679);
-	TESTFMT(L"ld near1|1.00000000000000000000|", L"%.20Lf", 0.999999999999999999995L);
-	TESTFMT(L"ld near2|2.00000000000000000000|", L"%.20Lf", 1.999999999999999999995L);
-	TESTFMT(L"ld near05|0.50000000000000000000|", L"%.20Lf", 0.499999999999999999995L);
-	TESTFMT(L"ld dp|0.00100000000000000000|", L"%.20Lf", 0.00099999999999999999995L);
-	TESTFMT(L"ld int|10.00000000000000000000|", L"%.20Lf", 9.999999999999999999995L);
-	TESTFMT(L"ld small|0.00000000000000000010|", L"%.20Lf", 0.000000000000000000095L);
-	TESTFMT(L"ld big|123456790.0000000000|", L"%.10Lf", 123456789.99999999995L);
-	long double pi_ld = 3.141592653589793238L;
-	TESTFMT(L"ld high prec|3.141592653589793238|", L"%.18Lf", pi_ld);
-	wprintf(L"\n");
-	/* ==================================================================*
-	 * Summary Output*
-	 * ================================================================== */
-	wprintf(L"=== Test Summary ===\n");
-	wprintf(L"  Run:     %d\n", tests_run);
-	wprintf(L"  Passed:  %d\n", tests_passed);
-	wprintf(L"  Failed:  %d\n", tests_failed);
-	wprintf(L"\n");
-	return tests_failed > 0 ? 1 : 0;
-}
-#endif
-/* TESTME */
