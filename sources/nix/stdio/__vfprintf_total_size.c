@@ -11,6 +11,20 @@
  *      bytes 0-1  : sign | 15-bit biased exponent (bias 16383)
  *      bytes 2-3  : padding -- completely ignored by the FPU
  *      bytes 4-11 : 64-bit mantissa with EXPLICIT integer bit in b63
+ *
+ * --------------------------------------------------------------------------
+ *  Copyright and license
+ * --------------------------------------------------------------------------
+ *
+ *  This file is part of the libnix C library for AmigaOS / m68k.
+ *
+ *  libnix is public domain.  As far as the law allows, this software comes
+ *  as is, without any warranty or condition, and no contributor will be
+ *  liable to anyone for any damages related to this software or this
+ *  license, under any kind of legal claim.
+ *
+ *  Author: Stefan "Bebbo" Franke
+ *
  * ========================================================================== */
 #include <ctype.h>
 #include <stdlib.h>
@@ -20,578 +34,26 @@
 #include <math.h>
 #include <float.h>
 #include <stdio.h>
-/* ======================================================================
- * SECTION 1: bit-pattern views onto floating point values
- * ==================================================================== */
-/*
- * binary64 ("double"), big-endian memory image:
- *
- *   byte 0..3 : seeeeeee eee(more) ffffffff ffffffff
- *   byte 4..7 : remaining fraction bits
- */
-union _d_bits {
-	double d;
-	struct {
-		unsigned sign :1;
-		unsigned exp :11; /* biased by 1023                     */
-		unsigned frac0 :20; /* fraction bits 51..32               */
-		unsigned frac1 :32; /* fraction bits 31..0                */
-	} b;
-	unsigned u;
-};
-/*
- * m68k extended precision ("long double"):
- *
- *   bytes 0-1 : s eeeeeeeeeeeeeee      sign:1, exp:15 (bias 16383)
- *   bytes 2-3 : <pad>                  hardware never reads these bits
- *   bytes 4-11: 64-bit mantissa, integer bit explicitly stored in b63
- *
- * Special patterns:
- *   inf  : exp $7FFF, mant $8000000000000000
- *   NaN  : exp $7FFF, any other mantissa  (b62 = quiet flag)
- *   zero : exp 0, mant 0                  (both polarities possible)
- */
-typedef
-union _ld_bits {
-	long double ld;
-	struct {
-		unsigned sign :1;
-		unsigned exp :15;
-		unsigned pad :16; /* never interpret me   */
-		unsigned long long mant :64;
-	} b;
-	struct {
-		unsigned short exp;
-		unsigned short pad;
-		unsigned long middle;
-		unsigned long lower;
-	} l;
-	struct {
-		unsigned long upper;
-		unsigned long middle;
-		unsigned long lower;
-	} w;
-} LDL;
 
-/* Unpack a standard IEEE-754 64-bit double into the local 64-bit LDL view.
- *
- * This routine extracts the fields, handles denormals by shifting them into
- * a normal alignment, restores the implicit hidden bit (b52) for normal inputs,
- * and repositions the mantissa to match the native Motorola 80-bit hardware layout
- * where the integer bit is explicitly located at position b63 (bit 31 of middle).
- *
- * Assumptions:
- *   - The input double layout is big-endian.
- *   - The target r.l.bottom word is explicitly zeroed out for clean 64-bit operation.
- */
-static inline LDL __LDL_from_double(double d) {
-	union _d_bits u;
-	u.d = d;
-
-	LDL r;
-
-	/* Exact zero */
-	if (u.b.exp == 0 && u.b.frac0 == 0 && u.b.frac1 == 0) {
-		r.l.exp = 0;
-		r.l.pad = 0;
-		r.l.middle = 0;
-		r.l.lower = 0;
-		return r;
-	}
-
-	unsigned long long mant;
-	int exp;
-
-	if (u.b.exp == 0) {
-		/* Subnormal double: exponent = -1022, no hidden bit */
-		mant = ((unsigned long long) u.b.frac0 << 32) | u.b.frac1;
-		exp = -1022;
-
-		/* Normalize until bit 52 becomes 1 */
-		while ((mant >> 52) == 0) {
-			mant <<= 1;
-			exp--;
-		}
-	} else {
-		/* Normal double: add hidden bit */
-		mant = (1ULL << 52) | ((unsigned long long) u.b.frac0 << 32) | u.b.frac1;
-		exp = (int) u.b.exp - 1023;
-	}
-
-	/* Convert 53 bit mantissa into 64 bit Motorola format
-	 by shifting it so that bit 63 becomes the integer bit. */
-	unsigned long long mant64 = mant << (63 - 52);
-
-	r.l.exp = (unsigned short) (exp + 16383);
-	r.l.pad = 0;
-	r.l.middle = (unsigned long) (mant64 >> 32);
-	r.l.lower = (unsigned long) (mant64 & 0xFFFFFFFFUL);
-
-	return r;
-}
-
-/* Unpack an m68k Extended Precision 80-bit (packed into 96-bit) long double.
- *
- * This routine copies the explicit bits straight out of the long double representation.
- * For normal numbers, fields are mapped directly. For subnormal inputs, the mantissa
- * is shifted left until the explicit integer bit (b63) is restored, adjusting the
- * exponent accordingly.
- *
- * Assumptions:
- *   - Follows Motorola 80-bit hardware storage layout.
- *   - The target r.l.bottom is ignored/cleared to remain strictly inside 64-bit mantissa scope.
- */
-static inline LDL __LDL_from_long_double(long double ld)
-{
-    union _ld_bits u;
-    u.ld = ld;
-
-    LDL r;
-
-    unsigned short E = u.b.exp;
-    unsigned long long mant = u.b.mant;
-
-    /* Exact zero */
-    if (E == 0 && mant == 0) {
-        r.l.exp    = 0;
-        r.l.pad    = 0;
-        r.l.middle = 0;
-        r.l.lower  = 0;
-        return r;
-    }
-
-    /* Subnormal long double: normalize mantissa */
-    if (E == 0) {
-        int exp = -16382;
-
-        /* Shift until integer bit (bit 63) becomes 1 */
-        while ((mant & 0x8000000000000000ULL) == 0) {
-            mant <<= 1;
-            exp--;
-        }
-
-        r.l.exp    = (unsigned short)(exp + 16383);
-        r.l.pad    = 0;
-        r.l.middle = (unsigned long)(mant >> 32);
-        r.l.lower  = (unsigned long)(mant & 0xFFFFFFFFUL);
-        return r;
-    }
-
-    /* Normal long double: copy fields directly */
-    r.l.exp    = E;
-    r.l.pad    = 0;
-    r.l.middle = (unsigned long)(mant >> 32);
-    r.l.lower  = (unsigned long)(mant & 0xFFFFFFFFUL);
-
-    return r;
-}
-
-/* Multiply two LDL values (Motorola 80-bit extended format, signless).
- *
- * This routine performs a full 64x64 -> 128-bit mantissa multiply,
- * normalizes the product so that the integer bit is in position 63,
- * adds the unbiased exponents, and rounds the result to nearest-even.
- *
- * Assumptions:
- * - LDL contains only normal numbers or zero. Subnormals have already
- *   been converted by the LDL creation functions.
- * - Mantissas always contain the explicit integer bit (bit 63).
- * - No sign bit is stored or processed.
- * - Underflow cannot occur because all operations stay within the
- *   numeric range [0 .. 10). Therefore no exponent shifting or
- *   subnormal generation is required.
- * - Overflow into INF is not required because the caller guarantees
- *   that the exponent stays within the valid Motorola 80-bit range.
- *
- * Returns:
- *   A new LDL value representing (a * b) in Motorola 80-bit format.
- */
-static inline
-LDL __LDL_mul(LDL a, LDL b)
-{
-    /* Zero */
-    if (a.l.middle == 0)
-    	return a;
-
-    if (b.l.middle == 0)
-    	return b;
-
-#ifdef __mc68881__
-    LDL r;
-    r.ld = a.ld * b.ld;
-    return r;
-#else
-    int exp_a = a.l.exp - 16383;
-    int exp_b = b.l.exp - 16383;
-
-    /* Add exponents */
-    int exp_r = exp_a + exp_b;
-
-    unsigned long long hi, lo;
-    unsigned long long mant_r;
-    unsigned int guard = 0, sticky = 0;
-
-    /* 64x64 -> 128-bit multiply */
-    unsigned int a_lo = a.l.lower;
-    unsigned int a_hi = a.l.middle;
-    unsigned int b_lo = b.l.lower;
-    unsigned int b_hi = b.l.middle;
-
-    unsigned long long p0 = (unsigned long long)a_lo * b_lo;
-    unsigned long long p1 = (unsigned long long)a_lo * b_hi;
-    unsigned long long p2 = (unsigned long long)a_hi * b_lo;
-    unsigned long long p3 = (unsigned long long)a_hi * b_hi;
-
-    unsigned long long mid =
-        (p0 >> 32) +
-        (p1 & 0xFFFFFFFFULL) +
-        (p2 & 0xFFFFFFFFULL);
-
-    hi = p3 + (p1 >> 32) + (p2 >> 32) + (mid >> 32);
-    lo = (mid << 32) | (p0 & 0xFFFFFFFFULL);
-
-    /* Normalize product so that mant_r has integer bit at 63 */
-    if (hi & 0x8000000000000000ULL) {
-        mant_r = hi;
-        guard  = (unsigned int)(lo >> 63);
-        sticky = (lo & 0x7FFFFFFFFFFFFFFFULL) != 0;
-        exp_r++;
-    } else {
-        mant_r = (hi << 1) | (lo >> 63);
-        {
-            unsigned long long lo_shifted = lo << 1;
-            guard  = (unsigned int)(lo_shifted >> 63);
-            sticky = (lo_shifted & 0x7FFFFFFFFFFFFFFFULL) != 0;
-        }
-    }
-
-    /* Round to nearest even */
-    if (guard && (sticky || (mant_r & 1ULL))) {
-        mant_r++;
-        if (mant_r == 0) {
-            mant_r = 0x8000000000000000ULL;
-            exp_r++;
-        }
-    }
-
-    LDL r;
-    r.l.exp    = exp_r + 16383;
-    r.l.pad    = 0;
-    r.l.middle = (mant_r >> 32);
-    r.l.lower  = mant_r;
-
-    return r;
-#endif
-}
-
-/* Multiply an LDL value by 10.0 (Motorola 80-bit extended format, signless).
- *
- * This routine implements a fast multiply-by-10 using the identity:
- *     10 = 8 + 2 = 8 + (1/4 * 8)
- * which allows the mantissa to be scaled using only shifts and adds.
- *
- * Steps:
- *   1. Check for zero (mantissa == 0).
- *   2. Compute x/4 by performing a 64-bit right shift by 2.
- *   3. Add x + x/4 using 64-bit mantissa arithmetic.
- *   4. Detect 64-bit overflow of the mantissa and renormalize by
- *      shifting right one bit and incrementing the exponent.
- *   5. Multiply the result by 8 by adding 3 to the exponent.
- *
- * Assumptions:
- *   - LDL contains only normal numbers or zero. Subnormals have already
- *     been converted by the LDL creation functions.
- *   - Mantissas always contain the explicit integer bit (bit 63).
- *   - No sign bit is stored or processed.
- *   - Underflow cannot occur because all operations stay within the
- *     numeric range [0 .. 10).
- *   - Overflow into INF is not required because the caller guarantees
- *     that the exponent stays within the valid Motorola 80-bit range.
- *
- * Returns:
- *   A new LDL value representing (x * 10.0) in Motorola 80-bit format.
- */
-static inline LDL __LDL_mul_10(LDL x)
-{
-
-    /* Zero check */
-    if (x.l.middle == 0 && x.l.lower == 0)
-        return x;
-
-    LDL r = x;
-
-    unsigned long hi = x.l.middle;
-    unsigned long lo = x.l.lower;
-
-    /* 64-bit right shift by 2 (x / 4) */
-    unsigned long hi2 = hi >> 2;
-    unsigned long lo2 = (lo >> 2) | (hi << 30);
-
-    /* 64-bit addition: (x + x/4) */
-    unsigned long res_lo = lo + lo2;
-    unsigned long carry  = (res_lo < lo);
-    unsigned long res_hi = hi + hi2 + carry;
-
-    /* Check 64-bit overflow (bit 63 set) */
-    if (res_hi < hi || (res_hi == hi && hi2 > 0)) {
-        /* Shift right 1 bit to re-normalize */
-        res_lo = (res_lo >> 1) | (res_hi << 31);
-        res_hi = (res_hi >> 1) | 0x80000000;
-        r.l.exp += 1;
-    }
-
-    /* Scale by 8 (add 3 to exponent) */
-    r.l.exp += 3;
-
-    r.l.middle = res_hi;
-    r.l.lower  = res_lo;
-
-    return r;
-}
-
-/* Fast in-place multiply-by-10 and base-10 digit extractor (64-bit clean).
- *
- * This routine implements the binary shift-and-add identity: x * 10 = (x + x/4) * 8.
- * It operates strictly on the 64-bit mantissa (middle and lower), tracking the dynamic
- * exponent layout after the scaling iteration.
- *
- * Steps:
- *   1. Scale x by 1.25 via x + (x >> 2).
- *   2. Multiply by 8 via an effective 3-bit left shift across the 64-bit collective register.
- *   3. Extract the accumulated integer digit shifted above the virtual decimal point.
- *   4. Mask out the extracted integer slice, leaving a pure fractional remainder.
- *   5. Renormalize the fractional mantissa back to bit 31 of middle using fast __builtin_clz
- *      and adjust the raw exponent dynamically to guarantee tracking precision.
- *
- * Returns:
- *   Extracted single-digit integer value tightly bound within [0..9].
- */
-static inline int __LDL_mul_10_extract(LDL *x) {
-    int exp_raw = x->l.exp;
-    unsigned long hi = x->l.middle;
-    unsigned long lo = x->l.lower;
-
-    int exp = exp_raw - 16383;
-    unsigned long z = 0;
-
-    if (exp >= 0) {
-        /* 1. Extract the leading digit */
-        z = hi >> (31 - exp);
-
-        /* 2. Subtract the digit from the upper mantissa */
-        hi -= (z << (31 - exp));
-
-        /* 3. In-place normalization */
-        if (!hi) {
-            if (!lo) {
-                /* Exact integer without a fraction -> value becomes clean zero */
-                x->l.exp = 0;
-                /* Skip mul_10 entirely, fields are already zero */
-                return (int)z;
-            }
-
-            /* 'middle' is completely empty, pull remaining bits up from 'lower' */
-            int n = __builtin_clz(lo);
-            hi = lo << n;
-            exp_raw = exp + 16383 - 32 - n;
-        } else {
-            /* 'middle' still has bits but gained leading zeros from subtraction */
-            int n = __builtin_clz(hi);
-
-            /* Optimization: combine shifting logic using 64-bit casting
-               to let GCC emit optimized native 64-bit barrel shifts */
-            unsigned long long combined = ((unsigned long long)hi << 32) | lo;
-            combined <<= n;
-
-            hi = (unsigned long)(combined >> 32);
-            lo = (unsigned long)combined;
-            exp_raw = exp + 16383 - n;
-        }
-    }
-
-    /* 4. Fast inlined multiply-by-10: x * 10 = (x + x/4) * 8 */
-
-    /* Compute x / 4 via 64-bit right shift by 2 */
-    unsigned long hi2 = hi >> 2;
-    unsigned long lo2 = (lo >> 2) | (hi << 30);
-
-    /* 64-bit addition: x + x/4 */
-    unsigned long res_lo = lo + lo2;
-    unsigned long carry  = (res_lo < lo);
-    unsigned long res_hi = hi + hi2 + carry;
-
-    /* Handle 64-bit overflow (carry-out out of bit 63) */
-    if (res_hi < hi || (res_hi == hi && hi2 > 0)) {
-        /* Shift right by 1 bit to re-normalize */
-        res_lo = (res_lo >> 1) | (res_hi << 31);
-        res_hi = (res_hi >> 1) | 0x80000000UL;
-        exp_raw += 1;
-    }
-
-    /* Scale by 8 (+3 to exponent) and commit final structural updates */
-    x->l.exp    = (unsigned short)(exp_raw + 3);
-    x->l.middle = res_hi;
-    x->l.lower  = res_lo;
-
-    return (int)z;
-}
-
-
-/* Compare an LDL value against a hardcoded Motorola 80-bit constant.
- *
- * The comparison is performed lexicographically:
- *   1. Compare exponent.
- *   2. If equal, compare upper 32 mantissa bits.
- *   3. If equal, compare lower 32 mantissa bits.
- *
- * Assumptions:
- *   - LDL is signless and already normalized.
- *   - No NaN, INF, or subnormal handling is required.
- *   - Constants are provided in raw Motorola 80-bit format.
- *
- * Returns:
- *   -1  if a < constant
- *    0  if a == constant
- *    1  if a > constant
- */
-static inline int __LDL_cmp_const(const LDL *a,
-                                  unsigned short bexp,
-                                  unsigned long  bmid,
-                                  unsigned long  blow)
-{
-    /* Compare exponent */
-    if (a->l.exp != bexp)
-        return (a->l.exp < bexp) ? -1 : 1;
-
-    /* Compare middle mantissa */
-    if (a->l.middle != bmid)
-        return (a->l.middle < bmid) ? -1 : 1;
-
-    /* Compare lower mantissa */
-    if (a->l.lower != blow)
-        return (a->l.lower < blow) ? -1 : 1;
-
-    return 0;
-}
-
-/* Lexicographically check if an LDL value matches or exceeds the constant 10.0.
- *
- * Constant representation:
- *   - Biased Exponent: 16386 (0x4002) -> 2^3
- *   - 64-bit Mantissa: 1.25 (0xA0000000 00000000)
- *   - Combined Value:  1.25 * 2^3 = 10.0
- *
- * Returns:
- *   -1 if a < 10.0, 0 if a == 10.0, 1 if a > 10.0
- */
-static inline int __LDL_cmp_10(const LDL *a)
-{
-    return __LDL_cmp_const(a, 0x4000, 0xA0000000UL, 0x00000000UL);
-}
-
-/* Lexicographically check if an LDL value matches or exceeds the constant 5.0.
- *
- * THE ROUNDING HACK:
- * Mathematically, 5.0 is represented as Exp 0x4001, Mantissa 0xA0000000 00000000.
- * However, cumulative multiplication and scaling steps can leave trailing fractional
- * remainders marginally under-represented in binary format (e.g., 4.99999999999...).
- *
- * To prevent exact half-way tie-breaks from incorrectly rounding down, the comparison
- * threshold is dropped by a sub-LSB epsilon directly inside the hardware bit pattern.
- * Using 0x9FFFFFFF 0xFFFF0000 safely absorbs binary truncation drift and guarantees stable
- * Round-to-Nearest-Even execution without breaking integer boundary constraints.
- *
- * Returns:
- *   -1 if a < 5.0 (adjusted), 0 if a == 5.0 (adjusted), 1 if a > 5.0 (adjusted)
- */
-static inline int __LDL_cmp_5(const LDL *a)
-{
-    /* Threshold adjusted from 0xA0000000 0x00000000 to absorb truncation error */
-    return __LDL_cmp_const(a, 0x4001, 0x9fffffffUL, 0xffff0000UL);
-}
-
-
-/* Lexicographically check if an LDL value matches or exceeds the constant 1.0.
- *
- * Constant representation:
- *   - Biased Exponent: 16383 (0x3FFF) -> 2^0
- *   - 64-bit Mantissa: 1.00 (0x80000000 00000000)
- *   - Combined Value:  1.00 * 2^0 = 1.0
- *
- * Returns:
- *   -1 if a < 1.0, 0 if a == 1.0, 1 if a > 1.0
- */
-static inline int __LDL_cmp_1(const LDL *a)
-{
-    return __LDL_cmp_const(a, 0x3FFF, 0x80000000UL, 0x00000000UL);
-}
-
-/* Compile-time sanity checks for the assumed layouts (GCC).            */
-#if defined(__GNUC__)
-typedef char __chk_d_sz[(sizeof(double) == 8) ? 1 : -1];
-typedef char __chk_ld_sz[(sizeof(long double) >= 10) ? 1 : -1];
-#endif
-#define _D_EXP_ALLONES   0x7FF
-#define _LD_EXP_ALLONES  0x7FFF
-#define _LD_INTBIT       0x8000000000000000ULL
-/* ======================================================================
- * SECTION 2: software-only FP classification
- *
- * Pure integer bit tests: no FPU compare instructions, no libm calls.
- * Two flavours each: _xxx_(union) for hot paths that already hold a
- * bits-view, and <name>_<w>(value) convenience wrappers.
- * ==================================================================== */
-/* ----------------------- double ----------------------------------- */
-static inline int _d_signbit(union _d_bits u) {
-	return u.b.sign;
-}
-static inline int _d_isnan(union _d_bits u) {
-	return u.b.exp == _D_EXP_ALLONES && (u.b.frac0 | u.b.frac1) != 0;
-}
-static inline int _d_isinf(union _d_bits u) {
-	return u.b.exp == _D_EXP_ALLONES && u.b.frac0 == 0 && u.b.frac1 == 0;
-}
-/*
- * True only for exact zero (exp==0 AND fraction==0).
- * Denormals (exp==0, fraction!=0) intentionally report FALSE --
- * unlike ld == 0.0 they are genuinely nonzero values.
- */
-static inline int _d_iszero(union _d_bits u) {
-	return u.b.exp == 0 && u.b.frac0 == 0 && u.b.frac1 == 0;
-}
-/* ----------------------- long double ------------------------------ */
-static inline int _ld_signbit(union _ld_bits u) {
-	return u.b.sign;
-}
-/* With an explicit integer bit, infinity is the ONLY $7FFF/$8000...000
- * pattern; every other all-exponent value is a NaN.                     */
-static inline int _ld_isnan(union _ld_bits u) {
-	return u.b.exp == _LD_EXP_ALLONES && u.b.mant != _LD_INTBIT;
-}
-static inline int _ld_isinf(union _ld_bits u) {
-	return u.b.exp == _LD_EXP_ALLONES && u.b.mant == _LD_INTBIT;
-}
-static inline int _ld_iszero(union _ld_bits u) {
-	return u.b.exp == 0 && u.b.mant == 0;
-}
-
-/* Full long double precision math */
-typedef LDL work_float_t;
-static const LDL WORK_0_1 = {
-    .l = { 16383 + (-4), 0, 0xCCCCCCCCUL, 0xCCCCCCCCUL }
-};
+#include "ami_printf_math.h"
 
 /* ======================================================================
- * SECTION 3: plumbing, flags, constants
+ * SECTION: plumbing, flags, constants
  * ==================================================================== */
 
 #ifdef FULL_SPECIFIERS
 extern unsigned char *__decimalpoint;
 #endif
 extern int __vfprintf_total_size(FILE *stream, const char *fmt, va_list args);
+
 /* Output one character and handle stream errors. */
+/* A string stream (the snprintf family) that is full keeps counting: C99 says
+ * the return value is the length the output would have had, and callers size a
+ * buffer with vsnprintf(NULL, 0, ...) on the strength of that. putc on a full
+ * __SSTR stream returns EOF from __swbuf without touching the buffer, so only
+ * the count goes on. EOF from a real stream is still an error. */
 #define OUT(c)  do { \
-    if (putc((c), stream) == EOF) { \
+    if (putc((c), stream) == EOF && !(stream->_flags & __SSTR)) { \
         __STDIO_UNLOCK(stream); \
         return -1; \
     } \
@@ -599,6 +61,7 @@ extern int __vfprintf_total_size(FILE *stream, const char *fmt, va_list args);
 } while(0)
 #define TOUT(c) *outp++ = (c)
 #define EOUT(c) *oute++ = (c)
+
 /* Worst-case byte requirements per numeric family -> shared scratch buf */
 #define MINFLOATSIZE   (DBL_DIG + 5)
 #define MININTSIZE     (sizeof(unsigned long long) * CHAR_BIT / 3 + 1)
@@ -606,6 +69,21 @@ extern int __vfprintf_total_size(FILE *stream, const char *fmt, va_list args);
 #define REQUIREDBUFFER ((MININTSIZE > MINPOINTSIZE                                        \
                             ? (MININTSIZE > MINFLOATSIZE ? MININTSIZE : MINFLOATSIZE)    \
                             : (MINPOINTSIZE > MINFLOATSIZE ? MINPOINTSIZE : MINFLOATSIZE))+8)
+
+/*
+ * Float-path buffer bounds.  After the piece-list rework, outbuffer only ever
+ * holds bounded content (sign, "0x", mantissa hex, digits, '.', exponent),
+ * and buffer[] holds only the digit string.  Nothing that grows with width or
+ * precision is buffered any more, so these can be small.
+ */
+#define FLOAT_DIGBUF   (LD_DIGS + 6)                /* digit buffer for %f/%e/%g    */
+#define FLOAT_OUTBUF   (FLOAT_DIGBUF + 24)          /* + sign, "0x", dot, exponent  */
+#if FLOAT_OUTBUF < 64
+# define FLOAT_OUTBUF_MIN 64
+#else
+# define FLOAT_OUTBUF_MIN FLOAT_OUTBUF
+#endif
+
 /* Flag bits; index in flagc[] == bit number.                           */
 #define ALTERNATEFLAG  1        /* '#'   */
 #define ZEROPADFLAG    2        /* '0'   */
@@ -616,133 +94,18 @@ extern int __vfprintf_total_size(FILE *stream, const char *fmt, va_list args);
 static const char flagc[] = { '#', '0', '-', ' ', '+' };
 extern unsigned __ulldivus(unsigned long long *llp, unsigned short n);
 
-/* Compute 10^n as an LDL value using precomputed 10^(2^bit) tables.
- *
- * This routine builds 10^n by decomposing |n| into its binary
- * representation and multiplying an LDL accumulator by 10^(2^bit)
- * for each set bit. Positive n uses the pow10_pos_table (10^(+2^bit)),
- * negative n uses the pow10_neg_table (10^(-2^bit)).
- *
- * Steps:
- *   1. Handle n == 0 by returning exactly 1.0 in LDL format.
- *   2. Initialize result to 1.0 (LDL with biased exponent 0x3FFF and
- *      mantissa 1.0).
- *   3. Take exp = |n| and iterate over its bits:
- *        - For each bit set, multiply result by the corresponding
- *          entry in pow10_pos_table or pow10_neg_table.
- *        - Shift exp right and increment bit index.
- *   4. Return the accumulated LDL value.
- *
- * Assumptions:
- *   - __LDL_mul implements normalized Motorola 80-bit multiplication
- *     without subnormal handling.
- *   - pow10_pos_table and pow10_neg_table contain correctly biased
- *     exponents (16383 + binexp) and normalized mantissas.
- *
- * Returns:
- *   LDL value representing 10^n in Motorola 80-bit extended format.
- */
-static LDL
-pow10_ld(LDL result, int n) {
-	/* 10^(2^bit) */
-	static const LDL pow10_pos_table[] = {
-	    /* 10^1 */
-	    { .l = { 16383 + 3,     0, 0xA0000000UL, 0x00000000UL } },
-	    /* 10^2 */
-	    { .l = { 16383 + 6,     0, 0xC8000000UL, 0x00000000UL } },
-	    /* 10^4 */
-	    { .l = { 16383 + 13,    0, 0x9C400000UL, 0x00000000UL } },
-	    /* 10^8 */
-	    { .l = { 16383 + 26,    0, 0xBEBC2000UL, 0x00000000UL } },
-	    /* 10^16 */
-	    { .l = { 16383 + 53,    0, 0x8E1BC9BFUL, 0x04000000UL } },
-	    /* 10^32 */
-	    { .l = { 16383 + 106,   0, 0x9DC5ADA8UL, 0x2B70B59DUL } },
-	    /* 10^64 */
-	    { .l = { 16383 + 212,   0, 0xC2781F49UL, 0xFFCFA6D5UL } },
-	    /* 10^128 */
-	    { .l = { 16383 + 425,   0, 0x93BA47C9UL, 0x80E98CDFUL } },
-	    /* 10^256 */
-	    { .l = { 16383 + 850,   0, 0xAA7EEBFBUL, 0x9DF9DE8DUL } },
-	    /* 10^512 */
-	    { .l = { 16383 + 1700,  0, 0xE319A0AEUL, 0xA60E91C6UL } },
-	    /* 10^1024 */
-	    { .l = { 16383 + 3401,  0, 0xC9767586UL, 0x81750C17UL } },
-	    /* 10^2048 */
-	    { .l = { 16383 + 6803,  0, 0x9E8B3B5DUL, 0xC53D5DE4UL } },
-	    /* 10^4096 */
-	    { .l = { 16383 + 13606, 0, 0xC4605202UL, 0x8A20979AUL } }
-	};
+/* A piece is a run of one repeated char, anchored at a byte offset in
+ * outbuffer.  Pieces are emitted strictly left to right, interleaved with
+ * outbuffer content.  The array is kept sorted by startPos: the front pad
+ * (if reserved) sits at index 0, value pieces follow in increasing order,
+ * and a left-align tail pad (if any) is appended last. */
+#define MAX_PIECES 8
+struct piece {
+    int  startPos;
+    int  count;
+    char c;
+};
 
-	/* 1 / 10^(2^bit) */
-	static const LDL pow10_neg_table[] = {
-	    /* 10^-1 */
-	    { .l = { 16383 + (-4),     0, 0xCCCCCCCCUL, 0xCCCCCCCDUL } },
-	    /* 10^-2 */
-	    { .l = { 16383 + (-7),     0, 0xA3D70A3DUL, 0x70A3D70BUL } },
-	    /* 10^-4 */
-	    { .l = { 16383 + (-14),    0, 0xD1B71758UL, 0xE219652CUL } },
-	    /* 10^-8 */
-	    { .l = { 16383 + (-27),    0, 0xABCC7711UL, 0x8461CEFDUL } },
-	    /* 10^-16 */
-	    { .l = { 16383 + (-54),    0, 0xE69594BEUL, 0xC44DE15CUL } },
-	    /* 10^-32 */
-	    { .l = { 16383 + (-107),   0, 0xCFB11EADUL, 0x453994BBUL } },
-	    /* 10^-64 */
-	    { .l = { 16383 + (-213),   0, 0xA87FEA27UL, 0xA539E9A6UL } },
-	    /* 10^-128 */
-	    { .l = { 16383 + (-426),   0, 0xDDD0467CUL, 0x64BCE4A1UL } },
-	    /* 10^-256 */
-	    { .l = { 16383 + (-851),   0, 0xC0314325UL, 0x637A193AUL } },
-	    /* 10^-512 */
-	    { .l = { 16383 + (-1701),  0, 0x9049EE32UL, 0xDB23D21DUL } },
-	    /* 10^-1024 */
-	    { .l = { 16383 + (-3402),  0, 0xA2A682A5UL, 0xDA57C0BFUL } },
-	    /* 10^-2048 */
-	    { .l = { 16383 + (-6804),  0, 0xCEAE534FUL, 0x34362DE5UL } },
-	    /* 10^-4096 */
-	    { .l = { 16383 + (-13607), 0, 0xA6DD04C8UL, 0xD2CE9FDFUL } }
-	};
-
-
-    const LDL *table;
-    unsigned int exp;
-    unsigned int bit;
-
-    if (n == 0)
-        return result;
-
-	table = n < 0 ? pow10_neg_table : pow10_pos_table;
-    exp = (unsigned int)(n < 0 ? -n : n);
-
-    for (bit = 0; exp; ++bit, exp >>= 1) {
-        if (exp & 1) {
-            result = __LDL_mul(result, table[bit]);
-        }
-    }
-
-    return result;
-}
-
-/*
- * How many significant decimal digits each source format genuinely
- * carries.  Digit extraction goes this deep (plus one guard digit) so
- * that rounding at the requested precision is honest rather than limited
- * by an early cutoff.
- */
-#ifdef DBL_DECIMAL_DIG
-# define D_DIGS  DBL_DECIMAL_DIG        /* typically 17                    */
-#else
-# define D_DIGS  17
-#endif
-#ifdef LDBL_DECIMAL_DIG
-# define LD_DIGS LDBL_DECIMAL_DIG       /* 21 for 64-bit significand       */
-#else
-# define LD_DIGS 21                     /* m68k extended fallback          */
-#endif
-
-
-#define LOG10_2_Q32  1292913986U
 /* ======================================================================
  *  __vfprintf_total_size -- the formatter core.
  *  Returns the number of characters written, or -1 on stream error.
@@ -776,10 +139,8 @@ int __vfprintf_total_size(FILE *stream, const char *format, va_list args) {
 			char subtype = 'i';
 			char buffer1[4]; /* sign / radix prefix slot */
 			char buffer[REQUIREDBUFFER + 8];
-			char outbuffer[REQUIREDBUFFER + 128]; /* Buffer used for output and left padding. */
+			char outbuffer[FLOAT_OUTBUF_MIN]; /* Float-path buffered output. */
 			char *outp = outbuffer;
-			char outexponent[8]; /* Separate buffer for the exponent, such as e+1234. */
-			char *oute = 0; /* Set only when an exponent is emitted. */
 			char *buffer2 = buffer;
 			size_t size1 = 0, size2 = 0;
 			const char *ptr = format + 1;
@@ -989,7 +350,7 @@ int __vfprintf_total_size(FILE *stream, const char *format, va_list args) {
 				 *   S3  g/G style arbitration (fixed vs scientific)
 				 *   S4  digit extraction + round-half-up
 				 *   S5  trailing-zero trimming, width bookkeeping
-				 *   S6  padded emission
+				 *   S6  padded emission (piece-list interleave)
 				 *======================================================== */
 			case 'a':
 			case 'A':
@@ -1086,6 +447,25 @@ int __vfprintf_total_size(FILE *stream, const char *format, va_list args) {
 					short killZero = 0;
 					int digits_to_compute = MEANINGFUL_DIGITS;
 					short isg = 0;
+					/* Piece list for this conversion.  Index 0 may be the
+					 * reserved front pad (right-align only); value pieces
+					 * follow in increasing startPos order; a left-align
+					 * tail pad is appended at step 9. */
+					struct piece pieces[MAX_PIECES];
+					int npieces = 0;
+#define PUSH(at, cnt, ch) do { \
+    if ((cnt) > 0 && npieces < MAX_PIECES) \
+        pieces[npieces++] = (struct piece){ .startPos = (at), .count = (cnt), .c = (ch) }; \
+} while (0)
+
+					/* 0. Reserve the front pad slot (always index 0) when
+					 *    the pad goes before the value.  Its count is set
+					 *    at step 9. */
+					if (width > 0 && !(flags & LALIGNFLAG)) {
+						int pad_at = (pad == '0' && sign != 0) ? 1 : 0;
+						pieces[npieces++] = (struct piece){ .startPos = pad_at, .count = 0, .c = pad };
+					}
+
 					if (preci == 0x7fff) {
 						if (type == 'f' || type == 'F' || type == 'e' || type == 'E' || type == 'g' || type == 'G') {
 							/* ISO C standard requires a default precision of 6 for floating-point formats */
@@ -1154,20 +534,9 @@ int __vfprintf_total_size(FILE *stream, const char *format, va_list args) {
 							buffer[0] = '0';
 							startPos = pos = 1;
 
-#if 0
-							/* Compute digits using ld_val */
-							for (; pos <= digits_to_compute && pos < sizeof(buffer); ++pos) {
-								unsigned int z = __LDL_fix_uint(ld_val);
-								if (z < 0) z = 0;
-								else if (z > 9) z = 9;
-								buffer[pos] = '0' + z;
-								ld_val = __LDL_mul_10(__LDL_sub_uint(ld_val, z));
-							}
-#else
-							for (; pos <= digits_to_compute && pos < sizeof(buffer); ++pos) {
+							for (; pos <= digits_to_compute && pos < FLOAT_DIGBUF; ++pos) {
 								buffer[pos] = '0' + __LDL_mul_10_extract(&ld_val);
 							}
-#endif
 							/* Perform rounding */
 							if (__LDL_cmp_5(&ld_val) >= 0) {
 								int tpos = pos - 1;
@@ -1203,7 +572,6 @@ int __vfprintf_total_size(FILE *stream, const char *format, va_list args) {
 								killZero = 1;
 							TOUT('0');
 							TOUT(type + ('X' - 'A'));
-							width -= 2;
 							buffer[0] = '0';
 							startPos = 0;
 							pos = 1;
@@ -1220,9 +588,6 @@ int __vfprintf_total_size(FILE *stream, const char *format, va_list args) {
 									buffer[0] = '1';
 								}
 								/* Extract mantissa for long double */
-								unsigned x = (unsigned) (lu.b.mant >> 32);
-								unsigned y = (unsigned) (lu.b.mant & 0xFFFFFFFFULL);
-								/* Full 64-bit mantissa including explicit integer bit */
 								unsigned long long mant = lu.b.mant;
 								/* Drop the explicit integer bit (bit 63) */
 								mant &= 0x7FFFFFFFFFFFFFFFULL;
@@ -1255,45 +620,57 @@ int __vfprintf_total_size(FILE *stream, const char *format, va_list args) {
 					if (preci > 0x3fff)
 						preci = 1;
 					/* -------- S6: Output generation -------- */
+					/*
+					 * Build a tiny piece list of unbounded runs (zeros / pad),
+					 * anchored at outbuffer offsets, then emit outbuffer
+					 * interleaved with those runs.  Only bounded content
+					 * (sign, "0x", digits, '.', exponent) ever goes into
+					 * outbuffer, so any width or precision is safe.
+					 */
+					/* 1. Sign (bounded; stays in outbuffer[0]). */
 					if (sign != 0) {
 						TOUT(sign);
-						--width;
 					}
 					if (infnan) {
+						/* Specials are tiny; just emit inline.  The 0 flag
+						 * is ignored for inf/NaN, so the front pad (if any)
+						 * uses spaces. */
 						TOUT(infnan[0]);
 						TOUT(infnan[1]);
 						TOUT(infnan[2]);
-						width -= 3;
-						pad = ' ';
+						if (width > 0 && !(flags & LALIGNFLAG))
+							pieces[0].c = ' ';
 					} else {
-						int fractional_output = 0;
-						/* 1. Print digits before the decimal point */
+						/* 2. Integer part. */
 						if (exponent < 0 && (type == 'f' || type == 'F')) {
 							/* For small fixed-point numbers (e.g., 0.00123), print the mandatory leading '0' */
 							TOUT('0');
-							--width;
 						} else {
 							if (isg)
 								preci -= leading;
 							int rpad = exponent - leading;
+							int int_start = startPos;
 							while (startPos < pos && leading-- > 0) {
-								TOUT(buffer[startPos++]);
-								--width;
 								if (isg && !(flags & ALTERNATEFLAG)) {
 									--preci;
 									if (preci > 0x3fff)
 										preci = 0;
 								}
+								++startPos;
 							}
-							while (leading-- > 0)
-								TOUT('0');
+							/* Copy the integer digit span into outbuffer. */
+							for (int k = int_start; k < startPos; ++k)
+								TOUT(buffer[k]);
+							/* Remaining integer zeros go into a piece. */
+							if (leading > 0)
+								PUSH((int)(outp - outbuffer), leading, '0');
 							if (type == 'f' || type == 'F') {
-								while (rpad-- > 0)
-									TOUT('0');
+								if (rpad > 0)
+									PUSH((int)(outp - outbuffer), rpad, '0');
 							}
 						}
+						/* 3. Trim trailing zeros in the digit buffer (g/G). */
 						if (killZero) {
-							/* Remove trailing zeros from the complete digit buffer. */
 							int stop = pos - 1;
 							while (stop >= startPos && buffer[stop] == '0') {
 								stop--;
@@ -1303,113 +680,131 @@ int __vfprintf_total_size(FILE *stream, const char *format, va_list args) {
 								preci = 0;
 							pos = stop + 1;
 						}
-						/* 2. Print the decimal point if required */
+						/* 4. Decimal point. */
 						if (preci || (flags & ALTERNATEFLAG) != 0) {
 							TOUT((__decimalpoint && __decimalpoint[0]) ? __decimalpoint[0] : '.');
-							--width;
 						}
 						/* limit output */
 						if (pos > startPos + preci) {
 							pos = startPos + preci;
 						}
-						/* 3. Print leading fractional zeros for small %f numbers */
+						/* 5. Leading fractional zeros for small %f numbers. */
 						if (exponent < 0 && (type == 'f' || type == 'F')) {
 							int fractional_zeros = -exponent - 1; /* e.g., exp = -3 -> 2 zeros */
-							while (fractional_zeros-- > 0 && preci > 0) {
-								TOUT('0');
-								--width;
+							if (fractional_zeros > preci)
+								fractional_zeros = preci;
+							if (fractional_zeros > 0) {
+								PUSH((int)(outp - outbuffer), fractional_zeros, '0');
 								if (!isg)
-									--preci;
-								fractional_output++;
+									preci -= fractional_zeros;
 							}
 						}
-						/* 4. Print the remaining significant digits from the buffer */
-						while (preci > 0 && startPos < pos) {
-							TOUT(buffer[startPos++]);
-							--width;
-							--preci;
+						/* 6. Significant fractional digits from the buffer. */
+						{
+							int nfrac = pos - startPos;
+							for (int k = 0; k < nfrac; ++k)
+								TOUT(buffer[startPos + k]);
+							preci -= nfrac;
 						}
-						/* 5. Pad trailing zeros to satisfy the requested precision */
-						int zeros_to_add = 0;
-						if (!(type == 'f' || type == 'F')) {
-							/* For %e, %g (scientific), and %a: precision dictates exact trailing zeros */
-							zeros_to_add = preci - fractional_output;
-						} else {
-							/* For %f and %g (fixed-point): track against global preci constraint */
-							zeros_to_add = preci - fractional_output;
+						/* 7. Trailing zeros to satisfy precision. */
+						if (preci > 0) {
+							PUSH((int)(outp - outbuffer), preci, '0');
+							preci = 0;
 						}
-						if (zeros_to_add < 0)
-							zeros_to_add = 0;
-						while (zeros_to_add-- > 0) {
-							TOUT('0');
-							--width;
-						}
+						/* 8. Exponent. */
 						if (!(type == 'f' || type == 'F')) {
 							int xout = 0;
 							char t_lower = (char) (type | 0x20); /* Convert to lowercase ('e' or 'p') */
-							oute = outexponent;
-							EOUT(type);
+							TOUT(type);
 							if (exponent < 0) {
-								EOUT('-');
+								TOUT('-');
 								exponent = -exponent;
 							} else {
-								EOUT('+');
+								TOUT('+');
 							}
 							/* Thousands digit (e.g., for long double extremes like e+4932) */
 							if (exponent > 999) {
 								int z = exponent / 1000;
-								EOUT('0' + z);
+								TOUT('0' + z);
 								exponent -= z * 1000;
 								xout = 1;
 							}
 							/* Hundreds digit */
 							if (xout || exponent > 99) {
 								int z = exponent / 100;
-								EOUT('0' + z);
+								TOUT('0' + z);
 								exponent -= z * 100;
 								xout = 1;
 							}
 							/* Tens digit: Forced to print for 'e'/'E' to guarantee at least 2 digits (e+00) */
 							if (xout || exponent > 9 || t_lower == 'e') {
 								int z = exponent / 10;
-								EOUT('0' + z);
+								TOUT('0' + z);
 								exponent -= z * 10;
 							}
 							/* Units digit (always printed) */
-							EOUT('0' + exponent);
+							TOUT('0' + exponent);
 						}
 					}
-					if (oute)
-						width -= oute - outexponent;
-					if ((flags & LALIGNFLAG) != 0) {
-						/* LEFT ALIGNED: print temp then pad */
-						for (char *p = outbuffer; p < outp; ++p)
-							OUT(*p);
-						if (oute) {
-							for (char *p = outexponent; p < oute; ++p)
-								OUT(*p);
-						}
-						while (--width >= 0)
-							OUT(' ');
-					} else {
-						/* RIGHT ALIGNED: pad then print */
-						char *qout = outbuffer;
-						/* check for sign */
-						if (pad == '0' && (*qout == '-' || *qout == '+' || *qout == ' ')) {
-							OUT(*qout++); /* Print the sign before zero padding. */
-							while (--width >= 0)
-								OUT('0');
-						} else {
-							while (--width >= 0)
-								OUT(pad);
-						}
-						for (; qout < outp; ++qout)
-							OUT(*qout);
-						if (oute) {
-							for (char *p = outexponent; p < oute; ++p)
-								OUT(*p);
+					/* 9. Fill in the pad count.
+					 *
+					 * width is the requested field width.  vlen is the
+					 * number of characters the value itself contributes
+					 * (everything already in outbuffer, plus the runs queued
+					 * as pieces -- including the reserved front pad, whose
+					 * count is still 0 at this point).  padcount is the
+					 * number of pad characters actually needed, clamped at 0.
+					 */
+					{
+						int vlen = (int)(outp - outbuffer);
+						int padcount;
+						int pi;
+
+						for (pi = 0; pi < npieces; ++pi)
+							vlen += pieces[pi].count;
+
+						padcount = (width > vlen) ? (width - vlen) : 0;
+
+						if (padcount > 0) {
+							if (flags & LALIGNFLAG) {
+								/* Tail pad: append at the end so its
+								 * startPos (== outp) is the largest. */
+								PUSH((int)(outp - outbuffer), padcount, ' ');
+							} else {
+								/* Front pad: the slot at index 0 was
+								 * reserved.  padcount > 0 implies
+								 * width > 0, and we are in the non-
+								 * LALIGNFLAG branch, so the slot is
+								 * guaranteed to exist. */
+								pieces[0].count = padcount;
+							}
 						}
 					}
+					/* 10. Emit: interleave outbuffer with pieces. */
+					{
+						int len = (int)(outp - outbuffer);
+						int pi = 0;
+						for (int k = 0; k < len; ++k) {
+							while (pi < npieces && pieces[pi].startPos == k) {
+								int cnt = pieces[pi].count;
+								char pc = pieces[pi].c;
+								for (int j = 0; j < cnt; ++j)
+									OUT(pc);
+								++pi;
+							}
+							OUT(outbuffer[k]);
+						}
+						/* Pieces anchored at the end (left-align tail,
+						 * or width pad when outbuffer is empty). */
+						while (pi < npieces) {
+							int cnt = pieces[pi].count;
+							char pc = pieces[pi].c;
+							for (int j = 0; j < cnt; ++j)
+								OUT(pc);
+							++pi;
+						}
+					}
+#undef PUSH
 					format = ptr;
 					continue;
 				}
@@ -1460,564 +855,3 @@ int __vfprintf_total_size(FILE *stream, const char *format, va_list args) {
 	__STDIO_UNLOCK(stream);
 	return outcount;
 }
-/* ======================================================================
- * Self-test harness (build with -DTESTME).
- * ==================================================================== */
-#ifdef TESTME
-#include <string.h>
-/* Test counter */
-static int tests_run = 0;
-static int tests_passed = 0;
-static int tests_failed = 0;
-/*
- * Classifier display functions - poke union fields directly to verify
- * the bit-level classification logic.
- */
-static void show_d(const char *tag, double v) {
-	union _d_bits u;
-	u.d = v;
-	printf("  %-6s sign=%d nan=%d inf=%d zero=%d\n", tag, _d_signbit(u), _d_isnan(u), _d_isinf(u), _d_iszero(u));
-}
-static void show_ld(const char *tag, long double v) {
-	union _ld_bits u;
-	u.ld = v;
-	printf("  %-6s sign=%d nan=%d inf=%d zero=%d\n", tag, _ld_signbit(u), _ld_isnan(u), _ld_isinf(u), _ld_iszero(u));
-}
-/*
- * Check that snprintf output matches an expected string exactly.
- *
- * The 'combined' string has format: "label|expected|"
- * The actual format string is passed separately in 'fmt'.
- * We find the LAST '|' to split expected from the format string portion,
- * then find the FIRST '|' in the prefix to split label from expected.
- */
-static int check_fmt(const char *combined, const char *fmt, ...) {
-	char buf[512];
-	const char *expected;
-	const char *label;
-	const char *last_sep;
-	const char *first_sep;
-	size_t expected_len;
-	int ret;
-	va_list args;
-	/* Find the last '|' which terminates the expected value */
-	last_sep = strrchr(combined, '|');
-	if (!last_sep) {
-		/* No separator at all - nothing to compare */
-		printf("BUG: no '|' in test spec: %s\n", combined);
-		tests_run++;
-		tests_failed++;
-		return 0;
-	}
-	/* Find the first '|' which separates label from expected */
-	first_sep = strchr(combined, '|');
-	if (first_sep == last_sep) {
-		/* Only one '|' - no label, just expected value */
-		label = "(unnamed)";
-		expected = combined;
-		expected_len = (size_t) (last_sep - combined);
-	} else {
-		/* label|expected| */
-		label = combined;
-		expected = first_sep + 1;
-		expected_len = (size_t) (last_sep - expected);
-	}
-	va_start(args, fmt);
-	ret = vsnprintf(buf, sizeof(buf), fmt, args);
-	va_end(args);
-	tests_run++;
-	if (ret == (int) expected_len && memcmp(buf, expected, expected_len) == 0) {
-		printf("OK: %s\n", label);
-		tests_passed++;
-		return 1;
-	} else {
-		tests_failed++;
-		printf("FAIL: %s\n", label);
-		printf("      fmt:      \"%s\"\n", fmt);
-		printf("      expected: \"");
-		fwrite(expected, 1, expected_len, stdout);
-		printf("\" (len=%zu)\n", expected_len);
-		printf("      got:      \"");
-		fwrite(buf, 1, (size_t) ret, stdout);
-		printf("\" (len=%d)\n", ret);
-		return 0;
-	}
-}
-/*
- * Macro wrapper: TESTFMT("description|expected_result|", "format", args...)
- *
- * The trailing '|' after expected_result is required to mark the end.
- * The actual format string is passed as the second argument.
- */
-#define TESTFMT(desc, fmt, ...) \
-    check_fmt(desc, fmt, ##__VA_ARGS__)
-int main(int argc, char **argv) {
-	double d;
-	(void) argc;
-	(void) argv;
-	printf("=== vfprintf test harness ===\n\n");
-	/* Print which math mode we're using */
-#if USE_LDOUBLE_MATH
-	printf("Math mode: long double (GCC >= 16)\n\n");
-#else
-	printf("Math mode: double fallback (GCC < 16)\n\n");
-#endif
-	/* ==================================================================
-	 * SECTION 1: Bit-level classifier tests
-	 * ================================================================== */
-	printf("--- Classifier tests ---\n");
-	{
-		union _d_bits td;
-		union _ld_bits tl;
-		printf("  Double classifiers:\n");
-		td.d = 0.0;
-		show_d("zero", td.d);
-		td.b.exp = 0x7ff;
-		show_d("+inf", td.d);
-		td.b.frac1 = 1;
-		show_d("nan", td.d);
-		td.b.exp = 0;
-		td.b.frac1 = 0;
-		td.b.sign = 1;
-		show_d("-0", td.d);
-		td.b.sign = 0;
-		td.b.frac1 = 1;
-		show_d("den", td.d);
-		printf("  Long double classifiers:\n");
-		tl.ld = 0.0L;
-		show_ld("zero", tl.ld);
-		tl.b.exp = 0x7fff;
-		tl.b.mant = _LD_INTBIT;
-		show_ld("+inf", tl.ld);
-		tl.b.mant = 0xC000000000000000ULL;
-		show_ld("qNaN", tl.ld);
-		tl.b.mant = 0x4000000000000000ULL;
-		show_ld("sNaN", tl.ld);
-		tl.b.exp = 0;
-		tl.b.mant = 0;
-		tl.b.sign = 1;
-		show_ld("-0", tl.ld);
-	}
-	printf("\n");
-	/* ==================================================================
-	 * SECTION 2: Zero and alternate-form tests
-	 * ================================================================== */
-	printf("--- Zero / alternate-form tests ---\n");
-	TESTFMT("zero fixed left pad|0                   |", "%-20.0f", 0.0);
-	TESTFMT("zero sci left pad|0e+00               |", "%-20.0e", 0.0);
-	TESTFMT("zero g left pad|0                   |", "%-20.1g", 0.0);
-	TESTFMT("zero fixed alt right pad|                  0.|", "%#20.0f", 0.0);
-	TESTFMT("zero sci alt right pad|              0.e+00|", "%#20.0e", 0.0);
-	TESTFMT("zero g alt right pad|                 0.0|", "%#20.1g", 0.0);
-	TESTFMT("negative zero|-0|", "%.0f", -0.0);
-	TESTFMT("zero with plus|+0|", "%+.0f", 0.0);
-	TESTFMT("zero with space| 0|", "% .0f", 0.0);
-	TESTFMT("zero prec 5|0.00000|", "%.5f", 0.0);
-	TESTFMT("simple 5.0|5|", "%.0f", 5.0);
-	printf("\n");
-	/* ==================================================================
-	 * SECTION 3: Fixed-point (%f) decade walk
-	 * ================================================================== */
-	printf("--- Fixed-point %%f decade walk ---\n");
-	d = 1.2345678902468e-13L;
-	TESTFMT("f e-13|           0.0000000|", "%20.7f", d);
-	d = 1.2345678902468e-12L;
-	TESTFMT("f e-12|           0.0000000|", "%20.7f", d);
-	d = 1.2345678902468e-11L;
-	TESTFMT("f e-11|           0.0000000|", "%20.7f", d);
-	d = 1.2345678902468e-10L;
-	TESTFMT("f e-10|           0.0000000|", "%20.7f", d);
-	d = 1.2345678902468e-09L;
-	TESTFMT("f e-9 |           0.0000000|", "%20.7f", d);
-	d = 1.2345678902468e-08L;
-	TESTFMT("f e-8 |           0.0000000|", "%20.7f", d);
-	d = 1.2345678902468e-07L;
-	TESTFMT("f e-7 |           0.0000001|", "%20.7f", d);
-	d = 1.2345678902468e-06L;
-	TESTFMT("f e-6 |           0.0000012|", "%20.7f", d);
-	d = 1.2345678902468e-05L;
-	TESTFMT("f e-5 |           0.0000123|", "%20.7f", d);
-	d = 1.2345678902468e-04L;
-	TESTFMT("f e-4 |           0.0001235|", "%20.7f", d);
-	d = 1.2345678902468e-03L;
-	TESTFMT("f e-3 |           0.0012346|", "%20.7f", d);
-	d = 1.2345678902468e-02L;
-	TESTFMT("f e-2 |           0.0123457|", "%20.7f", d);
-	d = 1.2345678902468e-01L;
-	TESTFMT("f e-1 |           0.1234568|", "%20.7f", d);
-	d = 1.2345678902468e+00L;
-	TESTFMT("f e0  |           1.2345679|", "%20.7f", d);
-	d = 1.2345678902468e+01L;
-	TESTFMT("f e1  |          12.3456789|", "%20.7f", d);
-	d = 1.2345678902468e+02L;
-	TESTFMT("f e2  |         123.4567890|", "%20.7f", d);
-	d = 1.2345678902468e+03L;
-	TESTFMT("f e3  |        1234.5678902|", "%20.7f", d);
-	d = 1.2345678902468e+04L;
-	TESTFMT("f e4  |       12345.6789025|", "%20.7f", d);
-	d = 1.2345678902468e+05L;
-	TESTFMT("f e5  |      123456.7890247|", "%20.7f", d);
-	d = 1.2345678902468e+06L;
-	TESTFMT("f e6  |     1234567.8902468|", "%20.7f", d);
-	d = 1.2345678902468e+07L;
-	TESTFMT("f e7  |    12345678.9024680|", "%20.7f", d);
-	d = 1.2345678902468e+08L;
-	TESTFMT("f e8  |   123456789.0246800|", "%20.7f", d);
-	d = 1.2345678902468e+09L;
-	TESTFMT("f e9  |  1234567890.2467999|", "%20.7f", d); //!!
-	d = 1.2345678902468e+10L;
-	TESTFMT("f e10 | 12345678902.4680000|", "%20.7f", d);
-	printf("\n");
-	/* ==================================================================
-	 * SECTION 4: General format (%g) decade walk
-	 * ================================================================== */
-	printf("--- General %%g decade walk ---\n");
-	d = 1.2345678902468e-13L;
-	TESTFMT("g e-13|        1.234568e-13|", "%20.7g", d); // value length = 12 -> 8 spaces
-	d = 1.2345678902468e-12L;
-	TESTFMT("g e-12|        1.234568e-12|", "%20.7g", d); // value length = 12 -> 8 spaces
-	d = 1.2345678902468e-11L;
-	TESTFMT("g e-11|        1.234568e-11|", "%20.7g", d); // value length = 12 -> 8 spaces
-	d = 1.2345678902468e-10L;
-	TESTFMT("g e-10|        1.234568e-10|", "%20.7g", d); // value length = 12 -> 8 spaces
-	d = 1.2345678902468e-09L;
-	TESTFMT("g e-9 |        1.234568e-09|", "%20.7g", d); // value length = 12 -> 8 spaces
-	d = 1.2345678902468e-08L;
-	TESTFMT("g e-8 |        1.234568e-08|", "%20.7g", d); // value length = 12 -> 8 spaces
-	d = 1.2345678902468e-07L;
-	TESTFMT("g e-7 |        1.234568e-07|", "%20.7g", d); // value length = 12 -> 8 spaces
-	d = 1.2345678902468e-06L;
-	TESTFMT("g e-6 |        1.234568e-06|", "%20.7g", d); // value length = 12 -> 8 spaces
-	d = 1.2345678902468e-05L;
-	TESTFMT("g e-5 |        1.234568e-05|", "%20.7g", d); // (value length = 12 -> 8 spaces)
-	d = 1.2345678902468e-04L;
-	TESTFMT("g e-4 |        0.0001234568|", "%20.7g", d); // (value length = 12 -> 8 spaces)
-	d = 1.2345678902468e-03L;
-	TESTFMT("g e-3 |         0.001234568|", "%20.7g", d); // (value length = 11 -> 9 spaces)
-	d = 1.2345678902468e-02L;
-	TESTFMT("g e-2 |          0.01234568|", "%20.7g", d); // (value length = 10 -> 10 spaces)
-	d = 1.2345678902468e-01L;
-	TESTFMT("g e-1 |           0.1234568|", "%20.7g", d); // (value length = 9 -> 11 spaces)
-	d = 1.2345678902468e+00L;
-	TESTFMT("g e0  |            1.234568|", "%20.7g", d); // (value length = 8 -> 12 spaces)
-	d = 1.2345678902468e+01L;
-	TESTFMT("g e1  |            12.34568|", "%20.7g", d); // (value length = 8 -> 12 spaces)
-	d = 1.2345678902468e+02L;
-	TESTFMT("g e2  |            123.4568|", "%20.7g", d); // (value length = 8 -> 12 spaces)
-	d = 1.2345678902468e+03L;
-	TESTFMT("g e3  |            1234.568|", "%20.7g", d); // (value length = 8 -> 12 spaces)
-	d = 1.2345678902468e+04L;
-	TESTFMT("g e4  |            12345.68|", "%20.7g", d); // (value length = 8 -> 12 spaces)
-	d = 1.2345678902468e+05L;
-	TESTFMT("g e5  |            123456.8|", "%20.7g", d); // (value length = 8 -> 12 spaces)
-	d = 1.2345678902468e+06L;
-	TESTFMT("g e6  |             1234568|", "%20.7g", d); // (value length = 7 -> 13 spaces)
-	d = 1.2345678902468e+07L;
-	TESTFMT("g e7  |        1.234568e+07|", "%20.7g", d); // value length = 12 -> 8 spaces
-	d = 1.2345678902468e+08L;
-	TESTFMT("g e8  |        1.234568e+08|", "%20.7g", d); // value length = 12 -> 8 spaces
-	d = 1.2345678902468e+09L;
-	TESTFMT("g e9  |        1.234568e+09|", "%20.7g", d); // value length = 12 -> 8 spaces
-	d = 1.2345678902468e+10L;
-	TESTFMT("g e10 |        1.234568e+10|", "%20.7g", d); // value length = 12 -> 8 spaces
-	printf("\n");
-	/* ==================================================================
-	 * SECTION 5: Scientific (%e) decade walk
-	 * ================================================================== */
-	printf("--- Scientific %%e decade walk ---\n");
-	d = 1.2345678902468e-13L;
-	TESTFMT("e e-13|       1.2345679e-13|", "%20.7e", d);
-	d = 1.2345678902468e-12L;
-	TESTFMT("e e-12|       1.2345679e-12|", "%20.7e", d);
-	d = 1.2345678902468e-11L;
-	TESTFMT("e e-11|       1.2345679e-11|", "%20.7e", d);
-	d = 1.2345678902468e-10L;
-	TESTFMT("e e-10|       1.2345679e-10|", "%20.7e", d);
-	d = 1.2345678902468e-09L;
-	TESTFMT("e e-9 |       1.2345679e-09|", "%20.7e", d);
-	d = 1.2345678902468e-08L;
-	TESTFMT("e e-8 |       1.2345679e-08|", "%20.7e", d);
-	d = 1.2345678902468e-07L;
-	TESTFMT("e e-7 |       1.2345679e-07|", "%20.7e", d);
-	d = 1.2345678902468e-06L;
-	TESTFMT("e e-6 |       1.2345679e-06|", "%20.7e", d);
-	d = 1.2345678902468e-05L;
-	TESTFMT("e e-5 |       1.2345679e-05|", "%20.7e", d);
-	d = 1.2345678902468e-04L;
-	TESTFMT("e e-4 |       1.2345679e-04|", "%20.7e", d);
-	d = 1.2345678902468e-03L;
-	TESTFMT("e e-3 |       1.2345679e-03|", "%20.7e", d);
-	d = 1.2345678902468e-02L;
-	TESTFMT("e e-2 |       1.2345679e-02|", "%20.7e", d);
-	d = 1.2345678902468e-01L;
-	TESTFMT("e e-1 |       1.2345679e-01|", "%20.7e", d);
-	d = 1.2345678902468e+00L;
-	TESTFMT("e e0  |       1.2345679e+00|", "%20.7e", d);
-	d = 1.2345678902468e+01L;
-	TESTFMT("e e1  |       1.2345679e+01|", "%20.7e", d);
-	d = 1.2345678902468e+02L;
-	TESTFMT("e e2  |       1.2345679e+02|", "%20.7e", d);
-	d = 1.2345678902468e+03L;
-	TESTFMT("e e3  |       1.2345679e+03|", "%20.7e", d);
-	d = 1.2345678902468e+04L;
-	TESTFMT("e e4  |       1.2345679e+04|", "%20.7e", d);
-	d = 1.2345678902468e+05L;
-	TESTFMT("e e5  |       1.2345679e+05|", "%20.7e", d);
-	d = 1.2345678902468e+06L;
-	TESTFMT("e e6  |       1.2345679e+06|", "%20.7e", d);
-	d = 1.2345678902468e+07L;
-	TESTFMT("e e7  |       1.2345679e+07|", "%20.7e", d);
-	d = 1.2345678902468e+08L;
-	TESTFMT("e e8  |       1.2345679e+08|", "%20.7e", d);
-	d = 1.2345678902468e+09L;
-	TESTFMT("e e9  |       1.2345679e+09|", "%20.7e", d);
-	d = 1.2345678902468e+10L;
-	TESTFMT("e e10 |       1.2345679e+10|", "%20.7e", d);
-	printf("\n");
-	/* ==================================================================
-	 * SECTION 6: Rounding tests
-	 * ================================================================== */
-	printf("--- Rounding tests ---\n");
-	TESTFMT("round up .5|2|", "%.0f", 1.5);
-	TESTFMT("round up .6|2|", "%.0f", 1.6);
-	TESTFMT("round down .4|1|", "%.0f", 1.4);
-	TESTFMT("round 9 cascade|10|", "%.0f", 9.5);
-	TESTFMT("round 99 cascade|100|", "%.0f", 99.5);
-	TESTFMT("round .05|1.1|", "%.1f", 1.05);
-	TESTFMT("round .15|1.2|", "%.1f", 1.15);
-	TESTFMT("round .25|1.3|", "%.1f", 1.25);
-	TESTFMT("round .35|1.4|", "%.1f", 1.35);
-	TESTFMT("round .45|1.5|", "%.1f", 1.45);
-	TESTFMT("round .55|1.6|", "%.1f", 1.55);
-	TESTFMT("round .65|1.7|", "%.1f", 1.65);
-	TESTFMT("round .75|1.8|", "%.1f", 1.75);
-	TESTFMT("round .85|1.9|", "%.1f", 1.85);
-	TESTFMT("round .95|2.0|", "%.1f", 1.95);
-	printf("\n");
-	/* ==================================================================
-	 * SECTION 7: Special values (inf, NaN)
-	 * ================================================================== */
-	printf("--- Special value tests ---\n");
-	{
-		union _d_bits inf_bits, nan_bits;
-		double pos_inf, neg_inf, qnan;
-		inf_bits.d = 0.0;
-		inf_bits.b.exp = 0x7ff;
-		pos_inf = inf_bits.d;
-		inf_bits.b.sign = 1;
-		neg_inf = inf_bits.d;
-		nan_bits.d = 0.0;
-		nan_bits.b.exp = 0x7ff;
-		nan_bits.b.frac0 = 1;
-		qnan = nan_bits.d;
-		TESTFMT("+inf|inf|", "%f", pos_inf);
-		TESTFMT("-inf|-inf|", "%f", neg_inf);
-		TESTFMT("nan|NaN|", "%f", qnan);
-		TESTFMT("+inf padded|       inf|", "%10f", pos_inf);
-		TESTFMT("-inf padded|      -inf|", "%10f", neg_inf);
-		TESTFMT("nan padded|       NaN|", "%10f", qnan);
-		TESTFMT("+inf sci|inf|", "%e", pos_inf);
-		TESTFMT("nan g|NaN|", "%g", qnan);
-	}
-	printf("\n");
-	/* ==================================================================
-	 * SECTION 8: Padding and alignment tests
-	 * ================================================================== */
-	printf("--- Padding / alignment tests ---\n");
-	TESTFMT("right pad zero|0000042|", "%07d", 42);
-	TESTFMT("left pad space|42     |", "%-7d", 42);
-	TESTFMT("right pad space|     42|", "%7d", 42);
-	TESTFMT("float zero pad|000012.35|", "%09.2f", 12.345);
-	TESTFMT("float space pad|    12.35|", "%9.2f", 12.345);
-	TESTFMT("float left pad|12.35    |", "%-9.2f", 12.345);
-	TESTFMT("sign prefix|+12.35|", "%+.2f", 12.345);
-	TESTFMT("space prefix| 12.35|", "% .2f", 12.345);
-	TESTFMT("neg sign|-12.35|", "%.2f", -12.345);
-	TESTFMT("neg zero pad|-00012.35|", "%09.2f", -12.345);
-	printf("\n");
-	/* ==================================================================
-	 * SECTION 9: Integer format tests
-	 * ================================================================== */
-	printf("--- Integer format tests ---\n");
-	TESTFMT("dec basic|42|", "%d", 42);
-	TESTFMT("dec neg|-42|", "%d", -42);
-	TESTFMT("dec zero|0|", "%d", 0);
-	TESTFMT("oct basic|52|", "%o", 42);
-	TESTFMT("oct alt|052|", "%#o", 42);
-	TESTFMT("hex lower|2a|", "%x", 42);
-	TESTFMT("hex upper|2A|", "%X", 42);
-	TESTFMT("hex alt lower|0x2a|", "%#x", 42);
-	TESTFMT("hex alt upper|0X2A|", "%#X", 42);
-	TESTFMT("unsigned|42|", "%u", 42);
-	TESTFMT("unsigned max|4294967295|", "%u", 0xFFFFFFFFU);
-	TESTFMT("long dec|1234567890|", "%ld", 1234567890L);
-	TESTFMT("char|A|", "%c", 'A');
-	TESTFMT("string|hello|", "%s", "hello");
-	TESTFMT("null string|(null)|", "%s", (char* )0);
-	TESTFMT("percent|%|", "%%");
-	TESTFMT("prec zero||", "%.0d", 0);
-	TESTFMT("prec zero alt|0|", "%#.0d", 0);
-	printf("\n");
-	/* ==================================================================
-	 * SECTION 10: Pointer format tests
-	 * ================================================================== */
-	printf("--- Pointer format tests ---\n");
-	/* Note: NULL pointer format is implementation-defined, common is "(nil)" or "0x0" */
-	{
-		char buf[64];
-		snprintf(buf, sizeof(buf), "%p", (void*) 0);
-		printf("  NULL pointer prints as: \"%s\" (implementation-defined)\n", buf);
-	}
-	printf("\n");
-	/* ==================================================================
-	 * SECTION 11: Long double tests
-	 * ================================================================== */
-	printf("--- Long double tests ---\n");
-	{
-		long double ld = 3.14159265358979323846L;
-		TESTFMT("ld basic|3.141593|", "%Lf", ld);
-		TESTFMT("ld sci|3.141593e+00|", "%Le", ld);
-		TESTFMT("ld g|3.14159|", "%Lg", ld);
-		TESTFMT("ld prec10|3.1415926536|", "%.10Lf", ld);
-		TESTFMT("ld zero|0.000000|", "%Lf", 0.0L);
-		TESTFMT("ld neg|-3.141593|", "%Lf", -ld);
-		/* High-precision long double */
-		long double pi_ld = 3.141592653589793238L;
-		TESTFMT("ld high prec|3.141592653589793238|", "%.18Lf", pi_ld);
-	}
-	printf("\n");
-	/* ==================================================================
-	 * SECTION 12: Hexadecimal float tests (%a)
-	 * ================================================================== */
-	printf("--- Hex float %%a tests ---\n");
-	{
-		/* 1.0 = 0x1.0p+0 */
-		TESTFMT("a 1.0|0x1p+0|", "%a", 1.0);
-		/* 2.0 = 0x1.0p+1 */
-		TESTFMT("a 2.0|0x1p+1|", "%a", 2.0);
-		/* 0.5 = 0x1.0p-1 */
-		TESTFMT("a 0.5|0x1p-1|", "%a", 0.5);
-		/* 0.25 = 0x1.0p-2 */
-		TESTFMT("a 0.25|0x1p-2|", "%a", 0.25);
-		/* 3.0 = 0x1.8p+1 */
-		TESTFMT("a 3.0|0x1.8p+1|", "%a", 3.0);
-		/* 0.1 = 0x1.999999999999ap-4 */
-		TESTFMT("a 0.1|0x1.999999999999ap-4|", "%a", 0.1);
-		/* with precision */
-		TESTFMT("a 1.0 prec2|0x1.00p+0|", "%.2a", 1.0);
-		TESTFMT("a 3.14 prec|0x1.91eb851eb851fp+1|", "%.13a", 3.14);
-	}
-	printf("\n");
-	/* ==================================================================
-	 * SECTION 13: Edge cases
-	 * ================================================================== */
-	printf("--- Edge case tests ---\n");
-	TESTFMT("very small|0.000000|", "%f", 1e-10);
-	TESTFMT("very large|123456789012345680.000000|", "%f", 1.2345678901234568e17);
-	TESTFMT("g trim trailing|1|", "%g", 1.0);
-	TESTFMT("g trim trailing2|1.5|", "%g", 1.5);
-	TESTFMT("g no trim with #|1.50000|", "%#5g", 1.5);
-	TESTFMT("f huge prec|1.2345678901234567|", "%.16f", 1.2345678901234567);
-	TESTFMT("e huge prec|1.2345678901234567e+00|", "%.16e", 1.2345678901234567);
-	TESTFMT("empty format||", "");
-	TESTFMT("text only|hello world|", "hello world");
-	TESTFMT("mixed|abc42def|", "abc%ddef", 42);
-	TESTFMT("multiple|1 2 3|", "%d %d %d", 1, 2, 3);
-	printf("\n");
-	/* ==================================================================
-	 * SECTION 14: High-precision long double (conditional on math mode)
-	 * ================================================================== */
-	printf("--- High-precision long double (PI calculation) ---\n");
-#define PI 3.141592653589793238462643383279502884197L
-	{
-		long double xx = 3.23454989171L - PI;
-		long double result = (long double) (1.2345678902468e-13 * PI) / xx;
-		char buf[128];
-		int len = snprintf(buf, sizeof(buf), "%1.40Le", result);
-		printf("  PI calc result (%d chars): %s\n", len, buf);
-#if USE_LDOUBLE_MATH
-		printf("  (Expected ~40 significant digits with GCC >= 16)\n");
-#else
-		printf("  (Expected ~17 significant digits with double fallback)\n");
-#endif
-	}
-
-	/* ==================================================================
-	 * SECTION 15: Integer alternate-form tests (%#hho and %#hhx)
-	 * ================================================================== */
-	printf("--- Integer alternate-form (%#hho and %#hhx) tests ---\n");
-	{
-	    unsigned char a;
-
-	    /* Test %#hho (octal with alternate form) */
-	    a = 0;
-	    TESTFMT("hho zero|0|", "%#hho", a);
-
-	    a = 1;
-	    TESTFMT("hho one|01|", "%#hho", a);
-
-	    a = 127;
-	    TESTFMT("hho 127|0177|", "%#hho", a);
-
-	    a = 255;
-	    TESTFMT("hho 255|0377|", "%#hho", a);
-
-	    /* Test %#hhx (hex with alternate form) */
-	    a = 0;
-	    TESTFMT("hhx zero|0|", "%#hhx", a);
-
-	    a = 1;
-	    TESTFMT("hhx one|0x1|", "%#hhx", a);
-
-	    a = 127;
-	    TESTFMT("hhx 127|0x7f|", "%#hhx", a);
-
-	    a = 255;
-	    TESTFMT("hhx 255|0xff|", "%#hhx", a);
-
-	    /* Test with width and precision */
-	    a = 42;
-	    TESTFMT("hho width|       052|", "%#10hho", a);
-	    TESTFMT("hhx width|      0x2a|", "%#10hhx", a);
-	    TESTFMT("hho prec|00052|", "%#.5hho", a);
-	    TESTFMT("hhx prec|0x02a|", "%#.5hhx", a);
-	    TESTFMT("hho left|052       |", "%#-10hho", a);
-	    TESTFMT("hhx left|0x2a      |", "%#-10hhx", a);
-	}
-	printf("\n");
-
-	/* ==================================================================
-	 * Additional
-	 * ================================================================== */
-	// --- DOUBLE TESTS
-	TESTFMT("f round dp|0.0010000|", "%.7f", 0.000999955);
-	TESTFMT("f round int|10.0000000|", "%.7f", 9.999999955);
-	TESTFMT("f small half|0.0000001|", "%.7f", 0.000000055);
-	TESTFMT("f big half|123456790.0000000|", "%.7f", 123456789.999999955);
-
-	// --- LONG DOUBLE TESTS
-	TESTFMT("ld |1.000000000000000001|", "%.18Lf", 1.000000000000000001L);
-	TESTFMT("ld near1|1.00000000000000000000|", "%.20Lf", 0.999999999999999999995L);
-	TESTFMT("ld near2|2.00000000000000000000|", "%.20Lf", 1.999999999999999999995L);
-	TESTFMT("ld near05|0.50000000000000000000|", "%.20Lf", 0.499999999999999999995L);
-	TESTFMT("ld dp|0.00100000000000000000|", "%.20Lf", 0.00099999999999999999995L);
-
-	TESTFMT("ld int|10.00000000000000000000|", "%.20Lf", 9.999999999999999999995L);
-
-	// --- special tests
-	TESTFMT("ld small|0.00000000000000000010|", "%.20Lf", 0.000000000000000000095L);
-	TESTFMT("ld big|123456790.0000000000|", "%.10Lf", 123456789.99999999995L);
-	TESTFMT("ld exp|1.234567890123456789e+00|", "%.18Le", 1.234567890123456789L);
-
-	printf("\n");
-	/* ==================================================================
-	 * Summary
-	 * ================================================================== */
-	printf("=== Test Summary ===\n");
-	printf("  Run:     %d\n", tests_run);
-	printf("  Passed:  %d\n", tests_passed);
-	printf("  Failed:  %d\n", tests_failed);
-	printf("\n");
-	return tests_failed > 0 ? 1 : 0;
-}
-#endif /* TESTME */
