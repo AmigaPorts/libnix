@@ -90,7 +90,7 @@ frexpl.o: ../sources/math/extra/frexpl.c
 	$(CROSS_CC) $(CROSS_CFLAGS) -fno-builtin -ffast-math -c -o $@ $<
 
 frexpl: frexpl.c frexpl.o
-	$(CROSS_CC) $(CROSS_CFLAGS) -fno-fast-math -fno-builtin -Wall -o $@ $^
+	$(CROSS_CC) $(CROSS_CFLAGS) -fno-fast-math -fno-builtin -Wall -o $@ $^ -lm
 
 # The soft-float comparisons, compiled as libm builds them and linked
 # ahead of libm.
