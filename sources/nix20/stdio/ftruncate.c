@@ -19,7 +19,9 @@ __stdargs int ftruncate(int d, off_t pos)
     if((r=SetFileSize(sfd->lx_fh,pos,OFFSET_BEGINNING))!=EOF)
       return 0;
     __seterrno();
+    return EOF;
   }
 
+  errno = EBADF;
   return EOF;
 }
