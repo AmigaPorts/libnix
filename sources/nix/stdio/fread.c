@@ -23,20 +23,25 @@ size_t fread(void *ptr, size_t size, size_t nmemb, FILE *stream) {
 			stream->_r -= subsize;
 			b += subsize;
 			total -= subsize;
-		} else if (total >= (size_t) stream->_bf._size
-			   && !(stream->_flags & (__SNBF | __SSTR))) {
-			/* The buffer is empty and the request is at least a buffer:
-			   read straight into the caller's memory, whole buffers at a
-			   time so the stream stays aligned to its buffer size.  One
-			   Read() instead of one per buffer, each followed by a copy;
-			   on AmigaDOS every Read() is a round trip to the handler.  */
+		} else if (!(stream->_flags & __SSTR)
+			   && (stream->_flags & __SNBF
+			       || total >= (size_t) stream->_bf._size)) {
+			/* The buffer is empty and the request is at least a buffer,
+			   or the stream is unbuffered: read straight into the
+			   caller's memory.  A buffered stream reads whole buffers at
+			   a time so it stays aligned to its buffer size; an
+			   unbuffered one reads just what was asked, instead of a
+			   byte or a buffer at a time.  One Read() instead of one per
+			   buffer, each followed by a copy; on AmigaDOS every Read()
+			   is a round trip to the handler.  */
 			int n;
 			if (__sprepread(stream))
 				break;
 			if (stream->_r > 0) /* ungetc() data came back */
 				continue;
 			stream->_flags |= __SRD;
-			n = read(stream->file, b, total - total % stream->_bf._size);
+			n = read(stream->file, b, stream->_flags & __SNBF
+				 ? total : total - total % stream->_bf._size);
 			if (n <= 0) {
 				stream->_flags |= n ? __SERR : __SEOF;
 				break;
