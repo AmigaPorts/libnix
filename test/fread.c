@@ -2,12 +2,14 @@
    through the buffer; whatever the mix, the bytes must be the right ones.
    A 100000-byte file of a known pattern on T:, read back in every way that
    crosses the paths: whole, in odd sizes, after getc() and ungetc(), with a
-   small setvbuf() buffer, past EOF, and after writing on an update
-   stream.  Prints what fails; the exit code is the number of failures.  */
+   small setvbuf() buffer, unbuffered, past EOF, and after writing on an
+   update stream.  Prints what fails; the exit code is the number of
+   failures.  */
 
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <unistd.h>
 
 #define NAME "T:libnix-fread-test"
 #define SIZE 100000L
@@ -119,12 +121,34 @@ int main(void)
     }
   fclose(f);
 
-  /* unbuffered: everything byte by byte, the direct path must stay out */
-  f = fopen(NAME, "rb");
-  setbuf(f, NULL);
-  r = fread(buf, 1, 5000, f);
-  check(r == 5000 && matches(buf, 0, 5000), "fread on an unbuffered stream");
-  fclose(f);
+  /* unbuffered, with setbuf()'s BUFSIZ buffer and with setvbuf()'s single
+     byte: every request is read straight into buf, just what was asked,
+     so the file position is where the stream is */
+  for (i = 0; i < 2; i++)
+    {
+      f = fopen(NAME, "rb");
+      if (i)
+        check(setvbuf(f, NULL, _IONBF, 0) == 0, "setvbuf unbuffered");
+      else
+        setbuf(f, NULL);
+      r = fread(buf, 1, 5000, f);
+      check(r == 5000 && matches(buf, 0, 5000), "fread on an unbuffered stream");
+      check(lseek(fileno(f), 0, SEEK_CUR) == 5000, "unbuffered fread reads no further");
+      check(fgetc(f) == pattern(5000), "getc on an unbuffered stream");
+      check(ungetc(pattern(5000), f) == pattern(5000), "ungetc on an unbuffered stream");
+      pos = 5000;
+      for (n = 1; pos < SIZE; n = n * 3 + 1)
+        {
+          long want = n > SIZE - pos ? SIZE - pos : n;
+          memset(buf, 0, want);
+          r = fread(buf, 1, want, f);
+          check(r == (size_t) want && matches(buf, pos, want), "unbuffered fread in growing odd sizes");
+          pos += want;
+          check(ftell(f) == pos, "ftell on an unbuffered stream");
+        }
+      check(fread(buf, 1, 1, f) == 0 && feof(f) && !ferror(f), "unbuffered fread at EOF");
+      fclose(f);
+    }
 
   /* seek, then read; and write then read on an update stream */
   f = fopen(NAME, "r+b");
