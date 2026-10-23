@@ -5,6 +5,15 @@
 
 long double frexpl(long double, int *);
 
+/* Whether long double arithmetic has its own range and precision.  gcc
+   6's libgcc does it without an FPU through double (xfpgnulib), so a long
+   double out of double's range does not survive it: check() cannot
+   rebuild those, and 0/0 is no long double NaN.  Without it, they are
+   checked against folded constants instead.  */
+#if !(defined(__GNUC__) && __GNUC__ < 7 && !defined(__HAVE_68881__))
+#define HAS_LONG_DOUBLE 1
+#endif
+
 static int fails;
 
 static long double rebuild(long double m, int e)
@@ -80,10 +89,17 @@ int main(void)
 	check("0.5", 0.5L);
 	check("-3", -3.0L);
 	check("0.1", 0.1L);
+#ifdef HAS_LONG_DOUBLE
 	check("1e4000", 1e4000L);
 	check("-1e-4000", -1e-4000L);
 	check("LDBL_MAX", LDBL_MAX);
 	check("-LDBL_MAX", -LDBL_MAX);
+#else
+	expect("1e4000", 1e4000L, 13288, 1e4000L * 0x1p-13288L);
+	expect("-1e-4000", -1e-4000L, -13287, -1e-4000L * 0x1p13287L);
+	expect("LDBL_MAX", LDBL_MAX, 16384, LDBL_MAX * 0x1p-16384L);
+	expect("-LDBL_MAX", -LDBL_MAX, 16384, -LDBL_MAX * 0x1p-16384L);
+#endif
 	expect("LDBL_MIN", LDBL_MIN, -16382, 0.5L);
 	expect("0x1p-16383L", 0x1p-16383L, -16382, 0.5L);
 	expect("0x1p-16384L", 0x1p-16384L, -16383, 0.5L);
@@ -96,9 +112,14 @@ int main(void)
 	check("-0", -zero);
 	check("inf", inf);
 	check("-inf", -inf);
+#ifdef HAS_LONG_DOUBLE
 	check("nan", nan);
 	for (d = LDBL_MIN * 2, i = 0; i < 70; i++, d *= 3)
 		check("small sweep", d);
+#else
+	(void)nan;
+	expect("nan", __builtin_nanl(""), 0, __builtin_nanl(""));
+#endif
 	for (d = 1, i = 0; i < 200; i++, d *= 7.25L)
 		check("sweep", d);
 	printf("%s: %d failures\n", fails ? "FAIL" : "ok", fails);
