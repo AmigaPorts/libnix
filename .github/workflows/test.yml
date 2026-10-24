@@ -1,6 +1,6 @@
 # Host-side unit tests: libnix code that is plain C, compiled and run with
 # the build machine's compiler. The toolchain build itself is exercised by
-# toolchain-ci.yml through the ci-* labels.
+# ci-label.yml and ci-command.yml, through ci-* labels and /ci comments.
 name: Tests
 
 on:
