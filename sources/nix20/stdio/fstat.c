@@ -1,6 +1,7 @@
 #include <dos/dosextens.h>
 #include <proto/dos.h>
 
+#include <errno.h>
 #include <sys/types.h>
 #include <sys/stat.h>
 #include "string.h"
@@ -11,21 +12,27 @@ extern void __seterrno(void);
 int fstat(int d, struct stat *buf) {
 	extern int __stat(struct stat *buf, struct FileInfoBlock *fib);
 
-	if (!buf)
+	if (!buf) {
+		errno = EFAULT;
 		return -1;
+	}
 
 	StdFileDes *sfd = _lx_fhfromfd(d);
 	struct FileInfoBlock *fib;
 	LONG pos, len, fh;
 
-	if (!sfd)
+	if (!sfd) {
+		errno = EBADF;
 		return -1;
+	}
 
 	if (sfd->lx_fx)
 		return sfd->lx_fx->lx_fstat(sfd, buf);
 
-	if (!(fh = sfd->lx_fh))
+	if (!(fh = sfd->lx_fh)) {
+		errno = EBADF;
 		return -1;
+	}
 
 	memset(buf, 0, sizeof(*buf));
 
