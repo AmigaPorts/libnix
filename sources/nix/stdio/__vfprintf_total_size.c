@@ -192,6 +192,26 @@ extern int __vfprintf_total_size(FILE *stream, const char *fmt, va_list args);
 } while(0)
 #define TOUT(c) *outp++ = (c)
 #define EOUT(c) *oute++ = (c)
+/* A run of zeros goes into outbuffer as a NUL with its length in zruns[]:
+ * the precision or a large %f value can ask for thousands of them. */
+#define TZEROS(n) do { \
+    int n_ = (n); \
+    if (n_ > 0) { \
+        zruns[nzruns++] = n_; \
+        TOUT('\0'); \
+    } \
+} while(0)
+/* Output outbuffer from p, expanding the zero runs. */
+#define OUTBUFFER(p) do { \
+    int z_ = 0; \
+    for (; (p) < outp; ++(p)) { \
+        if (*(p)) \
+            OUT(*(p)); \
+        else \
+            for (int n_ = zruns[z_++]; n_ > 0; --n_) \
+                OUT('0'); \
+    } \
+} while(0)
 /* Worst-case byte requirements per numeric family -> shared scratch buf */
 #define MINFLOATSIZE   (DBL_DIG + 5)
 #define MININTSIZE     (sizeof(unsigned long long) * CHAR_BIT / 3 + 1)
@@ -343,6 +363,8 @@ int __vfprintf_total_size(FILE *stream, const char *format, va_list args) {
 #ifdef FULL_SPECIFIERS
 			char outbuffer[REQUIREDBUFFER + 128]; /* Buffer used for output and left padding. */
 			char *outp = outbuffer;
+			int zruns[4]; /* Lengths of the zero runs in outbuffer, see TZEROS. */
+			int nzruns = 0;
 			char outexponent[8]; /* Separate buffer for the exponent, such as e+1234. */
 			char *oute = 0; /* Set only when an exponent is emitted. */
 #endif
@@ -574,6 +596,7 @@ int __vfprintf_total_size(FILE *stream, const char *format, va_list args) {
 				char sign = 0;
 				const char *infnan = 0;
 				char pad = ((flags & ZEROPADFLAG) && !(flags & LALIGNFLAG)) ? '0' : ' ';
+				short fieldwidth = width;
 #if USE_LDOUBLE_MATH
                 const int MEANINGFUL_DIGITS = is_ld ? LD_DIGS : D_DIGS;
 #else
@@ -782,7 +805,6 @@ int __vfprintf_total_size(FILE *stream, const char *format, va_list args) {
 								killZero = 1;
 							TOUT('0');
 							TOUT(type + ('X' - 'A'));
-							width -= 2;
 							buffer[0] = '0';
 							startPos = 0;
 							pos = 1;
@@ -831,15 +853,12 @@ int __vfprintf_total_size(FILE *stream, const char *format, va_list args) {
 					if (preci > 0x3fff)
 						preci = 1;
 					/* -------- S6: Output generation -------- */
-					if (sign != 0) {
+					if (sign != 0)
 						TOUT(sign);
-						--width;
-					}
 					if (infnan) {
 						TOUT(infnan[0]);
 						TOUT(infnan[1]);
 						TOUT(infnan[2]);
-						width -= 3;
 						pad = ' ';
 					} else {
 						int fractional_output = 0;
@@ -847,26 +866,21 @@ int __vfprintf_total_size(FILE *stream, const char *format, va_list args) {
 						if (exponent < 0 && (type == 'f' || type == 'F')) {
 							/* For small fixed-point numbers (e.g., 0.00123), print the mandatory leading '0' */
 							TOUT('0');
-							--width;
 						} else {
 							if (isg)
 								preci -= leading;
 							int rpad = exponent - leading;
 							while (startPos < pos && leading-- > 0) {
 								TOUT(buffer[startPos++]);
-								--width;
 								if (isg && !(flags & ALTERNATEFLAG)) {
 									--preci;
 									if (preci > 0x3fff)
 										preci = 0;
 								}
 							}
-							while (leading-- > 0)
-								TOUT('0');
-							if (type == 'f' || type == 'F') {
-								while (rpad-- > 0)
-									TOUT('0');
-							}
+							TZEROS(leading);
+							if (type == 'f' || type == 'F')
+								TZEROS(rpad);
 						}
 						if (killZero) {
 							/* Remove trailing zeros from the complete digit buffer. */
@@ -880,10 +894,8 @@ int __vfprintf_total_size(FILE *stream, const char *format, va_list args) {
 							pos = stop + 1;
 						}
 						/* 2. Print the decimal point if required */
-						if (preci || (flags & ALTERNATEFLAG) != 0) {
+						if (preci || (flags & ALTERNATEFLAG) != 0)
 							TOUT((__decimalpoint && __decimalpoint[0]) ? __decimalpoint[0] : '.');
-							--width;
-						}
 						/* limit output */
 						if (pos > startPos + preci) {
 							pos = startPos + preci;
@@ -891,18 +903,21 @@ int __vfprintf_total_size(FILE *stream, const char *format, va_list args) {
 						/* 3. Print leading fractional zeros for small %f numbers */
 						if (exponent < 0 && (type == 'f' || type == 'F')) {
 							int fractional_zeros = -exponent - 1; /* e.g., exp = -3 -> 2 zeros */
-							while (fractional_zeros-- > 0 && preci > 0) {
-								TOUT('0');
-								--width;
+							/* %f counts them against the precision, %g does not */
+							if (preci <= 0)
+								fractional_zeros = 0;
+							else if (!isg && fractional_zeros > preci)
+								fractional_zeros = preci;
+							if (fractional_zeros > 0) {
+								TZEROS(fractional_zeros);
 								if (!isg)
-									--preci;
-								fractional_output++;
+									preci -= fractional_zeros;
+								fractional_output += fractional_zeros;
 							}
 						}
 						/* 4. Print the remaining significant digits from the buffer */
 						while (preci > 0 && startPos < pos) {
 							TOUT(buffer[startPos++]);
-							--width;
 							--preci;
 						}
 						/* 5. Pad trailing zeros to satisfy the requested precision */
@@ -914,12 +929,7 @@ int __vfprintf_total_size(FILE *stream, const char *format, va_list args) {
 							/* For %f and %g (fixed-point): track against global preci constraint */
 							zeros_to_add = preci - fractional_output;
 						}
-						if (zeros_to_add < 0)
-							zeros_to_add = 0;
-						while (zeros_to_add-- > 0) {
-							TOUT('0');
-							--width;
-						}
+						TZEROS(zeros_to_add);
 						if (!(type == 'f' || type == 'F')) {
 							int xout = 0;
 							char t_lower = (char) (type | 0x20); /* Convert to lowercase ('e' or 'p') */
@@ -955,12 +965,16 @@ int __vfprintf_total_size(FILE *stream, const char *format, va_list args) {
 							EOUT('0' + exponent);
 						}
 					}
+					/* The padding is what the field width leaves of the whole output. */
+					width = fieldwidth - (outp - outbuffer) + nzruns;
+					for (int z = 0; z < nzruns; ++z)
+						width -= zruns[z];
 					if (oute)
 						width -= oute - outexponent;
 					if ((flags & LALIGNFLAG) != 0) {
 						/* LEFT ALIGNED: print temp then pad */
-						for (char *p = outbuffer; p < outp; ++p)
-							OUT(*p);
+						char *p = outbuffer;
+						OUTBUFFER(p);
 						if (oute) {
 							for (char *p = outexponent; p < oute; ++p)
 								OUT(*p);
@@ -979,8 +993,7 @@ int __vfprintf_total_size(FILE *stream, const char *format, va_list args) {
 							while (--width >= 0)
 								OUT(pad);
 						}
-						for (; qout < outp; ++qout)
-							OUT(*qout);
+						OUTBUFFER(qout);
 						if (oute) {
 							for (char *p = outexponent; p < oute; ++p)
 								OUT(*p);
