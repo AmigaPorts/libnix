@@ -10,7 +10,9 @@ signed long strtol(const char *nptr,char **endptr,int base)
   char *q;
   unsigned long r;
   if(!(nptr && *nptr))
-  { errno=EINVAL;
+  { if(endptr!=NULL)
+      *endptr=(char *)nptr;
+    errno=EINVAL;
     return 0;
   }
   while(isspace((int)*p))
