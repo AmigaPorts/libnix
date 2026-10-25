@@ -16,6 +16,7 @@ signed long long strtoll(const char *nptr,char **endptr,int base)
 { const char *p=nptr;
   char *q;
   unsigned long long r;
+  int olderrno=errno,overflow;
   if(!(nptr && *nptr))
   { if(endptr!=NULL)
       *endptr=(char *)nptr;
@@ -24,7 +25,12 @@ signed long long strtoll(const char *nptr,char **endptr,int base)
   }
   while(isspace((int)*p))
     p++;
+  /* strtoull's overflow is ULLONG_MAX, unnegated: the same value as "-1" */
+  errno=0;
   r=strtoull(p,&q,base);
+  overflow=errno==ERANGE;
+  if(!errno)
+    errno=olderrno;
   if(endptr!=NULL)
   { if(q==p)
       *endptr=(char *)nptr;
@@ -32,7 +38,7 @@ signed long long strtoll(const char *nptr,char **endptr,int base)
       *endptr=q;
   }
   if(*p=='-')
-  { if((signed long long)r>0)
+  { if(overflow || (signed long long)r>0)
     { errno=ERANGE;
       return LLONG_MIN; }
     else
