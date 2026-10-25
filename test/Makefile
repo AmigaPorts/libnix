@@ -72,6 +72,17 @@ vswprintf.o: ../sources/nix/stdio/vswprintf.c
 wprintf: wprintf.c vswprintf.o vwfprintf.o
 	$(CROSS_CC) $(CROSS_CFLAGS) -Wall -o $@ wprintf.c vswprintf.o vwfprintf.o -lm
 
+# The printf modules, compiled as libm builds them (with float formatting and
+# fast-math) and linked ahead of libm and libnix.
+vfprintf.o: ../sources/nix/stdio/__vfprintf_total_size.c
+	$(CROSS_CC) $(CROSS_CFLAGS) -I../sources/headers -fno-builtin -ffast-math -D__libnix__ -DFULL_SPECIFIERS -c -o $@ $<
+
+vsprintf.o: ../sources/nix/stdio/vsprintf.c
+	$(CROSS_CC) $(CROSS_CFLAGS) -I../sources/headers -fno-builtin -ffast-math -D__libnix__ -DFULL_SPECIFIERS -c -o $@ $<
+
+printf: printf.c vsprintf.o vfprintf.o
+	$(CROSS_CC) $(CROSS_CFLAGS) -Wall -o $@ printf.c vsprintf.o vfprintf.o -lm
+
 # Compile the implementations with the library's fast-math setting, but
 # keep the bit-pattern assertions free of fast-math and compiler builtins.
 atan2.o: ../sources/math/trans/atan2.c
@@ -135,9 +146,10 @@ popen.o: ../sources/nix20/stdio/popen.c
 popen: popen.c popen.o
 	$(CROSS_CC) $(CROSS_CFLAGS) -Wall -o $@ popen.c popen.o
 
-check-target: stack wprintf fcmp inet atan2-zero atan2f-zero ftw frexpl fread ftruncate fstat mathfp c99math strto sscanf
+check-target: stack wprintf printf fcmp inet atan2-zero atan2f-zero ftw frexpl fread ftruncate fstat mathfp c99math strto sscanf
 	$(SIM) $(SIMFLAGS) ./stack
 	$(SIM) $(SIMFLAGS) ./wprintf
+	$(SIM) $(SIMFLAGS) ./printf
 	$(SIM) $(SIMFLAGS) ./fcmp
 	$(SIM) $(SIMFLAGS) ./inet
 	$(SIM) $(SIMFLAGS) ./atan2-zero
@@ -255,6 +267,7 @@ cxa-dtors: cxa-dtors.cpp
 clean:
 	rm -f $(HOST_ATAN_TESTS) host-atan-stub.o host-atan2-test.o host-atan2f-test.o host-atan2-normal.o host-atan2f-normal.o host-atan2-fast.o host-atan2f-fast.o
 	rm -f amigapath stack swapstack.o setlocale_threads cxa-dtors wprintf vswprintf.o vwfprintf.o \
+	  printf vsprintf.o vfprintf.o \
 	  fcmp eqdf2.o eqsf2.o inet inet_aton.o inet_network.o atan2-zero atan2f-zero atan2.o atan2f.o \
 	  ftw ftw.o nftw.o popen popen.o frexpl frexpl.o fread ftruncate fstat mathfp $(MATHFP_OBJS) c99math $(C99MATH_OBJS) strto $(STRTO_OBJS) sscanf
 
