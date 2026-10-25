@@ -385,8 +385,10 @@ int __vfprintf_total_size(FILE *stream, const char *format, va_list args) {
 					signed int a;
 					ptr++;
 					a = va_arg(args, signed int);
-					if (a >= 0) /* negative means "unset"   */
+					if (a >= 0)
 						preci = a;
+					else /* negative means no precision at all */
+						flags &= ~HAS_PRECI;
 				} else {
 					preci = 0;
 					while (isdigit(*ptr))
