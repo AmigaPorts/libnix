@@ -162,8 +162,9 @@ fstat: fstat.c
 	$(CROSS_CC) $(CROSS_CFLAGS) -Wall -o $@ fstat.c
 
 # The fdlibm functions that once lost or won against same-named files in
-# trans/ and extra/, compiled as libm builds them and linked ahead of it.
-MATHFP_OBJS = fmodf.o frexp.o ldexp.o fabs.o fabsf.o
+# trans/ and extra/, and fmod, compiled as libm builds them and linked
+# ahead of it.
+MATHFP_OBJS = fmod.o fmodf.o frexp.o ldexp.o fabs.o fabsf.o
 
 $(MATHFP_OBJS): %.o: ../sources/math/mathfp/%.c
 	$(CROSS_CC) $(CROSS_CFLAGS) -I../sources/headers -I../sources/math/mathfp -fno-builtin -ffast-math -D__libnix__ -c -o $@ $<

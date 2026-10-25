@@ -1,8 +1,8 @@
 /* The fdlibm fmodf, frexp, ldexp, fabs and fabsf from sources/math/mathfp,
    which used to share a file name with weaker versions in trans/ and
-   extra/: whichever find listed last went into libm.  fmodf is exact,
-   frexp returns an infinity instead of looping forever, and ldexp
-   overflows and underflows correctly.  */
+   extra/: whichever find listed last went into libm, and fmod.  fmodf and
+   fmod are exact, frexp returns an infinity instead of looping forever,
+   and ldexp overflows and underflows correctly.  */
 
 #include <float.h>
 #include <math.h>
@@ -26,6 +26,8 @@ int main(void)
 
   check(fmodf(1e10f, 3.0f) == 1.0f, "fmodf(1e10, 3) is exactly 1");
   check(fmodf(-7.0f, 3.0f) == -1.0f, "fmodf(-7, 3) is -1");
+  check(fmod(1e20, 3.0) == 1.0, "fmod(1e20, 3) is exactly 1");
+  check(fmod(-7.0, 3.0) == -1.0 && fmod(5.5, 2.0) == 1.5, "fmod(-7, 3), fmod(5.5, 2)");
 
   e = 1;
   check(isinf(frexp(INFINITY, &e)), "frexp(inf) returns inf");
