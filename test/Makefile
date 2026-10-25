@@ -135,7 +135,7 @@ popen.o: ../sources/nix20/stdio/popen.c
 popen: popen.c popen.o
 	$(CROSS_CC) $(CROSS_CFLAGS) -Wall -o $@ popen.c popen.o
 
-check-target: stack wprintf fcmp inet atan2-zero atan2f-zero ftw frexpl fread ftruncate fstat mathfp
+check-target: stack wprintf fcmp inet atan2-zero atan2f-zero ftw frexpl fread ftruncate fstat mathfp c99math
 	$(SIM) $(SIMFLAGS) ./stack
 	$(SIM) $(SIMFLAGS) ./wprintf
 	$(SIM) $(SIMFLAGS) ./fcmp
@@ -148,6 +148,7 @@ check-target: stack wprintf fcmp inet atan2-zero atan2f-zero ftw frexpl fread ft
 	$(SIM) $(SIMFLAGS) ./ftruncate
 	$(SIM) $(SIMFLAGS) ./fstat
 	$(SIM) $(SIMFLAGS) ./mathfp
+	$(SIM) $(SIMFLAGS) ./c99math
 
 # fread() reading large requests straight into the caller's memory
 fread: fread.c
@@ -172,6 +173,63 @@ $(MATHFP_OBJS): %.o: ../sources/math/mathfp/%.c
 mathfp: mathfp.c $(MATHFP_OBJS)
 	$(CROSS_CC) $(CROSS_CFLAGS) -fno-builtin -Wall -o $@ mathfp.c $(MATHFP_OBJS) -lm
 
+# The C99 math functions libnix lacked, compiled as libm builds them (with
+# fast-math) and linked ahead of libm.
+C99MATH_DIRS = ../sources/math/ldouble ../sources/math/mathfp ../sources/math/common
+C99MATH_OBJS = \
+	acoshl.o \
+	asinhl.o \
+	atanhl.o \
+	cbrtl.o \
+	copysignl.o \
+	erfcl.o \
+	erfl.o \
+	exp2l.o \
+	expm1l.o \
+	fdiml.o \
+	fmal.o \
+	fmaxl.o \
+	fminl.o \
+	ilogbl.o \
+	lgammal.o \
+	llrintl.o \
+	llroundl.o \
+	log1pl.o \
+	log2l.o \
+	logbl.o \
+	lrintl.o \
+	lroundl.o \
+	nanl.o \
+	nearbyintl.o \
+	nextafterl.o \
+	nexttowardl.o \
+	remainderl.o \
+	remquol.o \
+	rintl.o \
+	roundl.o \
+	scalblnl.o \
+	scalbnl.o \
+	tgammal.o \
+	truncl.o \
+	exp2.o \
+	exp2f.o \
+	lgamma.o \
+	lgammaf.o \
+	log2f.o \
+	signgam.o \
+	tgamma.o \
+	tgammaf.o \
+	nexttoward.o \
+	nexttowardf.o
+
+vpath %.c $(C99MATH_DIRS)
+
+$(C99MATH_OBJS): %.o: %.c ../sources/math/ldouble/ldbits.h
+	$(CROSS_CC) $(CROSS_CFLAGS) -I../sources/headers -I$(dir $<) -fno-builtin -ffast-math -D__libnix__ -c -o $@ $<
+
+c99math: c99math.c $(C99MATH_OBJS)
+	$(CROSS_CC) $(CROSS_CFLAGS) -fno-builtin -Wall -o $@ c99math.c $(C99MATH_OBJS) -lm
+
 # Exec tasks are required; vamos cannot run this pthread test.
 setlocale_threads: setlocale_threads.c
 	$(CROSS_CC) $(CROSS_CFLAGS) -Wall -o $@ $< -lpthread -lm
@@ -183,7 +241,7 @@ clean:
 	rm -f $(HOST_ATAN_TESTS) host-atan-stub.o host-atan2-test.o host-atan2f-test.o host-atan2-normal.o host-atan2f-normal.o host-atan2-fast.o host-atan2f-fast.o
 	rm -f amigapath stack swapstack.o setlocale_threads cxa-dtors wprintf vswprintf.o vwfprintf.o \
 	  fcmp eqdf2.o eqsf2.o inet inet_aton.o inet_network.o atan2-zero atan2f-zero atan2.o atan2f.o \
-	  ftw ftw.o nftw.o popen popen.o frexpl frexpl.o fread ftruncate fstat mathfp $(MATHFP_OBJS)
+	  ftw ftw.o nftw.o popen popen.o frexpl frexpl.o fread ftruncate fstat mathfp $(MATHFP_OBJS) c99math $(C99MATH_OBJS)
 
 
 
