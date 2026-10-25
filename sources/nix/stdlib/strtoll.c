@@ -17,7 +17,9 @@ signed long long strtoll(const char *nptr,char **endptr,int base)
   char *q;
   unsigned long long r;
   if(!(nptr && *nptr))
-  { errno=EINVAL;
+  { if(endptr!=NULL)
+      *endptr=(char *)nptr;
+    errno=EINVAL;
     return 0;
   }
   while(isspace((int)*p))
@@ -36,7 +38,7 @@ signed long long strtoll(const char *nptr,char **endptr,int base)
     else
       return r;
   }else
-  { if((signed long)r<0)
+  { if((signed long long)r<0)
     { errno=ERANGE;
       return LLONG_MAX; }
     else

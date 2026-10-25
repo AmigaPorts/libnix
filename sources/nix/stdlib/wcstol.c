@@ -12,22 +12,29 @@ signed long wcstol(const wchar_t *nptr, wchar_t **endptr, int base) {
 	char *_q;
 	unsigned long r;
 	if (!(nptr && *nptr)) {
+		if (endptr != NULL)
+			*endptr = (wchar_t*) nptr;
 		errno = EINVAL;
 		return 0;
 	}
-	while (isspace((int )*p))
+	while ((unsigned long) *p < 128 && isspace((int )*p))
 		p++;
 
 	int l = wcslen(p);
 	char *_p = (char*) malloc(l + 1);
-	if (_p) {
+	if (!_p) {
+		if (endptr != NULL)
+			*endptr = (wchar_t*) nptr;
 		errno = ENOMEM;
 		return 0;
 	}
 
-	// convert wchar_t to char
-	for (int i = 0; i < l; ++i)
+	// convert wchar_t to char, ending at the first non-ASCII character,
+	// which cannot be part of a number
+	int i;
+	for (i = 0; i < l && (unsigned long) p[i] < 128; ++i)
 		_p[i] = p[i];
+	_p[i] = '\0';
 
 	r = strtoul(_p, &_q, base);
 	free(_p);

@@ -22,6 +22,8 @@ unsigned long long strtoull(const char *nptr, char **endptr, int base) {
 		return 0;
 	}
 	if (!(nptr && *nptr)) {
+		if (endptr != NULL)
+			*endptr = (char *) nptr;
 		errno = EINVAL;
 		return 0;
 	}
