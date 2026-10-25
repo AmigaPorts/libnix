@@ -13,7 +13,8 @@ root ?= $(shell echo $$PWD)
 export root
 
 target ?= m68k-amigaos
- 
+
+# The sub-makes run in the build directories without -f: make reads this file there through MAKEFILES.
 MAKEFILES=$(root)/Makefile.m68k-amigaos
 
 # special path handling for msys2 started from Eclipse
@@ -65,12 +66,11 @@ $(error 'libc' and 'lib' cannot be used together)
 endif
 endif
 
-# add order if clean all is run simultaneously
+# with clean among the goals, clean first
 ifneq (,$(filter clean,$(MAKECMDGOALS)))
 $(VARIANTS_TO_BUILD): clean
 libc: clean
 endif
-
 
 ifneq (,$(lib))
 crt = -mcrt=nix13
@@ -94,9 +94,8 @@ STARTUPS ?= lib/ncrt0.o
 
 endif
 
-# extend CFLAGS on first invokation
+# extend CFLAGS in the top-level make only: the sub-makes inherit them
 ifeq (,$(kind))
-
 CFLAGS += -I$(root)/sources/headers -fno-builtin -ffast-math -D__libnix__
 # The library implements the mem* functions.  Keep loop distribution from
 # replacing one of their loops with a call back into the same function.
@@ -104,15 +103,10 @@ CFLAGS += -fno-tree-loop-distribute-patterns
 # AmigaOS APIs take STRPTR (unsigned char) strings, so -Wpointer-sign
 # would flag every call that passes a plain char string.
 CFLAGS += -Wall -Wno-pointer-sign
-
-ifneq (,$(lc))
-CFLAGS += -D__libnix__
-endif
 endif
 
-.PHONY: all one rest clean install install_one
-
-.PHONY: $(VARIANTS_TO_BUILD) lc
+.PHONY: all one rest clean install install_one info
+.PHONY: $(VARIANTS_TO_BUILD)
 all: $(VARIANTS_TO_BUILD)
 
 $(VARIANTS_TO_BUILD): $(STARTUPS)
@@ -121,7 +115,7 @@ $(VARIANTS_TO_BUILD): $(STARTUPS)
 lib:
 	@mkdir -p $@
 	$(MAKE) one kind=$@
-	if [ -e lib/libstubs.a ] && [ "$$($(AR) t lib/libstubs.a | grep __initlib)" != "" ]; then rm -f lib/libstubs.a; fi
+	if [ -e lib/libstubs.a ] && $(AR) t lib/libstubs.a | grep -q __initlib; then rm -f lib/libstubs.a; fi
 
 # every other multilib: build in its directory, install into the same
 # directory under $(PREFIX)/$(target)/libnix/lib
@@ -158,40 +152,26 @@ install_one:
 libdir:
 	@mkdir -p lib
 
-lib/devinit.o: $(root)/sources/startup/devinit.c libdir
-	$(CC) -c $(CFLAGS) $(flags) $< -o $@
-
-lib/libinit.o: $(root)/sources/startup/libinit.c libdir
+lib/devinit.o lib/libinit.o lib/libinitr.o: lib/%.o: $(root)/sources/startup/%.c libdir
 	$(CC) -c $(CFLAGS) $(flags) $< -o $@
 
 lib/libinitb.o: $(root)/sources/startup/libinit.c libdir
 	$(CC) -c $(CFLAGS) $(flags) -D__BASEREL__ $< -o $@
 
-lib/libinitr.o: $(root)/sources/startup/libinitr.c libdir
-	$(CC) -c $(CFLAGS) $(flags) $< -o $@
-
-lib/ncrt0.o: $(root)/sources/startup/ncrt0.S libdir
+# $(TGT) marks the ELF build in the startups that have an ELF variant
+lib/ncrt0.o lib/xcrt0.o: lib/%.o: $(root)/sources/startup/%.S libdir
 	$(AS) $(TGT) -m68000 $< -o $@
 
-lib/xcrt0.o: $(root)/sources/startup/xcrt0.S libdir
-	$(AS) $(TGT) -m68000 $< -o $@
-
-lib/nbcrt0.o: $(root)/sources/startup/nbcrt0.S libdir
+lib/nbcrt0.o lib/nrcrt0.o: lib/%.o: $(root)/sources/startup/%.S libdir
 	$(AS) -m68000 $< -o $@
 
-lib/nlbcrt0.o: $(root)/sources/startup/nlbcrt0.S libdir
-	$(AS) -m68020 $< -o $@
-
-lib/nrcrt0.o: $(root)/sources/startup/nrcrt0.S libdir
-	$(AS) -m68000 $< -o $@
-
-lib/nlrcrt0.o: $(root)/sources/startup/nlrcrt0.S libdir
+lib/nlbcrt0.o lib/nlrcrt0.o: lib/%.o: $(root)/sources/startup/%.S libdir
 	$(AS) -m68020 $< -o $@
 
 lib/init_shared.o: $(root)/sources/startup/init_shared.c libdir
-	$(CC) $(CFLAGS) -fbaserel -m68000 -Os -c $< -o $@ 
+	$(CC) $(CFLAGS) -fbaserel -m68000 -Os -c $< -o $@
 
-.PHONY: libnix libnix13 libnix20 libnixmain libnix_main libm libsocket
+.PHONY: libnix libnix13 libnix20 libnixmain libnix_main libm libsocket libstub libc
 libnix:
 	$(MAKE) -C $(kind) rest libnix.a lib=nix
 libnix13:
@@ -213,8 +193,8 @@ libc: $(STARTUPS)
 	$(MAKE) -C $(lc) kind=$(lc) rest libnix.a lib=nix
 	$(MAKE) -C $(lc) kind=$(lc) rest libnix20.a lib=nix20
 	$(MAKE) -C $(lc) kind=$(lc) rest libnixmain.a lib=nixmain
-	-rm lib/stubs/*_list__.o
-	if [ ! -e  $(lc)/libc.a ]; then $(AR) rcs $(lc)/libc.a; touch -t 0001010000 $(lc)/libc.a; fi
+	rm -f lib/stubs/*_list__.o
+	if [ ! -e $(lc)/libc.a ]; then $(AR) rcs $(lc)/libc.a; touch -t 0001010000 $(lc)/libc.a; fi
 	$(AR) rcs $(lc)/libc.a \
 	$$(find ./$(lc)/nix/* -name '*.o' -newer $(lc)/libc.a) \
 	$$(find ./lib/stubs/* -name '*.o' -newer $(lc)/libc.a) \
@@ -226,8 +206,9 @@ rest: detach.o
 detach.o: $(root)/sources/misc/detach.c
 	$(CC) -c -Os -fomit-frame-pointer $(flags) $^ -o $@
 
-# build the lib base on $(lib), $(kind) and $(flags)
-# Every source of a library compiles to <basename>.o in $(lib), so two sources with the same basename would replace each other's object, in the order find happens to list them.
+# Build lib$(libname).a from sources/$(lib), for $(kind) with $(flags).
+# Only the sources newer than the archive are recompiled, all of them if a header or this file changed.
+# Every source compiles to <basename>.o in $(lib), so two sources with the same basename would replace each other's object, in the order find happens to list them.
 lib$(libname).a: $(shell find $(root)/sources/$(lib)/* -name '*.c') $(stolen) $(shell find $(root)/sources/headers/* -name '*.h') $(root)/Makefile.m68k-amigaos
 	@dups="$$(find $(root)/sources/$(lib)/* -name '*.c' | xargs -n1 basename | sort | uniq -d | xargs)"; \
 	if [ -n "$$dups" ]; then echo "sources/$(lib) has more than one file named: $$dups" >&2; exit 1; fi
@@ -238,9 +219,8 @@ lib$(libname).a: $(shell find $(root)/sources/$(lib)/* -name '*.c') $(stolen) $(
 	@if [ "$$(find $(root)/Makefile.m68k-amigaos -newer $(lib)/stamp)" != "" ]; then rm -f $(lib)/*.o $@; touch -t 0001010000 $(lib)/stamp; fi
 	@cd $(lib) && files="$$(find $^ -name '*.c' -newer stamp)" && echo "$(CC) -c $(CFLAGS) $(flags) $$files" && \
 	$(CC) -c $(CFLAGS) $(flags) $$files
-	@#echo archive $(kind)/$@
-	echo @$(AR) rcs $@ $$(find ./$(lib)/* -name '*.o' -newer $(lib)/stamp)
-	@$(AR) rcs $@ $$(find ./$(lib)/* -name '*.o' -newer $(lib)/stamp)
+	@objs="$$(find ./$(lib)/* -name '*.o' -newer $(lib)/stamp)" && echo "$(AR) rcs $@ $$objs" && \
+	$(AR) rcs $@ $$objs
 
 libb/libnix4.library:
 	cd libb && $(root)/preplib
