@@ -53,7 +53,7 @@ check-atan2: $(HOST_ATAN_TESTS)
 check: amigapath check-atan2
 	./amigapath
 
-# swapstack.c is compiled the way Makefile.gcc6 does it and linked ahead
+# swapstack.c is compiled the way Makefile.m68k-amigaos does it and linked ahead
 # of libnix, so the module under test is the one in ../sources.
 swapstack.o: ../sources/misc/swapstack.c
 	$(CROSS_CC) $(CROSS_CFLAGS) -I../sources/headers -fno-builtin -D__libnix__ -c -o $@ $<
@@ -135,7 +135,7 @@ popen.o: ../sources/nix20/stdio/popen.c
 popen: popen.c popen.o
 	$(CROSS_CC) $(CROSS_CFLAGS) -Wall -o $@ popen.c popen.o
 
-check-target: stack wprintf fcmp inet atan2-zero atan2f-zero ftw frexpl fread ftruncate fstat
+check-target: stack wprintf fcmp inet atan2-zero atan2f-zero ftw frexpl fread ftruncate fstat mathfp
 	$(SIM) $(SIMFLAGS) ./stack
 	$(SIM) $(SIMFLAGS) ./wprintf
 	$(SIM) $(SIMFLAGS) ./fcmp
@@ -147,6 +147,7 @@ check-target: stack wprintf fcmp inet atan2-zero atan2f-zero ftw frexpl fread ft
 	$(SIM) $(SIMFLAGS) ./fread
 	$(SIM) $(SIMFLAGS) ./ftruncate
 	$(SIM) $(SIMFLAGS) ./fstat
+	$(SIM) $(SIMFLAGS) ./mathfp
 
 # fread() reading large requests straight into the caller's memory
 fread: fread.c
@@ -160,6 +161,16 @@ ftruncate: ftruncate.c
 fstat: fstat.c
 	$(CROSS_CC) $(CROSS_CFLAGS) -Wall -o $@ fstat.c
 
+# The fdlibm functions that once lost or won against same-named files in
+# trans/ and extra/, compiled as libm builds them and linked ahead of it.
+MATHFP_OBJS = fmodf.o frexp.o ldexp.o fabs.o fabsf.o
+
+$(MATHFP_OBJS): %.o: ../sources/math/mathfp/%.c
+	$(CROSS_CC) $(CROSS_CFLAGS) -I../sources/headers -I../sources/math/mathfp -fno-builtin -ffast-math -D__libnix__ -c -o $@ $<
+
+mathfp: mathfp.c $(MATHFP_OBJS)
+	$(CROSS_CC) $(CROSS_CFLAGS) -fno-builtin -Wall -o $@ mathfp.c $(MATHFP_OBJS) -lm
+
 # Exec tasks are required; vamos cannot run this pthread test.
 setlocale_threads: setlocale_threads.c
 	$(CROSS_CC) $(CROSS_CFLAGS) -Wall -o $@ $< -lpthread -lm
@@ -171,7 +182,7 @@ clean:
 	rm -f $(HOST_ATAN_TESTS) host-atan-stub.o host-atan2-test.o host-atan2f-test.o host-atan2-normal.o host-atan2f-normal.o host-atan2-fast.o host-atan2f-fast.o
 	rm -f amigapath stack swapstack.o setlocale_threads cxa-dtors wprintf vswprintf.o vwfprintf.o \
 	  fcmp eqdf2.o eqsf2.o inet inet_aton.o inet_network.o atan2-zero atan2f-zero atan2.o atan2f.o \
-	  ftw ftw.o nftw.o popen popen.o frexpl frexpl.o fread ftruncate fstat
+	  ftw ftw.o nftw.o popen popen.o frexpl frexpl.o fread ftruncate fstat mathfp $(MATHFP_OBJS)
 
 
 
