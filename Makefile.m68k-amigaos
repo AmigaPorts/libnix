@@ -227,7 +227,10 @@ detach.o: $(root)/sources/misc/detach.c
 	$(CC) -c -Os -fomit-frame-pointer $(flags) $^ -o $@
 
 # build the lib base on $(lib), $(kind) and $(flags)
+# Every source of a library compiles to <basename>.o in $(lib), so two sources with the same basename would replace each other's object, in the order find happens to list them.
 lib$(libname).a: $(shell find $(root)/sources/$(lib)/* -name '*.c') $(stolen) $(shell find $(root)/sources/headers/* -name '*.h') $(root)/Makefile.m68k-amigaos
+	@dups="$$(find $(root)/sources/$(lib)/* -name '*.c' | xargs -n1 basename | sort | uniq -d | xargs)"; \
+	if [ -n "$$dups" ]; then echo "sources/$(lib) has more than one file named: $$dups" >&2; exit 1; fi
 	@mkdir -p $(lib)
 	@echo compiling for $(kind)/$@ using $(CC) -c $(CFLAGS) $(flags)
 	@touch -t 0001010000 $(lib)/stamp && if [ -e $@ ]; then touch -r $@ $(lib)/stamp; fi
