@@ -36,7 +36,13 @@ signed long wcstol(const wchar_t *nptr, wchar_t **endptr, int base) {
 		_p[i] = p[i];
 	_p[i] = '\0';
 
+	/* strtoul's overflow is ULONG_MAX, unnegated: the same value as "-1" */
+	int olderrno = errno, overflow;
+	errno = 0;
 	r = strtoul(_p, &_q, base);
+	overflow = errno == ERANGE;
+	if (!errno)
+		errno = olderrno;
 	free(_p);
 
 	// translate end
@@ -49,7 +55,7 @@ signed long wcstol(const wchar_t *nptr, wchar_t **endptr, int base) {
 			*endptr = q;
 	}
 	if (*p == '-') {
-		if ((signed long) r > 0) {
+		if (overflow || (signed long) r > 0) {
 			errno = ERANGE;
 			return LONG_MIN;
 		} else

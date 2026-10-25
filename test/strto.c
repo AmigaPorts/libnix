@@ -1,6 +1,6 @@
 /* strtol() and friends: the end pointer is always set, to nptr when no
-   number was read; strtoll() covers the range of a long long; and
-   wcstol() parses wide strings.  */
+   number was read; strtoll() covers the range of a long long; a
+   negative overflow is the minimum; and wcstol() parses wide strings.  */
 
 #include <errno.h>
 #include <limits.h>
@@ -63,6 +63,23 @@ int main(void)
   errno = 0;
   ll = strtoll("9223372036854775808", &end, 10);
   check(ll == LLONG_MAX && errno == ERANGE, "strtoll() overflow is LLONG_MAX, ERANGE");
+
+  /* a negative overflow is the minimum, not "-1" */
+  errno = 0;
+  l = strtol("-99999999999", &end, 10);
+  check(l == LONG_MIN && errno == ERANGE, "strtol() negative overflow is LONG_MIN, ERANGE");
+  errno = 0;
+  ll = strtoll("-99999999999999999999", &end, 10);
+  check(ll == LLONG_MIN && errno == ERANGE, "strtoll() negative overflow is LLONG_MIN, ERANGE");
+  errno = 0;
+  l = wcstol(L"-99999999999", &wend, 10);
+  check(l == LONG_MIN && errno == ERANGE, "wcstol() negative overflow is LONG_MIN, ERANGE");
+  errno = EDOM;
+  l = strtol("-1", &end, 10);
+  check(l == -1 && errno == EDOM, "strtol(\"-1\") is -1, leaving errno alone");
+  errno = EDOM;
+  ll = strtoll("-1", &end, 10);
+  check(ll == -1 && errno == EDOM, "strtoll(\"-1\") is -1, leaving errno alone");
 
   /* wcstol */
   wend = WUNSET;
