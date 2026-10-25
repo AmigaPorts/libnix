@@ -20,7 +20,7 @@ make -C test check-target SIM=volamos SIMFLAGS="--stack 4K --sanitize"
 ```
 
 The math objects are linked before installed libm and compiled with
-`-ffast-math`, as in Makefile.gcc6. Cross compiler and simulator settings
+`-ffast-math`, as in Makefile.m68k-amigaos. Cross compiler and simulator settings
 use the existing CROSS_CC, CROSS_CFLAGS, SIM, and SIMFLAGS variables.
 For a hard-float run, clean first and use:
 
