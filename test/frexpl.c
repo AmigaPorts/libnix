@@ -16,10 +16,23 @@ long double frexpl(long double, int *);
 
 static int fails;
 
+/* m * 2^e, by powers of two up to 2^8192 (2^16384 itself overflows): each
+   step is exact, and the partial products go from m towards the result,
+   so none overflows */
 static long double rebuild(long double m, int e)
 {
-	while (e > 0) { m *= 2; e--; }
-	while (e < 0) { m /= 2; e++; }
+	long double p = 2;
+	int n = e < 0 ? -e : e;
+
+	for (; n >= 8192; n -= 8192)
+		m = e < 0 ? m / 0x1p8192L : m * 0x1p8192L;
+	while (n) {
+		if (n & 1)
+			m = e < 0 ? m / p : m * p;
+		n >>= 1;
+		if (n)
+			p *= p;
+	}
 	return m;
 }
 
