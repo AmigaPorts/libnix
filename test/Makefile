@@ -146,7 +146,7 @@ popen.o: ../sources/nix20/stdio/popen.c
 popen: popen.c popen.o
 	$(CROSS_CC) $(CROSS_CFLAGS) -Wall -o $@ popen.c popen.o
 
-check-target: stack wprintf printf fcmp inet atan2-zero atan2f-zero ftw frexpl fread ftruncate fstat mathfp c99math strto sscanf
+check-target: stack wprintf printf fcmp inet atan2-zero atan2f-zero ftw frexpl fread ftruncate fstat mathfp c99math strto sscanf fma
 	$(SIM) $(SIMFLAGS) ./stack
 	$(SIM) $(SIMFLAGS) ./wprintf
 	$(SIM) $(SIMFLAGS) ./printf
@@ -163,6 +163,7 @@ check-target: stack wprintf printf fcmp inet atan2-zero atan2f-zero ftw frexpl f
 	$(SIM) $(SIMFLAGS) ./c99math
 	$(SIM) $(SIMFLAGS) ./strto
 	$(SIM) $(SIMFLAGS) ./sscanf
+	$(SIM) $(SIMFLAGS) ./fma
 
 # fread() reading large requests straight into the caller's memory
 fread: fread.c
@@ -257,6 +258,17 @@ strto: strto.c $(STRTO_OBJS)
 sscanf: sscanf.c
 	$(CROSS_CC) $(CROSS_CFLAGS) -Wall -o $@ sscanf.c
 
+# fma and fmaf, compiled as libm builds them (with fast-math) and linked
+# ahead of it. Built with an FPU (-m68020 -m68881), the test also checks
+# the directed rounding modes.
+FMA_OBJS = s_fma.o sf_fma.o
+
+$(FMA_OBJS): %.o: ../sources/math/common/%.c
+	$(CROSS_CC) $(CROSS_CFLAGS) -I../sources/headers -I../sources/math/mathfp -fno-builtin -ffast-math -D__libnix__ -c -o $@ $<
+
+fma: fma.c $(FMA_OBJS)
+	$(CROSS_CC) $(CROSS_CFLAGS) -fno-builtin -Wall -o $@ fma.c $(FMA_OBJS) -lm
+
 # Exec tasks are required; vamos cannot run this pthread test.
 setlocale_threads: setlocale_threads.c
 	$(CROSS_CC) $(CROSS_CFLAGS) -Wall -o $@ $< -lpthread -lm
@@ -269,7 +281,7 @@ clean:
 	rm -f amigapath stack swapstack.o setlocale_threads cxa-dtors wprintf vswprintf.o vwfprintf.o \
 	  printf vsprintf.o vfprintf.o \
 	  fcmp eqdf2.o eqsf2.o inet inet_aton.o inet_network.o atan2-zero atan2f-zero atan2.o atan2f.o \
-	  ftw ftw.o nftw.o popen popen.o frexpl frexpl.o fread ftruncate fstat mathfp $(MATHFP_OBJS) c99math $(C99MATH_OBJS) strto $(STRTO_OBJS) sscanf
+	  ftw ftw.o nftw.o popen popen.o frexpl frexpl.o fread ftruncate fstat mathfp $(MATHFP_OBJS) c99math $(C99MATH_OBJS) strto $(STRTO_OBJS) sscanf fma $(FMA_OBJS)
 
 
 
