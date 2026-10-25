@@ -14,7 +14,9 @@ int vsprintf(char *s, const char *format, va_list args) {
 	buffer.__spinlock[0] = 0;
 #endif
 	retval = vfprintf(&buffer, format, args);
-	buffer._w = retval;
-	fputc('\0', &buffer);
+	/* directly, as vsnprintf does: fputc with _w = retval wrote nothing
+	   after an empty output */
+	if (retval >= 0)
+		s[retval] = '\0';
 	return retval;
 }
