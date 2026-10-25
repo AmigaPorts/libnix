@@ -135,7 +135,7 @@ popen.o: ../sources/nix20/stdio/popen.c
 popen: popen.c popen.o
 	$(CROSS_CC) $(CROSS_CFLAGS) -Wall -o $@ popen.c popen.o
 
-check-target: stack wprintf fcmp inet atan2-zero atan2f-zero ftw frexpl fread ftruncate fstat mathfp c99math strto
+check-target: stack wprintf fcmp inet atan2-zero atan2f-zero ftw frexpl fread ftruncate fstat mathfp c99math strto sscanf
 	$(SIM) $(SIMFLAGS) ./stack
 	$(SIM) $(SIMFLAGS) ./wprintf
 	$(SIM) $(SIMFLAGS) ./fcmp
@@ -150,6 +150,7 @@ check-target: stack wprintf fcmp inet atan2-zero atan2f-zero ftw frexpl fread ft
 	$(SIM) $(SIMFLAGS) ./mathfp
 	$(SIM) $(SIMFLAGS) ./c99math
 	$(SIM) $(SIMFLAGS) ./strto
+	$(SIM) $(SIMFLAGS) ./sscanf
 
 # fread() reading large requests straight into the caller's memory
 fread: fread.c
@@ -240,6 +241,10 @@ $(STRTO_OBJS): %.o: ../sources/nix/stdlib/%.c
 strto: strto.c $(STRTO_OBJS)
 	$(CROSS_CC) $(CROSS_CFLAGS) -fno-builtin -Wall -o $@ strto.c $(STRTO_OBJS)
 
+# sscanf() going on after a conversion that pushed a character back
+sscanf: sscanf.c
+	$(CROSS_CC) $(CROSS_CFLAGS) -Wall -o $@ sscanf.c
+
 # Exec tasks are required; vamos cannot run this pthread test.
 setlocale_threads: setlocale_threads.c
 	$(CROSS_CC) $(CROSS_CFLAGS) -Wall -o $@ $< -lpthread -lm
@@ -251,7 +256,7 @@ clean:
 	rm -f $(HOST_ATAN_TESTS) host-atan-stub.o host-atan2-test.o host-atan2f-test.o host-atan2-normal.o host-atan2f-normal.o host-atan2-fast.o host-atan2f-fast.o
 	rm -f amigapath stack swapstack.o setlocale_threads cxa-dtors wprintf vswprintf.o vwfprintf.o \
 	  fcmp eqdf2.o eqsf2.o inet inet_aton.o inet_network.o atan2-zero atan2f-zero atan2.o atan2f.o \
-	  ftw ftw.o nftw.o popen popen.o frexpl frexpl.o fread ftruncate fstat mathfp $(MATHFP_OBJS) c99math $(C99MATH_OBJS) strto $(STRTO_OBJS)
+	  ftw ftw.o nftw.o popen popen.o frexpl frexpl.o fread ftruncate fstat mathfp $(MATHFP_OBJS) c99math $(C99MATH_OBJS) strto $(STRTO_OBJS) sscanf
 
 
 

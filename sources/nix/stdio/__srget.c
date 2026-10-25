@@ -8,12 +8,13 @@
 extern int __fflush(FILE*);
 
 /* Get a stream ready to read from its file: fail on a stream in error or
-   at EOF, flush pending output, bring back ungetc() data (which then is in
-   the buffer, with _r > 0), refuse a string stream, and flush the line
-   buffered output streams before reading an unbuffered or line buffered
-   one (ANSI).  Returns EOF when there is nothing to read; the caller holds
-   the stream lock.  fread() uses it to read straight into a caller's
-   memory; __srget() to refill the buffer.  */
+   at EOF, flush pending output, and bring back ungetc() data: when some is
+   left, return 0 at once, string stream or not, with the data in the
+   buffer (_r > 0) for the caller to take.  Otherwise refuse a string
+   stream, and flush the line buffered output streams before reading an
+   unbuffered or line buffered one (ANSI).  Returns EOF when there is
+   nothing to read; the caller holds the stream lock.  fread() uses it to
+   read straight into a caller's memory; __srget() to refill the buffer.  */
 int __sprepread(FILE *stream)
 {
 	if (stream->_flags & (__SERR | __SEOF)) /* Error on stream / EOF */
@@ -30,6 +31,10 @@ int __sprepread(FILE *stream)
 		stream->_p = stream->tmpp;
 		stream->_r = stream->tmpinc;
 		stream->tmpp = NULL;
+		/* left from before the ungetc(): hand it out first, or a string
+		   stream (sscanf) would end at the __SSTR test below */
+		if (stream->_r > 0)
+			return 0;
 	}
 	if (stream->_flags & __SSTR) /* it's a sscanf buffer */
 		return EOF;
