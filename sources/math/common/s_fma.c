@@ -84,11 +84,13 @@ double fma(double x, double y, double z)
 	if (nx.e >= ZEROINFNAN || ny.e >= ZEROINFNAN)
 		return x*y + z;
 	if (nz.e >= ZEROINFNAN) {
-		if (nz.e > ZEROINFNAN) { /* z==0 */
-			volatile double xy = x*y;
-			return xy;
-		}
-		return z;
+		if (nz.e == ZEROINFNAN)
+			return z;
+		/* z==0: add it exactly, so x*y rounds once with its own sign: the
+		   FPU would round x*y to extended and then to double */
+		nz.m = 0;
+		nz.e = nx.e + ny.e;
+		nz.sign = nx.sign ^ ny.sign;
 	}
 
 	/* mul: r = x*y */
