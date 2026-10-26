@@ -29,10 +29,8 @@ asm(
 #endif
 );
 
-// init rounding
-asm("fmove.l fpcr,d0");
-asm("and.w #65487,d0");
-asm("fmove.l d0,fpcr");
+/* FPCR and FPSR are cleared by __initlibraries(), after the maths
+   libraries have set FPCR. */
 
 asm(
 "	rts;"

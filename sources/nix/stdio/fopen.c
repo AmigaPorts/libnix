@@ -15,8 +15,8 @@ extern struct MinList ___filelist;
 FILE *fopen(const char *filename,const char *mode)
 { struct filenode *node = (struct filenode *)calloc(1,sizeof(*node));
   if(node!=NULL)
-  { if((node->theFILE._bf._base=(unsigned char *)malloc(BUFSIZ))!=NULL)
-    { node->theFILE._bf._size=BUFSIZ;
+  { if((node->theFILE._bf._base=(unsigned char *)malloc(*__BUFSIZE))!=NULL)
+    { node->theFILE._bf._size=*__BUFSIZE;
       node->theFILE._flags|=__SMBF|__SLBF; /* Buffer is malloc'ed */
       node->theFILE.file = -1;
       if(freopen(filename,mode,&node->theFILE)!=NULL)

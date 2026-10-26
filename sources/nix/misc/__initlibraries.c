@@ -57,6 +57,22 @@ void __initlibraries(void) {
 	}
 	if (failed)
  		  __openliberror();
+
+	/* On an FPU, the IEEE maths libraries set the whole FPCR of the task
+	 * that opens them: mathieeesingbas to $40 (round to single precision),
+	 * mathieeedoubbas to $10 (round toward zero).  A shell's commands also
+	 * share its process and inherit the FPCR and FPSR the previous one
+	 * left, trap enables and exception flags included.  Start from the
+	 * FPU's reset values, which is what C expects (Annex F.8.3): round to
+	 * nearest, extended precision, no traps, and no exception flags set.
+	 * The FPU instructions are hand-assembled because the base variant is
+	 * built for the 68000. */
+	if (SysBase->AttnFlags & AFF_68881) {
+		__asm__ volatile ("moveq #0,d0\n\t"
+				  ".short 0xf200,0x9000\n\t"	/* fmove.l d0,fpcr */
+				  ".short 0xf200,0x8800"	/* fmove.l d0,fpsr */
+				  ::: "d0");
+	}
 }
 
 void __exitlibraries(void) {

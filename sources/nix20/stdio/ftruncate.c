@@ -17,9 +17,11 @@ __stdargs int ftruncate(int d, off_t pos)
     long r;
     __chkabort();
     if((r=SetFileSize(sfd->lx_fh,pos,OFFSET_BEGINNING))!=EOF)
-      return r;
+      return 0;
     __seterrno();
+    return EOF;
   }
 
+  errno = EBADF;
   return EOF;
 }
