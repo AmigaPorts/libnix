@@ -96,10 +96,10 @@ endif
 
 # extend CFLAGS in the top-level make only: the sub-makes inherit them
 ifeq (,$(kind))
-# FAST_MATH= builds without -ffast-math, which breaks NaN, infinities and signed
+# FAST_MATH=-ffast-math builds with it, which breaks NaN, infinities and signed
 # zeros in the math functions, and the exact rounding error fma() and fmaf()
 # compute: libc-test fails many of them with it.
-FAST_MATH ?= -ffast-math
+FAST_MATH ?=
 CFLAGS += -I$(root)/sources/headers -fno-builtin $(FAST_MATH) -D__libnix__
 # The library implements the mem* functions.  Keep loop distribution from
 # replacing one of their loops with a call back into the same function.
