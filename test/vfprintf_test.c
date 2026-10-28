@@ -175,6 +175,8 @@ int main(int argc, char **argv) {
 	TESTFMT("zero with space| 0|", "% .0f", 0.0);
 	TESTFMT("zero prec 5|0.00000|", "%.5f", 0.0);
 	TESTFMT("simple 5.0|5|", "%.0f", 5.0);
+	TESTFMT("g small frac zero|0.008|", "%.10g", 0.008);
+	TESTFMT("g 0001|0.0001|", "%g", 0.0001);
 	printf("\n");
 	/* ==================================================================
 	 * SECTION 3: Fixed-point (%f) decade walk
@@ -445,6 +447,7 @@ int main(int argc, char **argv) {
 		/* High-precision long double */
 		long double pi_ld = 3.141592653589793238L;
 		TESTFMT("ld high prec|3.141592653589793238|", "%.18Lf", pi_ld);
+		TESTFMT("ld third|0.33333333333333333335|", "%.20Lf", 1.0L / 3.0L);
 	}
 	printf("\n");
 	/* ==================================================================
@@ -467,6 +470,9 @@ int main(int argc, char **argv) {
 		/* with precision */
 		TESTFMT("a 1.0 prec2|0x1.00p+0|", "%.2a", 1.0);
 		TESTFMT("a 3.14 prec|0x1.91eb851eb851fp+1|", "%.13a", 3.14);
+		TESTFMT("A 1.75|0X1.CP+0|", "%A", 1.75);
+		TESTFMT("A 0.1|0X1.999999999999AP-4|", "%A", 0.1);
+		TESTFMT("A 1.0 prec2|0X1.00P+0|", "%.2A", 1.0);
 	}
 	printf("\n");
 	/* ==================================================================

@@ -35,9 +35,11 @@ int vswprintf(wchar_t *s, size_t size, const wchar_t *format, va_list args) {
 		return -1;
 	}
 
-	if ((size_t)retval < size)
-		s[retval] = 0;
-	else if (size > 0)
-		s[size - 1] = 0;
+	if ((size_t)retval >= size) {
+	    if (size > 0)
+	        s[size - 1] = 0;
+	    return -1;
+	}
+	s[retval] = 0;
 	return retval;
 }
