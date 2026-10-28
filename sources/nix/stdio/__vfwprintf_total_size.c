@@ -186,6 +186,8 @@ int __vfwprintf_total_size(FILE *stream, const wchar_t *format, va_list args) {
 					a = va_arg(args, signed int);
 					if (a >= 0) /* negative means "unset"   */
 						preci = a;
+					else
+						flags &= ~HAS_PRECI;
 				} else {
 					preci = 0;
 					while (*ptr >= L'0' && *ptr <= L'9')
@@ -615,6 +617,7 @@ int __vfwprintf_total_size(FILE *stream, const wchar_t *format, va_list args) {
 							buffer[0] = L'0';
 							startPos = 0;
 							pos = 1;
+							const wchar_t *hexdigits = (type == L'A') ? L"0123456789ABCDEF" : L"0123456789abcdef";
 							if (is_ld) {
 								if (lu.b.exp == 0) {
 									if (lu.b.mant == 0) {
@@ -634,7 +637,7 @@ int __vfwprintf_total_size(FILE *stream, const wchar_t *format, va_list args) {
 								/* Extract 16 hex digits (64 bits) */
 								for (int i = 0; i < 16; i++) {
 								    int digit = (mant >> (60 - 4*i)) & 0xF;
-								    buffer[pos++] = L"0123456789abcdef"[digit];
+								    buffer[pos++] = hexdigits[digit];
 								}
 							} else {
 								if (!d.b.exp) {
@@ -650,7 +653,7 @@ int __vfwprintf_total_size(FILE *stream, const wchar_t *format, va_list args) {
 								/* Print 13 hex digits (52 bits) */
 								for (int i = 0; i < 13; i++) {
 								    int digit = (mant >> (48 - 4*i)) & 0xF;
-								    buffer[pos++] = L"0123456789abcdef"[digit];
+								    buffer[pos++] = hexdigits[digit];
 								}
 							}
 							type += L'P' - L'A';
@@ -709,6 +712,7 @@ int __vfwprintf_total_size(FILE *stream, const wchar_t *format, va_list args) {
 									PUSH((int)(outp - outbuffer), rpad, L'0');
 							}
 						}
+						short frac = preci;
 						/* 3. Trim trailing zeros in the digit buffer (g/G). */
 						if (killZero) {
 							int stop = pos - 1;
@@ -731,8 +735,8 @@ int __vfwprintf_total_size(FILE *stream, const wchar_t *format, va_list args) {
 						/* 5. Leading fractional zeros for small %f numbers. */
 						if (exponent < 0 && (type == L'f' || type == L'F')) {
 							int fractional_zeros = -exponent - 1; /* e.g., exp = -3 -> 2 zeros */
-							if (fractional_zeros > preci)
-								fractional_zeros = preci;
+							if (fractional_zeros > frac)
+								fractional_zeros = frac;
 							if (fractional_zeros > 0) {
 								PUSH((int)(outp - outbuffer), fractional_zeros, L'0');
 								if (!isg)
