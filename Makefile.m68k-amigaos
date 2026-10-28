@@ -107,6 +107,14 @@ CFLAGS += -fno-tree-loop-distribute-patterns
 # AmigaOS APIs take STRPTR (unsigned char) strings, so -Wpointer-sign
 # would flag every call that passes a plain char string.
 CFLAGS += -Wall -Wno-pointer-sign
+# With the gcc we build and test with, more warnings, and all of them errors.
+# Older gcc, as in the amiga6 toolchain, lacks some of these options and warns
+# differently.  WERROR= keeps them warnings.
+gcc_major := $(firstword $(subst ., ,$(shell $(CC) -dumpversion 2>/dev/null)))
+ifeq (y,$(shell test "$(gcc_major)" -ge 16 2>/dev/null && echo y))
+WERROR ?= -Werror
+CFLAGS += -Wimplicit-fallthrough -Wtype-limits -Wold-style-definition -Wstrict-prototypes $(WERROR)
+endif
 endif
 
 .PHONY: all one rest clean install install_one info
