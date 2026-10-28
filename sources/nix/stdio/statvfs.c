@@ -55,10 +55,8 @@ statvfs(const char *name, struct statvfs *buf)
 		return -1;
 	}
 
-#ifdef IXPATHS
-	if((name=__amigapath(name))==NULL)
-	return -1;
-#endif
+	if ((name = __amigapath(name)) == NULL)
+		return -1;
 
 	/* Match stat(): avoid DOS requesters while probing the volume. */
 	wptr = &((struct Process *)FindTask(NULL))->pr_WindowPtr;

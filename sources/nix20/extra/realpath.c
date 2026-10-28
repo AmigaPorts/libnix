@@ -13,10 +13,9 @@ char *realpath(const char *name, char *resolved) {
 	BPTR lock;
 	char *buf;
 
-#ifdef IXPATHS
-	if((name=__amigapath(name))==NULL)
-	return NULL;
-#endif
+	if ((name = __amigapath(name)) == NULL)
+		return NULL;
+
 	lock = Lock((CONST_STRPTR)name, ACCESS_READ);
 	if (lock == 0) {
 		__seterrno();
