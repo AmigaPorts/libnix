@@ -11,7 +11,8 @@ int truncate(const char *path, off_t length) {
 #ifdef IXPATHS
 	if((path=__amigapath(path))==NULL)
 	return -1;
-#endif	fd = Open((CONST_STRPTR)path, MODE_OLDFILE);
+#endif
+	fd = Open((CONST_STRPTR)path, MODE_OLDFILE);
 	if (fd != 0) {
 		retval = (SetFileSize(fd, length, OFFSET_BEGINNING) >= 0) ? 0 : -1;
 		Close(fd);
