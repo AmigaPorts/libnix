@@ -107,8 +107,10 @@ DIR* opendir(const char *dirname) {
 				dirp->d_eac->eac_MatchString=NULL;
 				dirp->d_eac->eac_MatchFunc=NULL;
 #endif
-				if (Examine((BPTR)dirp->d_lock, (struct FileInfoBlock *)&dirp->d_info)) {
-					if ( ((struct FileInfoBlock *)&dirp->d_info)->fib_EntryType >= 0)
+				/* the char view of the union, which may alias the FileInfoBlock */
+				struct FileInfoBlock *fib = (struct FileInfoBlock *)dirp->d_ead;
+				if (Examine((BPTR)dirp->d_lock, fib)) {
+					if (fib->fib_EntryType >= 0)
 						return dirp;
 				}
 				FreeVec(dirp->d_eac);

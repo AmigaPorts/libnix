@@ -175,7 +175,7 @@ static inline int lx_select(int nfd, fd_set *ifd, fd_set *ofd, fd_set *efd, stru
        * signals (but want at least one signal set!)
        */
       if (network_installed) {
-        int res;
+        int res __attribute__((unused)); /* only DB() prints it */
         DB( BUG("Calling _net_select, signals are %lx\n", wait_sigs); )
         res = net_select(net_nfds, &netin, &netout, &netexc, NULL, &wait_sigs);
         recv_wait_sigs = wait_sigs;

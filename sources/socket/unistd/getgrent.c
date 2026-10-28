@@ -149,7 +149,7 @@ struct group* getgrent(void) {
 			nextgid = -2;
 			if ((name = getenv("GROUP")))
 				return getgrnam(name);
-			/* no break */
+			/* fall through */
 		case (gid_t) (-2):
 			nextgid = -1;
 			return (struct group*) &builtin_nogroup;

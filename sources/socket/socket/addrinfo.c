@@ -8,19 +8,7 @@ extern struct Library * SocketBase;
 #define __freeaddrinfo(ai) ({ \
   struct addrinfo * _freeaddrinfo_ai = (ai); \
   { \
-  register struct Library * const __freeaddrinfo__bn __asm("a6") = (struct Library *) (BSDSOCKET_BASE_NAME); register int _d1 __asm("d1"); register int _a0 __asm("a0"); register int _a1 __asm("a1");\
-  register struct addrinfo * __freeaddrinfo_ai __asm("a0") = (_freeaddrinfo_ai); \
-  __asm volatile ("jsr a6@(-804:W)" \
-  : \
-  : "r"(__freeaddrinfo__bn), "r"(__freeaddrinfo_ai) \
-  : "d0", "d1", "a1", "fp0", "fp1", "cc", "memory"); \
-  } \
-})
-
-#define __freeaddrinfo(ai) ({ \
-  struct addrinfo * _freeaddrinfo_ai = (ai); \
-  { \
-  register struct Library * const __freeaddrinfo__bn __asm("a6") = (struct Library *) (BSDSOCKET_BASE_NAME); register int _d1 __asm("d1"); register int _a0 __asm("a0"); register int _a1 __asm("a1");\
+  register struct Library * const __freeaddrinfo__bn __asm("a6") = (struct Library *) (BSDSOCKET_BASE_NAME); \
   register struct addrinfo * __freeaddrinfo_ai __asm("a0") = (_freeaddrinfo_ai); \
   __asm volatile ("jsr a6@(-804:W)" \
   : \

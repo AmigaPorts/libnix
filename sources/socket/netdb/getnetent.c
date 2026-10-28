@@ -119,7 +119,7 @@ struct netent *getnetent(void)
           *q = NULL; return &lss->lx_net;
         }
       }
-      /* no break */
+      /* fall through */
     default:
       return NULL;
     break;
