@@ -11,12 +11,8 @@ int rename(const char *old,const char *new)
   int ret=-1;
   BPTR lnew;
 
-#ifdef IXPATHS
-	if((old=__amigapath(old))==NULL)
-		return -1;
-	if((new=__amigapath(new))==NULL)
-		return -1;
-#endif
+  if((old=__amigapath(old))==NULL || (new=__amigapath(new))==NULL)
+    return -1;
 
   lnew=Lock((CONST_STRPTR)new,SHARED_LOCK);
   if(lnew) {

@@ -17,10 +17,8 @@ int chdir(const char *path)
   BPTR fl;
   int ret;
 
-#ifdef IXPATHS
-	if((path=__amigapath(path))==NULL)
-	return -1;
-#endif
+  if((path=__amigapath(path))==NULL)
+    return -1;
   if ((fl=Lock((STRPTR)path,SHARED_LOCK)))
   {
     UnLock(CurrentDir(fl)); ret=0;
