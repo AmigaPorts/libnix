@@ -117,7 +117,7 @@ struct protoent *getprotoent(void)
           return &lss->lx_proto;
         }
       }
-      /* no break */
+      /* fall through */
     default:
       return NULL;
     break;

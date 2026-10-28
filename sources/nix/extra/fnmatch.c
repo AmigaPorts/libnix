@@ -151,7 +151,7 @@ int fnmatch(const char *pattern, const char *string, int flags) {
 				pattern = start;
 				p = *pattern;
 			}
-				/* no break */
+				/* fall through */
 			case '\\':
 				// recompare because of fall through - could be something else
 				if (p == '\\') {
@@ -159,7 +159,7 @@ int fnmatch(const char *pattern, const char *string, int flags) {
 						p = *++pattern;
 					}
 				}
-				/* no break */
+				/* fall through */
 			default:
 				// to character compare
 				if (FLAG_CASEFOLD) {

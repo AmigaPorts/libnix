@@ -116,7 +116,7 @@ struct servent *getservent(void)
           *q = NULL; return &lss->lx_serv;
         }
       }
-      /* no break */
+      /* fall through */
     default:
       return NULL;
     break;

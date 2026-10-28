@@ -75,7 +75,7 @@ void __initdetach(void)
          * Maybe the 3 movel are a bit too cautious, but they ARE working
          */
         asm("movel %0,sp;movel %1,a6;movel %2,a0;moveql #0,d0;jmp a6@(-570)"::
-            "r"(stack),"r"(SysBase),"r"(sema):"sp","a6","a0");
+            "r"(stack),"r"(SysBase),"r"(sema):"a6","a0");
       }
 
       ReleaseSemaphore(sema); /* Again only caution - you never know */
