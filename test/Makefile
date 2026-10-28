@@ -52,7 +52,9 @@ MANUAL_TESTS = \
 	popen \
 	setlocale_threads
 
-LIB_CFLAGS = -I../sources/headers -fno-builtin -ffast-math -D__libnix__ -fno-tree-loop-distribute-patterns
+# The library's flags, FAST_MATH as in Makefile.m68k-amigaos.
+FAST_MATH ?=
+LIB_CFLAGS = -I../sources/headers -fno-builtin $(FAST_MATH) -D__libnix__ -fno-tree-loop-distribute-patterns
 
 # The signed-zero assertions compare bits, so the tests themselves are built
 # without fast-math and builtins.
