@@ -144,7 +144,9 @@ int __vfwprintf_total_size(FILE *stream, const wchar_t *format, va_list args) {
 			wchar_t buffer1[4]; /* sign / radix prefix slot */
 			wchar_t buffer[REQUIREDBUFFER + 8];
 			wchar_t outbuffer[FLOAT_OUTBUF_MIN]; /* Float-path buffered output. */
+#ifdef FULL_SPECIFIERS
 			wchar_t *outp = outbuffer;
+#endif
 			wchar_t *buffer2 = buffer;
 			size_t size1 = 0, size2 = 0;
 			const wchar_t *ptr = format + 1;
