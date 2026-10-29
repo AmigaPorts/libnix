@@ -6,7 +6,7 @@
  *  Provides:
  *    - bit-pattern views of binary64 and Motorola 80-bit extended
  *    - software-only FP classification (no FPU compares, no libm)
- *    - signless 80-bit arithmetic (multiply, multiply-by-10)
+ *    - signless 96-bit mantissa arithmetic (multiply, multiply-by-10)
  *    - base-10 digit extractor for long division
  *    - decimal exponent seeding (pow10_ld) with precomputed tables
  *
@@ -15,10 +15,18 @@
  *  medium/large routines) and by vfprintf.c / vfwprintf.c (which consume the
  *  inline classifiers and comparison helpers and call the out-of-line ones).
  *
- *  Layout assumptions (Motorola 80-bit extended, big-endian, packed to 96 bit):
+ *  Two views of long double coexist here:
+ *
+ *    Native Motorola 80-bit extended, big-endian, packed into 96 bits:
  *      bytes 0-1  : sign | 15-bit biased exponent (bias 16383)
  *      bytes 2-3  : padding -- completely ignored by the FPU
- *      bytes 4-11 : 64-bit mantissa with EXPLICIT integer bit in b63
+ *      bytes 4-11 : 64-bit mantissa, integer bit explicit in b63
+ *      (union _ld_bits, used by the classifiers)
+ *
+ *    Internal working format, sign stripped, 96-bit mantissa:
+ *      word  0    : 16-bit biased exponent (bias 16383)
+ *      words 1-3  : 96-bit mantissa, integer bit explicit in b95
+ *      (LDL, used by all arithmetic and digit extraction)
  *
  * --------------------------------------------------------------------------
  *  Copyright and license
@@ -66,18 +74,21 @@ union _d_bits {
 };
 
 /*
- * m68k extended precision ("long double"):
+ * Native m68k extended precision ("long double"), 12 bytes (2 + 2 + 8):
  *
- *   bytes 0-1 : s eeeeeeeeeeeeeee      sign:1, exp:15 (bias 16383)
- *   bytes 2-3 : <pad>                  hardware never reads these bits
- *   bytes 4-11: 64-bit mantissa, integer bit explicitly stored in b63
+ *   bytes 0-1  : s eeeeeeeeeeeeeee      sign:1, exp:15 (bias 16383)
+ *   bytes 2-3  : <pad>                  hardware never reads these bits
+ *   bytes 4-11 : 64-bit mantissa, integer bit explicit in b63
  *
  * Special patterns:
  *   inf  : exp $7FFF, mant $8000000000000000
  *   NaN  : exp $7FFF, any other mantissa  (b62 = quiet flag)
  *   zero : exp 0, mant 0                  (both polarities possible)
+ *
+ * The internal working format (LDL, below) widens this to a 96-bit
+ * mantissa by adding a low 32-bit word and moving the integer bit to b95.
  */
-typedef union _ld_bits {
+union _ld_bits {
 	long double ld;
 	struct {
 		unsigned sign : 1;
@@ -85,17 +96,31 @@ typedef union _ld_bits {
 		unsigned pad  : 16;   /* never interpret me */
 		unsigned long long mant : 64;
 	} b;
+};
+
+/*
+ * Internal working format.  Signless, exponent in word 0, 96-bit mantissa
+ * in the three 32-bit words that follow:
+ *
+ *   l.exp    : 16-bit biased exponent (bias 16383)
+ *   l.high   : mantissa bits 95..64, integer bit explicit in b31
+ *   l.middle : mantissa bits 63..32
+ *   l.low    : mantissa bits 31..0
+ *
+ * The `s` view exposes the same storage as six 16-bit words, for the
+ * multiply routines that emit 16-bit limbs.
+ */
+typedef union _internal {
 	struct {
 		unsigned short exp;
-		unsigned short pad;
-		unsigned long middle;
-		unsigned long lower;
+		unsigned long high;   /* bits 95..64 */
+		unsigned long middle; /* bits 63..32 */
+		unsigned long low;    /* bits 31..0  */
 	} l;
 	struct {
-		unsigned long upper;
-		unsigned long middle;
-		unsigned long lower;
-	} w;
+		unsigned short exp;
+		unsigned short word[6];
+	} s;
 } LDL;
 
 /* ======================================================================
@@ -147,10 +172,11 @@ static inline int _ld_iszero(union _ld_bits u) {
 /* ======================================================================
  * SECTION 3: comparison helpers
  *
- * Lexicographic comparison of an LDL against a hardcoded 80-bit constant:
+ * Lexicographic comparison of an LDL against a hardcoded 96-bit constant:
  *   1. Compare biased exponent.
- *   2. If equal, compare upper 32 mantissa bits.
- *   3. If equal, compare lower 32 mantissa bits.
+ *   2. If equal, compare mantissa bits 95..64.
+ *   3. If equal, compare mantissa bits 63..32.
+ *   4. If equal, compare mantissa bits 31..0.
  *
  * Assumptions:
  *   - LDL is signless and already normalized.
@@ -165,39 +191,42 @@ static inline int _ld_iszero(union _ld_bits u) {
  * ==================================================================== */
 static inline int __LDL_cmp_const(const LDL *a,
                                   unsigned short bexp,
+                                  unsigned long  bhigh,
                                   unsigned long  bmid,
                                   unsigned long  blow)
 {
 	if (a->l.exp != bexp)
 		return (a->l.exp < bexp) ? -1 : 1;
+	if (a->l.high != bhigh)
+		return (a->l.high < bhigh) ? -1 : 1;
 	if (a->l.middle != bmid)
 		return (a->l.middle < bmid) ? -1 : 1;
-	if (a->l.lower != blow)
-		return (a->l.lower < blow) ? -1 : 1;
+	if (a->l.low != blow)
+		return (a->l.low < blow) ? -1 : 1;
 	return 0;
 }
 
 /* Compare against 10.0:
- *   biased exp 0x4002 (2^3), mantissa 0xA0000000 00000000 (1.25)
+ *   biased exp 0x4002 (2^3), 96-bit mantissa 0xA0000000 00000000 00000000
  */
 static inline int __LDL_cmp_10(const LDL *a) {
-	return __LDL_cmp_const(a, 0x4002, 0xA0000000UL, 0x00000000UL);
+	return __LDL_cmp_const(a, 0x4002, 0xA0000000UL, 0x00000000UL, 0x00000000UL);
 }
 
 /* Compare against 5.0, with a sub-LSB epsilon that absorbs the truncation
- * drift accumulated by the multiply/scaling steps.  The nominal pattern is
- * 0x4001/0xA0000000/0x00000000; the threshold is dropped to
- * 0x9FFFFFFF/0xFFFF0000 so exact half-way ties still round up.
+ * drift accumulated by the multiply/scaling steps.  The threshold is
+ * 0x9FFFFFFF_FFFF0000_00000000 instead of the exact 0xA0000000_00000000_00000000,
+ * so exact half-way ties still round up.
  */
 static inline int __LDL_cmp_5(const LDL *a) {
-	return __LDL_cmp_const(a, 0x4001, 0x9fffffffUL, 0xffff0000UL);
+	return __LDL_cmp_const(a, 0x4001, 0x9fffffffUL, 0xffff0000UL, 0x00000000UL);
 }
 
 /* Compare against 1.0:
- *   biased exp 0x3FFF (2^0), mantissa 0x80000000 00000000 (1.0)
+ *   biased exp 0x3FFF (2^0), 96-bit mantissa 0x80000000 00000000 00000000
  */
 static inline int __LDL_cmp_1(const LDL *a) {
-	return __LDL_cmp_const(a, 0x3FFF, 0x80000000UL, 0x00000000UL);
+	return __LDL_cmp_const(a, 0x3FFF, 0x80000000UL, 0x00000000UL, 0x00000000UL);
 }
 
 /* ======================================================================
@@ -207,53 +236,42 @@ static inline int __LDL_cmp_1(const LDL *a) {
  * several are called from loops.  A single external copy keeps the two
  * printf engines (narrow and wide) from duplicating ~300 instructions each
  * in their .text.  The call/return overhead is a few percent of the body
- * cost, which is invisible next to the 80-bit arithmetic being performed.
+ * cost, which is invisible next to the 96-bit arithmetic being performed.
  * ==================================================================== */
 
-/* Unpack a binary64 into the local 64-bit LDL view.  Handles denormals by
+/* Unpack a binary64 into the local 96-bit LDL view.  Handles denormals by
  * normalizing into the explicit-integer-bit layout; restores the implicit
- * hidden bit for normals; converts the exponent bias 1023 -> 16383. */
+ * hidden bit for normals; converts the exponent bias 1023 -> 16383.
+ * The low 32 bits of the 96-bit mantissa are always zero for a double. */
 LDL __LDL_from_double(double d);
 
 /* Unpack an m68k extended-precision long double.  Copies the explicit bits
- * straight through; normalizes subnormals so the integer bit lands in b63. */
+ * straight through; normalizes subnormals so the integer bit lands in b95.
+ * The native mantissa has only 64 significant bits, so the low 32 bits of
+ * the 96-bit LDL are always zero after the shift. */
 LDL __LDL_from_long_double(long double ld);
 
-/* Full 64x64 -> 128-bit mantissa multiply, normalize to integer-bit-at-63,
- * add unbiased exponents, round to nearest-even.  Inputs are assumed normal
- * and signless; zero is handled; no subnormal or overflow generation.
+/* Full 96x96 -> 192-bit mantissa multiply, normalize to integer-bit-at-95,
+ * add unbiased exponents, round to nearest-even at the 96-bit boundary.
+ * Inputs are assumed normal and signless; zero is handled; no subnormal or
+ * overflow generation.
  *
- * When the target has a 68881/68882, the multiply is a single fmul.x.
- * Exposing that as an inline keeps pow10_ld's loop free of call/return
- * overhead around each of its up to 13 iterations.  When the FPU is
- * absent, the software body (tens of instructions, called from loops) is
- * kept out-of-line and shared between the two printf engines. */
-#ifdef __mc68881__
-static inline LDL __LDL_mul(LDL a, LDL b)
-{
-	LDL r;
-	if (a.l.middle == 0)
-		return a;
-	if (b.l.middle == 0)
-		return b;
-	r.ld = a.ld * b.ld;
-	return r;
-}
-#else
+ * Cannot use the FPU: the FPU only does 80-bit extended, and the point of
+ * the 96-bit working format is to keep enough precision for the extraction
+ * chain not to drift by a few ULPs at the last digit. */
 LDL __LDL_mul(LDL a, LDL b);
-#endif
 
 /* Fast multiply by 10 using the identity 10 = 8 + 2 = (1 + 1/4) * 8,
- * i.e. shifts and adds on the 64-bit mantissa, then bias the exponent by 3. */
+ * i.e. shifts and adds on the 96-bit mantissa, then bias the exponent by 3. */
 LDL __LDL_mul_10(LDL x);
 
 /* In-place multiply by 10 plus extraction of the leading base-10 digit.
  * Returns the digit [0..9]; x is updated to the fractional remainder,
- * renormalized so the integer bit is at position 63 of the mantissa. */
+ * renormalized so the integer bit is at position 95 of the mantissa. */
 int __LDL_mul_10_extract(LDL *x);
 
-/* Compute 10^n in 80-bit extended format by decomposing |n| into bits and
- * multiplying by the corresponding precomputed 10^(2^bit) table entry.
+/* Compute 10^n in the 96-bit working format by decomposing |n| into bits
+ * and multiplying by the corresponding precomputed 10^(2^bit) table entry.
  * Positive n uses the 10^(+2^bit) table; negative n the 10^(-2^bit) one. */
 LDL pow10_ld(LDL result, int n);
 
@@ -261,7 +279,7 @@ LDL pow10_ld(LDL result, int n);
  * SECTION 5: shared constants and tuning knobs
  * ==================================================================== */
 
-/* Working type for all float formatting: the 80-bit extended layout.  This
+/* Working type for all float formatting: the 96-bit internal layout.  This
  * is what the digit extractor and the multiply helpers operate on. */
 typedef LDL work_float_t;
 

@@ -686,6 +686,8 @@ int __vfwprintf_total_size(FILE *stream, const wchar_t *format, va_list args) {
 						if (width > 0 && !(flags & LALIGNFLAG))
 							pieces[0].c = L' ';
 					} else {
+						unsigned short frac = preci;
+
 						/* 2. Integer part. */
 						if (exponent < 0 && (type == L'f' || type == L'F')) {
 							/* For small fixed-point numbers (e.g., 0.00123), print the mandatory leading '0' */
@@ -714,7 +716,6 @@ int __vfwprintf_total_size(FILE *stream, const wchar_t *format, va_list args) {
 									PUSH((int)(outp - outbuffer), rpad, L'0');
 							}
 						}
-						short frac = preci;
 						/* 3. Trim trailing zeros in the digit buffer (g/G). */
 						if (killZero) {
 							int stop = pos - 1;

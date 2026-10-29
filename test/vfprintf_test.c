@@ -447,7 +447,7 @@ int main(int argc, char **argv) {
 		/* High-precision long double */
 		long double pi_ld = 3.141592653589793238L;
 		TESTFMT("ld high prec|3.141592653589793238|", "%.18Lf", pi_ld);
-		TESTFMT("ld third|0.33333333333333333335|", "%.20Lf", 1.0L / 3.0L);
+		TESTFMT("ld third|0.33333333333333333334|", "%.20Lf", 1.0L / 3.0L);
 	}
 	printf("\n");
 	/* ==================================================================
@@ -792,7 +792,7 @@ int main(int argc, char **argv) {
 
 	// --- special tests
 	TESTFMT("ld small|0.00000000000000000010|", "%.20Lf", 0.000000000000000000095L);
-	TESTFMT("ld big|123456790.0000000000|", "%.10Lf", 123456789.99999999995L);
+	TESTFMT("ld big|123456789.9999999999|", "%.10Lf", 123456789.99999999995L);
 	TESTFMT("ld exp|1.234567890123456789e+00|", "%.18Le", 1.234567890123456789L);
 
 	printf("\n");

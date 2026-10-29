@@ -541,6 +541,7 @@ int __vfprintf_total_size(FILE *stream, const char *format, va_list args) {
 							for (; pos <= digits_to_compute && pos < FLOAT_DIGBUF; ++pos) {
 								buffer[pos] = '0' + __LDL_mul_10_extract(&ld_val);
 							}
+
 							/* Perform rounding */
 							if (__LDL_cmp_5(&ld_val) >= 0) {
 								int tpos = pos - 1;
@@ -646,6 +647,8 @@ int __vfprintf_total_size(FILE *stream, const char *format, va_list args) {
 						if (width > 0 && !(flags & LALIGNFLAG))
 							pieces[0].c = ' ';
 					} else {
+						unsigned short frac = preci;
+
 						/* 2. Integer part. */
 						if (exponent < 0 && (type == 'f' || type == 'F')) {
 							/* For small fixed-point numbers (e.g., 0.00123), print the mandatory leading '0' */
@@ -674,7 +677,6 @@ int __vfprintf_total_size(FILE *stream, const char *format, va_list args) {
 									PUSH((int)(outp - outbuffer), rpad, '0');
 							}
 						}
-						short frac = preci;
 						/* 3. Trim trailing zeros in the digit buffer (g/G). */
 						if (killZero) {
 							int stop = pos - 1;
