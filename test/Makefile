@@ -125,7 +125,7 @@ stack_SRCS = ../sources/misc/swapstack.c
 strto_SRCS = $(addprefix ../sources/nix/stdlib/,strtol.c strtoul.c strtoll.c strtoull.c wcstol.c)
 strto_CFLAGS = -fno-builtin
 
-wprintf_SRCS = ../sources/nix/stdio/__vwfprintf_total_size.c ../sources/nix/stdio/vswprintf.c
+wprintf_SRCS = ../sources/nix/stdio/__vfwprintf_total_size.c ../sources/nix/stdio/vswprintf.c
 wprintf_LIBFLAGS = -DFULL_SPECIFIERS
 wprintf_LIBS = -lm
 

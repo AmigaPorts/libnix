@@ -221,6 +221,9 @@ static inline int __LDL_cmp_10(const LDL *a) {
 static inline int __LDL_cmp_5(const LDL *a) {
 	return __LDL_cmp_const(a, 0x4001, 0x9fffffffUL, 0xffff0000UL, 0x00000000UL);
 }
+static inline int __LDL_cmp_5U(const LDL *a) {
+	return __LDL_cmp_const(a, 0x4001, 0xA0000000UL, 0x00000000UL, 0x00000000UL);
+}
 
 /* Compare against 1.0:
  *   biased exp 0x3FFF (2^0), 96-bit mantissa 0x80000000 00000000 00000000
