@@ -142,7 +142,6 @@ int __vfprintf_total_size(FILE *stream, const char *format, va_list args) {
 			char buffer[REQUIREDBUFFER + 8];
 #ifdef FULL_SPECIFIERS
 			char outbuffer[FLOAT_OUTBUF_MIN]; /* Float-path buffered output. */
-#ifdef FULL_SPECIFIERS
 			char *outp = outbuffer;
 #endif
 			char *buffer2 = buffer;
