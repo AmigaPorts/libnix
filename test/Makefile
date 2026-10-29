@@ -44,6 +44,8 @@ TARGET_TESTS = \
 	sscanf \
 	stack \
 	strto \
+	vfprintf_test \
+	vfwprintf_test \
 	wprintf
 
 # Need what the simulators lack: PIPE: and a shell (popen), Exec tasks
@@ -115,13 +117,24 @@ mathfp_CFLAGS = -fno-builtin
 mathfp_LIBS = -lm
 
 # libm builds the printf family with float formatting.
-printf_SRCS = ../sources/nix/stdio/__vfprintf_total_size.c ../sources/nix/stdio/vsprintf.c
+printf_SRCS = ../sources/nix/stdio/__vfprintf_total_size.c ../sources/nix/stdio/vsprintf.c ../sources/math/stdio/ami_printf_math.c
 printf_LIBFLAGS = -DFULL_SPECIFIERS
 printf_LIBS = -lm
 
 # The startup code of -ramiga-lib, linked into a program.
 romtag_SRCS = ../sources/startup/libinit.c
 romtag_CFLAGS = -I../sources/headers
+
+# bebbo's self-tests of the narrow and wide printf engines.
+vfprintf_test_SRCS = ../sources/nix/stdio/__vfprintf_total_size.c ../sources/math/stdio/ami_printf_math.c
+vfprintf_test_LIBFLAGS = -DFULL_SPECIFIERS
+vfprintf_test_CFLAGS = -I../sources/headers -DFULL_SPECIFIERS
+vfprintf_test_LIBS = -lm
+
+vfwprintf_test_SRCS = $(addprefix ../sources/nix/stdio/,__vfwprintf_total_size.c vswprintf.c vfwprintf.c wprintf.c) ../sources/math/stdio/ami_printf_math.c
+vfwprintf_test_LIBFLAGS = -DFULL_SPECIFIERS
+vfwprintf_test_CFLAGS = -I../sources/headers -DFULL_SPECIFIERS
+vfwprintf_test_LIBS = -lm
 
 sscanf_SRCS = $(addprefix ../sources/nix/stdio/,sscanf.c vsscanf.c vfscanf.c __srget.c)
 
@@ -130,7 +143,7 @@ stack_SRCS = ../sources/misc/swapstack.c
 strto_SRCS = $(addprefix ../sources/nix/stdlib/,strtol.c strtoul.c strtoll.c strtoull.c wcstol.c)
 strto_CFLAGS = -fno-builtin
 
-wprintf_SRCS = ../sources/nix/stdio/__vwfprintf_total_size.c ../sources/nix/stdio/vswprintf.c
+wprintf_SRCS = $(addprefix ../sources/nix/stdio/,__vfwprintf_total_size.c vswprintf.c vfwprintf.c wprintf.c) ../sources/math/stdio/ami_printf_math.c
 wprintf_LIBFLAGS = -DFULL_SPECIFIERS
 wprintf_LIBS = -lm
 
