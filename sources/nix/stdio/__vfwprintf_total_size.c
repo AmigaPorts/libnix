@@ -87,8 +87,8 @@ extern int __vfwprintf_total_size(FILE *stream, const wchar_t *fmt, va_list args
  */
 #define FLOAT_DIGBUF   (LD_DIGS + 6)                /* digit buffer for %f/%e/%g    */
 #define FLOAT_OUTBUF   (FLOAT_DIGBUF + 24)          /* + sign, "0x", dot, exponent  */
-#if FLOAT_OUTBUF < 64
-# define FLOAT_OUTBUF_MIN 64
+#if FLOAT_OUTBUF < 128
+# define FLOAT_OUTBUF_MIN 128
 #else
 # define FLOAT_OUTBUF_MIN FLOAT_OUTBUF
 #endif
@@ -140,11 +140,14 @@ int __vfwprintf_total_size(FILE *stream, const wchar_t *format, va_list args) {
 			unsigned short preci = 0x7fff; /* Sentinel value: no precision was specified. */
 			short flags = 0;
 			wchar_t type;
+			char orig_type;
 			wchar_t subtype = L'i';
 			wchar_t buffer1[4]; /* sign / radix prefix slot */
 			wchar_t buffer[REQUIREDBUFFER + 8];
 			wchar_t outbuffer[FLOAT_OUTBUF_MIN]; /* Float-path buffered output. */
+#ifdef FULL_SPECIFIERS			
 			wchar_t *outp = outbuffer;
+#endif			
 			wchar_t *buffer2 = buffer;
 			size_t size1 = 0, size2 = 0;
 			const wchar_t *ptr = format + 1;
@@ -204,7 +207,7 @@ int __vfwprintf_total_size(FILE *stream, const wchar_t *format, va_list args) {
 					++ptr, ++subtype;
 			} else
 				subtype = 0;
-			type = *ptr++;
+			orig_type = type = *ptr++;
 			switch (type) {
 			/* ========================================================
 			 * Integer family: d i o p u x X

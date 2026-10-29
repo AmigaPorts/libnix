@@ -5,5 +5,7 @@
 #include "stdio.h"
 
 wint_t fputwc(wchar_t wc, FILE *fp) {
-	return fwrite(&wc, 1, sizeof(wchar_t), fp);
+	if (1 == fwrite(&wc, sizeof(wchar_t), 1, fp))
+		return wc;
+	return WEOF;
 }

@@ -140,8 +140,8 @@ int __vfprintf_total_size(FILE *stream, const char *format, va_list args) {
 			char subtype = 'i';
 			char buffer1[4]; /* sign / radix prefix slot */
 			char buffer[REQUIREDBUFFER + 8];
-			char outbuffer[FLOAT_OUTBUF_MIN]; /* Float-path buffered output. */
 #ifdef FULL_SPECIFIERS
+			char outbuffer[FLOAT_OUTBUF_MIN]; /* Float-path buffered output. */
 			char *outp = outbuffer;
 #endif
 			char *buffer2 = buffer;
