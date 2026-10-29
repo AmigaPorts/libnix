@@ -222,7 +222,7 @@ struct passwd *getpwent(void)
           nextuid = -2;
           if ((name = (char *)getlogin()))
             return getpwnam(name);
-            /* no break */
+            /* fall through */
         case (uid_t)(-2):
           nextuid = -1;
           return (struct passwd *)&builtin_nobody;

@@ -157,7 +157,7 @@ static char *__getlocalename(size_t a, size_t b) {
 static char *__setlocale(size_t a, size_t b, const char *name) {
 	size_t i;
 	struct Locale *vec[5];
-	char *string, *s1, *s2, c;
+	char *string, *s1 __attribute__((unused)), *s2, c; /* s1 is unused with __KICK13__ */
 
 	if ((string = strdup(name)) == NULL)
 		return NULL;
@@ -250,7 +250,7 @@ static char *__setlocale(size_t a, size_t b, const char *name) {
 	}
 
 	if (__localevec[LC_NUMERIC - 1] != NULL) {
-		struct Locale *locale = __localevec[LC_NUMERIC - 1];
+		struct Locale *locale __attribute__((unused)) = __localevec[LC_NUMERIC - 1]; /* unused with __KICK13__ */
 #ifndef __KICK13__
 		__lconv.decimal_point = (char*) locale->loc_DecimalPoint;
 #else

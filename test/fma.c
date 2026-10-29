@@ -38,6 +38,11 @@ int main(void)
 
   r = fma(0x1p-1022, 0.5, 0.0);
   check(r == 0x1p-1023, "fma(2^-1022, 0.5, 0) == 2^-1023 (subnormal)");
+  /* z == 0: x * y rounded once, not to extended and then to double */
+  r = fma(0x1.27365a6456ba5p+0, 0x1.63fdaf7759a4fp+0, 0.0);
+  check(r == 0x1.9a84ea6842dcdp+0, "fma(x, y, 0) rounds x * y once");
+  r = fma(-0x1p-600, 0x1p-600, 0.0);
+  check(r == 0.0 && signbit(r), "fma(-2^-600, 2^-600, +0) == -0");
   r = fma(one, 0.0, -0.0);
   check(r == 0.0 && !signbit(r), "fma(1, 0, -0) == +0");
   r = fma(-one, 0.0, -0.0);

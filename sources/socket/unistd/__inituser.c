@@ -163,7 +163,7 @@ int initgroups(const char *name, gid_t basegid)
     return UG_initgroups(name,basegid);
 
   /* parameter check */
-  if (!name || basegid < 0) {
+  if (!name) {
     errno = EFAULT; return -1;
   }
 
