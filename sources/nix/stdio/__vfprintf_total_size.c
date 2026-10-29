@@ -136,11 +136,13 @@ int __vfprintf_total_size(FILE *stream, const char *format, va_list args) {
 			unsigned short preci = 0x7fff; /* Sentinel value: no precision was specified. */
 			short flags = 0;
 			char type;
+			char orig_type;
 			char subtype = 'i';
 			char buffer1[4]; /* sign / radix prefix slot */
 			char buffer[REQUIREDBUFFER + 8];
 #ifdef FULL_SPECIFIERS
 			char outbuffer[FLOAT_OUTBUF_MIN]; /* Float-path buffered output. */
+#ifdef FULL_SPECIFIERS
 			char *outp = outbuffer;
 #endif
 			char *buffer2 = buffer;
@@ -202,7 +204,7 @@ int __vfprintf_total_size(FILE *stream, const char *format, va_list args) {
 					++ptr, ++subtype;
 			} else
 				subtype = 0;
-			type = *ptr++;
+			orig_type = type = *ptr++;
 			switch (type) {
 			/* ========================================================
 			 * Integer family: d i o p u x X
@@ -282,7 +284,8 @@ int __vfprintf_total_size(FILE *stream, const char *format, va_list args) {
 								/* Precision specified and value non-zero: add prefix if needed */
 								if (size1 < sizeof(buffer1)) {
 									buffer1[size1++] = '0';
-									--preci;
+									if (preci > 0)
+										--preci;
 								}
 							}
 							/* If v == 0, don't add prefix - just let the digit loop output "0" */
@@ -468,7 +471,8 @@ int __vfprintf_total_size(FILE *stream, const char *format, va_list args) {
 					if (width > 0 && !(flags & LALIGNFLAG)) {
 						int pad_at = (pad == '0' && sign != 0) ? 1 : 0;
 						pieces[npieces++] = (struct piece){ .startPos = pad_at, .count = 0, .c = pad };
-					}
+					} else
+						pieces[npieces++] = (struct piece){ .startPos = 0, .count = 0, .c = pad };
 
 					if (preci == 0x7fff) {
 						if (type == 'f' || type == 'F' || type == 'e' || type == 'E' || type == 'g' || type == 'G') {
@@ -541,29 +545,34 @@ int __vfprintf_total_size(FILE *stream, const char *format, va_list args) {
 							for (; pos <= digits_to_compute && pos < FLOAT_DIGBUF; ++pos) {
 								buffer[pos] = '0' + __LDL_mul_10_extract(&ld_val);
 							}
-
 							/* Perform rounding */
 							if (__LDL_cmp_5(&ld_val) >= 0) {
 								int tpos = pos - 1;
-								while (tpos > 0) {
-									if (++buffer[tpos] <= '9')
+								do { // while (0);
+									// even number
+									if (0 == (buffer[tpos] & 1) && __LDL_cmp_5U(&ld_val) <= 0)
 										break;
-									buffer[tpos--] = '0';
-								}
-								/* Handle carry overflow (e.g., 9.99 -> 10.00 or 0.099 -> 0.100) */
-								if (tpos == 0) {
-									startPos = 0;
-									buffer[0] = '1';
-									exponent++; /* Exponent shifts up globally for all format paths */
-									if (exponent > 0) {
-										++leading;
-										++ digits_to_compute;
+
+									while (tpos > 0) {
+										if (++buffer[tpos] <= '9')
+											break;
+										buffer[tpos--] = '0';
 									}
-								} else if (exponent + preci < 0 && buffer[tpos] == '5') {
-									startPos = 0;
-									buffer[0] = '1';
-									exponent++; /* Exponent shifts up globally for all format paths */
-								}
+									/* Handle carry overflow (e.g., 9.99 -> 10.00 or 0.099 -> 0.100) */
+									if (tpos == 0) {
+										startPos = 0;
+										buffer[0] = '1';
+										exponent++; /* Exponent shifts up globally for all format paths */
+										if (exponent > 0) {
+											++leading;
+											++ digits_to_compute;
+										}
+									} else if (exponent + preci < 0 && buffer[tpos] == '5') {
+										startPos = 0;
+										buffer[0] = '1';
+										exponent++; /* Exponent shifts up globally for all format paths */
+									}
+								} while (0); // end do
 							}
 							/* Set the number of integer digits; this matters only for %f. */
 							if (type == 'f' || type == 'F') {
@@ -838,6 +847,12 @@ int __vfprintf_total_size(FILE *stream, const char *format, va_list args) {
 			if ((flags & HAS_PRECI) && !(flags & ALTERNATEFLAG)) {
 				if (size2 == 1 && !preci && buffer2[0] == '0')
 					size2 = 0;
+			}
+			if ((flags & HAS_PRECI) && !preci) {
+			    if (size2 == 1 && buffer2[0] == '0' &&
+			        (orig_type == 'd' || orig_type == 'i' ||
+			         orig_type == 'x' || orig_type == 'X'))
+			        size2 = 0;
 			}
 			pad = size1 + (size2 >= preci ? size2 : preci); /* Calculate the number of characters */
 			pad = pad >= width ? 0 : width - pad; /* and the number of resulting pad bytes */

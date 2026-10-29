@@ -384,13 +384,20 @@ int __LDL_mul_10_extract(LDL *x)
 			lo  = (lo << n);
 			exp_raw = exp + 16383 - n;
 		}
+	} else {
+		/* exp < 0: value is < 1.  The mantissa has up to 4 bits of
+		 * headroom above hi's bit 31 (from the ×10 shift).  Shift
+		 * right by 4 to renormalize, and bump exp_raw by 4. */
+		lo  = (lo >> 4)  | (mid << 28);
+		mid = (mid >> 4) | (hi << 28);
+		hi  = hi >> 4;
+		exp_raw += 4;
 	}
-
 	/* 4. Inlined multiply-by-10: x * 10 = (x + x/4) * 8. */
 	{
-		unsigned long hi2  = hi >> 2;
-		unsigned long mid2 = (mid >> 2) | (hi << 30);
 		unsigned long lo2  = (lo >> 2)  | (mid << 30);
+		unsigned long mid2 = (mid >> 2) | (hi << 30);
+		unsigned long hi2  = hi >> 2;
 
 		unsigned long res_lo = lo + lo2;
 		unsigned long carry  = (res_lo < lo);
@@ -407,12 +414,42 @@ int __LDL_mul_10_extract(LDL *x)
 			exp_raw += 1;
 		}
 
+		/* Renormalize: if hi's bit 31 is not set, shift left until it is.
+		 * This happens when exp was < 0 (value < 1) and the ×10 did not
+		 * bring the value back into [1, 2).  Without this shift the
+		 * mantissa drifts right across iterations and the digit
+		 * extraction returns 0 for what should be significant digits. */
+		if (!(res_hi & 0x80000000UL)) {
+			int n;
+			if (res_hi) {
+				n = __builtin_clz(res_hi);
+				res_hi  = (res_hi << n)  | (res_mid >> (32 - n));
+				res_mid = (res_mid << n) | (res_lo >> (32 - n));
+				res_lo  = (res_lo << n);
+				exp_raw -= n;
+			} else if (res_mid) {
+				n = __builtin_clz(res_mid);
+				res_hi  = (res_mid << n) | (res_lo >> (32 - n));
+				res_mid = (res_lo << n);
+				res_lo  = 0;
+				exp_raw -= 32 + n;
+			} else if (res_lo) {
+				n = __builtin_clz(res_lo);
+				res_hi  = (res_lo << n);
+				res_mid = 0;
+				res_lo  = 0;
+				exp_raw -= 64 + n;
+			}
+			/* res_hi, res_mid, res_lo are all zero: value is zero,
+			 * leave as is (the caller handles zero via the zero check). */
+		}
+
 		x->l.exp    = (unsigned short) (exp_raw + 3);
 		x->l.high   = res_hi;
 		x->l.middle = res_mid;
 		x->l.low    = res_lo;
-	}
 
+	}
 	return (int) z;
 }
 

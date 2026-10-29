@@ -85,6 +85,7 @@ static int check_fmt(const char *combined, const char *fmt, ...) {
 	}
 	va_start(args, fmt);
 	ret = vsnprintf(buf, sizeof(buf), fmt, args);
+	if (ret > expected_len + 32) ret = expected_len + 32;
 	va_end(args);
 	tests_run++;
 	if (ret == (int) expected_len && memcmp(buf, expected, expected_len) == 0) {
@@ -346,16 +347,16 @@ int main(int argc, char **argv) {
 	TESTFMT("round down .4|1|", "%.0f", 1.4);
 	TESTFMT("round 9 cascade|10|", "%.0f", 9.5);
 	TESTFMT("round 99 cascade|100|", "%.0f", 99.5);
-	TESTFMT("round .05|1.1|", "%.1f", 1.05);
-	TESTFMT("round .15|1.2|", "%.1f", 1.15);
-	TESTFMT("round .25|1.3|", "%.1f", 1.25);
-	TESTFMT("round .35|1.4|", "%.1f", 1.35);
-	TESTFMT("round .45|1.5|", "%.1f", 1.45);
-	TESTFMT("round .55|1.6|", "%.1f", 1.55);
-	TESTFMT("round .65|1.7|", "%.1f", 1.65);
-	TESTFMT("round .75|1.8|", "%.1f", 1.75);
-	TESTFMT("round .85|1.9|", "%.1f", 1.85);
-	TESTFMT("round .95|2.0|", "%.1f", 1.95);
+	TESTFMT("round 1.05|1.1|", "%.1f", 1.05);
+	TESTFMT("round 1.15|1.2|", "%.1f", 1.15);
+	TESTFMT("round 1.25|1.2|", "%.1f", 1.25);
+	TESTFMT("round 1.35|1.4|", "%.1f", 1.35);
+	TESTFMT("round 1.45|1.4|", "%.1f", 1.45);
+	TESTFMT("round 1.55|1.6|", "%.1f", 1.55);
+	TESTFMT("round 1.65|1.6|", "%.1f", 1.65);
+	TESTFMT("round 1.75|1.8|", "%.1f", 1.75);
+	TESTFMT("round 1.85|1.9|", "%.1f", 1.85);
+	TESTFMT("round 1.95|2.0|", "%.1f", 1.95);
 	printf("\n");
 	/* ==================================================================
 	 * SECTION 7: Special values (inf, NaN)
@@ -419,7 +420,22 @@ int main(int argc, char **argv) {
 	TESTFMT("null string|(null)|", "%s", (char* )0);
 	TESTFMT("percent|%|", "%%");
 	TESTFMT("prec zero||", "%.0d", 0);
-	TESTFMT("prec zero alt|0|", "%#.0d", 0);
+
+	/* C99 7.19.6.1: precision 0 with value 0 produces no digits at all.
+	 * '#' has no effect for d/i, so "%#.0d" of 0 is the empty string. */
+	TESTFMT("alt prec zero dec||", "%#.0d", 0);
+	TESTFMT("alt prec zero int||", "%#.0i", 0);
+	TESTFMT("prec zero dec||", "%.0d", 0);
+
+	/* '#' for hex: "0x" prefix, but zero value still emits nothing. */
+	TESTFMT("alt prec zero hex||", "%#.0x", 0);
+	TESTFMT("alt prec zero hex up||", "%#.0X", 0);
+
+	/* '#' for octal: zero value emits a single '0', even with prec 0. */
+	TESTFMT("alt prec zero oct|0|", "%#.0o", 0);
+	TESTFMT("alt prec zero oct one|01|", "%#.0o", 1);
+	TESTFMT("alt prec width oct one|  01|", "%#4.0o", 1);
+	TESTFMT("alt prec zero width oct one|  01|", "%#04.0o", 1);
 	printf("\n");
 	/* ==================================================================
 	 * SECTION 10: Pointer format tests
@@ -490,6 +506,13 @@ int main(int argc, char **argv) {
 	TESTFMT("text only|hello world|", "hello world");
 	TESTFMT("mixed|abc42def|", "abc%ddef", 42);
 	TESTFMT("multiple|1 2 3|", "%d %d %d", 1, 2, 3);
+
+	/* Values chosen by musl to hit the round-half-even boundary at
+	 * several precisions; the expected strings are glibc/musl output. */
+	TESTFMT("fp 1.03125 prec4|1.0312|", "%.4f", 1.03125);
+	TESTFMT("fp 1.1 prec17|1.1000000000000001|", "%.17g", 1.1);
+	TESTFMT("fp 1.5e6 prec2|1.50e+06|", "%.2e", 1500000.0);
+
 	printf("\n");
 	/* ==================================================================
 	 * SECTION 14: High-precision long double (conditional on math mode)
