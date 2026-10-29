@@ -1,7 +1,7 @@
 #include "stdio.h"
 
 double strtod(const char *nptr,char **endptr)
-{ double a;
+{ double a=0.0;
   unsigned long n=0;
   sscanf(nptr,"%lf%ln",&a,&n);
   if(endptr)
