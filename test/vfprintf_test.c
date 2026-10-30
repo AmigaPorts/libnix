@@ -118,12 +118,16 @@ int main(int argc, char **argv) {
 	(void) argc;
 	(void) argv;
 	printf("=== vfprintf test harness ===\n\n");
-	/* Print which math mode we're using */
-#if USE_LDOUBLE_MATH
+
+	TESTFMT("9.995|1e+01|", "%.1g", 9.995);
+	TESTFMT("99.995|1e+02|", "%.2g", 99.995);
+	TESTFMT("0.045|4.5e-02|", "%.1e", 0.045);
+	TESTFMT("5e-324|5e-324|", "%.0e", 5e-324);
+	TESTFMT("5e-324|4.9406565e-324|", "%.7e", 5e-324);
+	TESTFMT("0.015|0.01|", "%.2f", 0.015);
+	TESTFMT("0.155|0.15|", "%.2f", 0.155);
+
 	printf("Math mode: long double (GCC >= 16)\n\n");
-#else
-	printf("Math mode: double fallback (GCC < 16)\n\n");
-#endif
 	/* ==================================================================
 	 * SECTION 1: Bit-level classifier tests
 	 * ================================================================== */

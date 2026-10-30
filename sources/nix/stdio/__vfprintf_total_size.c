@@ -482,9 +482,9 @@ int __vfprintf_total_size(FILE *stream, const char *format, va_list args) {
 						}
 					}
 					if (!infnan) {
+						int original_preci = (preci == 0) ? 1 : preci;
 						if (type != 'a' && type != 'A') {
 							if (type == 'g' || type == 'G') {
-								int original_preci = (preci == 0) ? 1 : preci;
 								isg = 1;
 								if (exponent >= -4 && exponent < original_preci) {
 									--type; /* Fixed-point 'f' or 'F' */
@@ -548,7 +548,6 @@ int __vfprintf_total_size(FILE *stream, const char *format, va_list args) {
 									// even number
 									if (0 == (buffer[tpos] & 1) && __LDL_cmp_5U(&ld_val) <= 0)
 										break;
-
 									while (tpos > 0) {
 										if (++buffer[tpos] <= '9')
 											break;
@@ -556,14 +555,20 @@ int __vfprintf_total_size(FILE *stream, const char *format, va_list args) {
 									}
 									/* Handle carry overflow (e.g., 9.99 -> 10.00 or 0.099 -> 0.100) */
 									if (tpos == 0) {
-										startPos = 0;
-										buffer[0] = '1';
-										exponent++; /* Exponent shifts up globally for all format paths */
-										if (exponent > 0) {
-											++leading;
-											++ digits_to_compute;
-										}
-									} else if (exponent + preci < 0 && buffer[tpos] == '5') {
+									    startPos = 0;
+									    buffer[0] = '1';
+									    exponent++;
+									    if (isg && exponent >= original_preci) {
+									        /* Rounding pushed the value into scientific territory.
+									         * Switch from %f to %e (or F to E). */
+									        type = (type == 'f') ? 'e' : 'E';
+									        leading = 1;
+									        preci = original_preci - 1;
+									    } else if (exponent > 0) {
+									        ++leading;
+									        ++digits_to_compute;
+									    }
+									} else if (exponent + preci < 0 && buffer[tpos] == '5' && (type == 'f' || type == 'F')) {
 										startPos = 0;
 										buffer[0] = '1';
 										exponent++; /* Exponent shifts up globally for all format paths */

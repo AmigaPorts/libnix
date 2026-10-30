@@ -522,9 +522,9 @@ int __vfwprintf_total_size(FILE *stream, const wchar_t *format, va_list args) {
 						}
 					}
 					if (!infnan) {
+						int original_preci = (preci == 0) ? 1 : preci;
 						if (type != L'a' && type != L'A') {
 							if (type == L'g' || type == L'G') {
-								int original_preci = (preci == 0) ? 1 : preci;
 								isg = 1;
 								if (exponent >= -4 && exponent < original_preci) {
 									--type; /* Fixed-point 'f' or 'F' */
@@ -596,14 +596,20 @@ int __vfwprintf_total_size(FILE *stream, const wchar_t *format, va_list args) {
 								}
 								/* Handle carry overflow (e.g., 9.99 -> 10.00 or 0.099 -> 0.100) */
 								if (tpos == 0) {
-									startPos = 0;
-									buffer[0] = L'1';
-									exponent++; /* Exponent shifts up globally for all format paths */
-									if (exponent > 0) {
-										++leading;
-										++ digits_to_compute;
-									}
-								} else if (exponent + preci < 0 && buffer[tpos] == L'5') {
+								    startPos = 0;
+								    buffer[0] = L'1';
+								    exponent++;
+								    if (isg && exponent >= original_preci) {
+								        /* Rounding pushed the value into scientific territory.
+								         * Switch from %f to %e (or F to E). */
+								        type = (type == L'f') ? L'e' : L'E';
+								        leading = 1;
+								        preci = original_preci - 1;
+								    } else if (exponent > 0) {
+								        ++leading;
+								        ++digits_to_compute;
+								    }
+								} else if (exponent + preci < 0 && buffer[tpos] == L'5' && (type == L'f' || type == L'F')) {
 									startPos = 0;
 									buffer[0] = L'1';
 									exponent++; /* Exponent shifts up globally for all format paths */

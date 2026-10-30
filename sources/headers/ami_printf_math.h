@@ -219,7 +219,7 @@ static inline int __LDL_cmp_10(const LDL *a) {
  * so exact half-way ties still round up.
  */
 static inline int __LDL_cmp_5(const LDL *a) {
-	return __LDL_cmp_const(a, 0x4001, 0x9fffffffUL, 0xfffff000UL, 0x00000000UL);
+	return __LDL_cmp_const(a, 0x4001, 0x9fffffffUL, 0xffffff00UL, 0x00000000UL);
 }
 static inline int __LDL_cmp_5U(const LDL *a) {
 	return __LDL_cmp_const(a, 0x4001, 0xA0000000UL, 0x00000000UL, 0x00000000UL);
