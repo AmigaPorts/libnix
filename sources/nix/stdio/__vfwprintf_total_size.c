@@ -601,8 +601,8 @@ int __vfwprintf_total_size(FILE *stream, const wchar_t *format, va_list args) {
 								    exponent++;
 								    if (isg && exponent >= original_preci) {
 								        /* Rounding pushed the value into scientific territory.
-								         * Switch from %f to %e (or F to E). */
-								        type = (type == L'f') ? L'e' : L'E';
+								         * Switch from %f/%g to %e (or F to E). */
+								        type = (type & 0x20) ? L'e' : L'E';
 								        leading = 1;
 								        preci = original_preci - 1;
 								    } else if (exponent > 0) {
