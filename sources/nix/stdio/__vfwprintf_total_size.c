@@ -511,7 +511,7 @@ int __vfwprintf_total_size(FILE *stream, const TCHAR *format, va_list args) {
 						}
 
 						while (__LDL_cmp_1(&ld_val) < 0 && normalized_exp > -5000) {
-						    ld_val = __LDL_mul_10(ld_val);
+						    __LDL_mul_10(&ld_val);
 						    --normalized_exp;
 						}
 						exponent = (short) normalized_exp;

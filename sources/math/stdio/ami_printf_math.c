@@ -289,7 +289,7 @@ LDL __LDL_mul(LDL a, LDL b)
 	return r;
 }
 
-LDL __LDL_mul_10(LDL x)
+void __LDL_mul_10(LDL * x)
 {
 	LDL r;
 	unsigned long hi, mid, lo;
@@ -297,14 +297,12 @@ LDL __LDL_mul_10(LDL x)
 	unsigned long res_lo, res_mid, res_hi, carry;
 
 	/* Zero check across the full 96-bit storage. */
-	if (x.l.high == 0 && x.l.middle == 0 && x.l.low == 0)
-		return x;
+	if (x->l.high == 0)
+		return;
 
-	r = x;
-
-	hi  = x.l.high;
-	mid = x.l.middle;
-	lo  = x.l.low;
+	hi  = x->l.high;
+	mid = x->l.middle;
+	lo  = x->l.low;
 
 	/* 96-bit right shift by 2 (x / 4). */
 	hi2  = hi >> 2;
@@ -325,17 +323,15 @@ LDL __LDL_mul_10(LDL x)
 		res_lo  = (res_lo >> 1)  | (res_mid << 31);
 		res_mid = (res_mid >> 1) | (res_hi << 31);
 		res_hi  = (res_hi >> 1)  | 0x80000000UL;
-		r.l.exp += 1;
+		x->l.exp += 1;
 	}
 
 	/* Scale by 8 (add 3 to exponent). */
-	r.l.exp += 3;
+	x->l.exp += 3;
 
-	r.l.high   = res_hi;
-	r.l.middle = res_mid;
-	r.l.low    = res_lo;
-
-	return r;
+	x->l.high   = res_hi;
+	x->l.middle = res_mid;
+	x->l.low    = res_lo;
 }
 
 int __LDL_mul_10_extract(LDL *x)
