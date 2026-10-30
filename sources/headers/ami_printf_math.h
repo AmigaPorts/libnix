@@ -266,7 +266,7 @@ LDL __LDL_mul(LDL a, LDL b);
 
 /* Fast multiply by 10 using the identity 10 = 8 + 2 = (1 + 1/4) * 8,
  * i.e. shifts and adds on the 96-bit mantissa, then bias the exponent by 3. */
-LDL __LDL_mul_10(LDL x);
+void __LDL_mul_10(LDL * x);
 
 /* In-place multiply by 10 plus extraction of the leading base-10 digit.
  * Returns the digit [0..9]; x is updated to the fractional remainder,
@@ -277,6 +277,41 @@ int __LDL_mul_10_extract(LDL *x);
  * and multiplying by the corresponding precomputed 10^(2^bit) table entry.
  * Positive n uses the 10^(+2^bit) table; negative n the 10^(-2^bit) one. */
 LDL pow10_ld(LDL result, int n);
+
+/* Fast multiply by 10 using the identity 10 = 8 + 2 = (1 + 1/4) * 8,
+ * i.e. shifts and adds on the 96-bit mantissa, then bias the exponent by 3.
+ * then the digit is added, 0 <= digit <= 9
+ * The mantissa is not normalized, it's a 96 bit integer.
+ * */
+void __LDL_mul_10_add(LDL *x, int digit);
+
+/* In-place multiply by 16 and add a hex digit:
+ *     *x = *x * 16 + digit,  0 <= digit <= 15
+ *
+ * Like __LDL_mul_10_add: the mantissa is treated as a plain 96-bit
+ * unsigned integer, the exponent is not touched (stays 0 from the
+ * caller's initializer), and __LDL_normalize sets it at the end.
+ *
+ * x * 16 is a pure left shift by 4, so there's no (x + x/4)-style
+ * approximation and no truncation: the only loss is the carry out of
+ * bit 95, which is the caller's saturation concern.
+ */
+void __LDL_mul_16_add(LDL *x, int digit);
+
+/* Normalize an LDL so the integer bit is at b95.
+ *
+ * If the mantissa is already normalized, this is a no-op.  If it is
+ * not (e.g. after a sequence of __LDL_mul_10_add calls that left the
+ * integer bit below b95), shift left until b95 is set and reduce the
+ * exponent by the shift amount.  A zero mantissa is left as zero.
+ */
+void __LDL_normalize(LDL *x);
+
+/* Convert to double. */
+double __ldl_to_double(const LDL *lv);
+
+/* Convert to long double. */
+long double __ldl_to_long_double(const LDL *lv);
 
 /* ======================================================================
  * SECTION 5: shared constants and tuning knobs

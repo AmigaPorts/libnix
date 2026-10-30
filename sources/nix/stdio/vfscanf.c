@@ -4,7 +4,7 @@
 #include <ctype.h>
 #include <math.h>
 #include "stdio.h"
-
+#include "ami_printf_math.h"
 
 
 /* some macros to cut this short
@@ -12,9 +12,34 @@
  * PREV(c);     ungetc a character
  * VAL(a)       leads to 1 if a is true and valid
  */
-#define NEXT(c) ((c)=getc(stream),size++,incount++)
-#define PREV(c) do{if((c)!=EOF)ungetc((c),stream);size--;incount--;}while(0)
+
+#define NEXT(c) do { \
+    (c) = getc(stream); \
+    if ((c) != EOF) { \
+        size++; \
+        incount++; \
+    } \
+} while(0)
+
+#define PREV(c) do { \
+    if ((c) != EOF) { \
+        ungetc((c), stream); \
+        size--; \
+        incount--; \
+    } \
+} while(0)
 #define VAL(a)  ((a)&&size<=width)
+
+static inline int hexval(int c)
+{
+	if (c >= '0' && c <= '9')
+		return c - '0';
+	if (c >= 'a' && c <= 'f')
+		return c - 'a' + 10;
+	if (c >= 'A' && c <= 'F')
+		return c - 'A' + 10;
+	return 0;
+}
 
 #ifdef FULL_SPECIFIERS
 static const unsigned char undef[3][sizeof(double)] = /* Undefined numeric values, IEEE */
@@ -162,125 +187,244 @@ int vfscanf(FILE *stream, const char *format, va_list args) {
 				break;
 			}
 #ifdef FULL_SPECIFIERS
-			case 'e':
-			case 'f':
-			case 'g': {
-				double v;
-				int ex = 0;
-				int min = 0, mine = 0; /* This is a workaround for gcc 2.3.3: should be char */
+	        case 'e':
+	        case 'f':
+	        case 'g': {
+	            LDL lv = { .l = { 0, 0, 0, 0 } };
+	            int frac_digits = 0;
+	            int min = 0, mine = 0;
+	            int sign = 1;
+	            int has_digit = 0;
+	            int is_L = (subtype == 'L');
+	            int special = 0;   /* 0 = finite, 1 = inf, 2 = nan, 3 = +/-0.0 */
 
-				do /* This is there just to be able to break out */
-				{
-					if (VAL(c == '-' || c == '+')) {
-						min = c;
-						NEXT(c);
-					}
+	            if (VAL(c == '-' || c == '+')) {
+	                min = c;
+	                sign = (c == '-') ? -1 : 1;
+	                NEXT(c);
+	            }
 
-					if (VAL(tolower(c)=='i')) /* +- inf */
-					{
-						int d;
-						NEXT(d);
-						if (VAL(tolower(d)=='n')) {
-							int e;
-							NEXT(e);
-							if (VAL(tolower(e)=='f')) {
-								v = *(double *) &undef[min == '-'];
-								break;
-							} /* break out */
-							PREV(e);
-						}
-						PREV(d);
-					} else if (VAL(toupper(c)=='N')) /* NaN */
-					{
-						int d;
-						NEXT(d);
-						if (VAL(tolower(d)=='a')) {
-							int e;
-							NEXT(e);
-							if (VAL(toupper(e)=='N')) {
-								v = *(double *) &undef[2];
-								break;
-							}
-							PREV(e);
-						}
-						PREV(d);
-					}
+	            /* inf / nan */
+	            if (VAL(tolower(c) == 'i')) {
+	                int d;
+	                NEXT(d);
+	                if (VAL(tolower(d) == 'n')) {
+	                    int e;
+	                    NEXT(e);
+	                    if (VAL(tolower(e) == 'f')) {
+	                        special = 1;
+	                        has_digit = 1;
+	                        goto float_done;
+	                    }
+	                    PREV(e);
+	                }
+	                PREV(d);
+	            } else if (VAL(toupper(c) == 'N')) {
+	                int d;
+	                NEXT(d);
+	                if (VAL(tolower(d) == 'a')) {
+	                    int e;
+	                    NEXT(e);
+	                    if (VAL(toupper(e) == 'N')) {
+	                        special = 2;
+	                        has_digit = 1;
+	                        goto float_done;
+	                    }
+	                    PREV(e);
+	                }
+	                PREV(d);
+	            }
 
-					v = 0.0;
-					while (VAL(isdigit(c))) {
-						v = v * 10.0 + (c - '0');
-						NEXT(c);
-					}
+	            /* Integer part */
+	            while (VAL(isdigit(c))) {
+	                __LDL_mul_10_add(&lv, c - '0');
+	                has_digit = 1;
+	                NEXT(c);
+	            }
 
-					if (VAL(c == __decimalpoint[0])) {
-						double dp = 0.1;
-						NEXT(c);
-						while (VAL(isdigit(c))) {
-							v = v + dp * (c - '0');
-							dp = dp / 10.0;
-							NEXT(c);
-						}
-						if (size == 2 + (min != 0)) /* No number read till now -> malformatted */
-						{
-							PREV(c);
-							c = __decimalpoint[0];
-						}
-					}
+	            if (c && VAL(c == 'x') && lv.l.high == 0 && lv.l.middle == 0 && lv.l.low == 0) {
+	                size_t before_hex = size;   /* remember where 'x' started */
+	                int has_hex = 0;
+	                int bin_exp = 0;
 
-					if (min && size == 2) /* No number read till now -> malformatted */
-					{
-						PREV(c);
-						c = min;
-					}
-					if (size <= 1)
-						break;
+	                NEXT(c);   /* consume 'x' */
 
-					if (VAL(tolower(c)=='e')) {
-						int d;
-						NEXT(d);
-						if (VAL(d == '-' || d == '+')) {
-							mine = d;
-							NEXT(d);
-						}
+	                while (VAL(isxdigit(c))) {
+	                    __LDL_mul_16_add(&lv, hexval(c));
+	                    has_hex = 1;
+	                    NEXT(c);
+	                }
+	                if (VAL(c == __decimalpoint[0])) {
+	                    NEXT(c);
+	                    while (VAL(isxdigit(c))) {
+	                        __LDL_mul_16_add(&lv, hexval(c));
+	                        bin_exp -= 4;
+	                        has_hex = 1;
+	                        NEXT(c);
+	                    }
+	                }
 
-						if (VAL(isdigit(d))) {
-							do {
-								ex = ex * 10 + (d - '0');
-								NEXT(d);
-							} while (VAL(isdigit(d)));
-							c = d;
-						} else {
-							PREV(d);
-							if (mine)
-								PREV(mine);
-						}
-					}
-					PREV(c);
+	                if (!has_hex) {
+	                    /* "0x" with no hex digits: the 'x' is not part of the number.
+	                     * Unget the 'x' and fall back to the decimal value (which is 0). */
+	                    PREV(c);
+	                    has_digit = 0;
+	                    goto float_done;   /* skip hex, keep lv = 0 */
+	                }
 
-					if (mine == '-')
-						v = v / pow(10.0, ex);
-					else
-						v = v * pow(10.0, ex);
+	                __LDL_normalize(&lv);
 
-					if (min == '-')
-						v = -v;
+	                if (VAL(tolower(c) == 'p')) {
+	                    int d;
+	                    int pexp = 0;
+	                    int psign_char = 0;   /* 0, '+' or '-' */
+	                    int has_pexp = 0;
 
-				} while (0);
+	                    NEXT(d);
+	                    if (VAL(d == '-' || d == '+')) {
+	                        psign_char = d;
+	                        NEXT(d);
+	                    }
+	                    while (VAL(isdigit(d))) {
+	                        pexp = pexp * 10 + (d - '0');
+	                        has_pexp = 1;
+	                        NEXT(d);
+	                    }
+	                    if (!has_pexp) {
+	                        /* "0x1p" or "0x1p+": 'p' is not part of the number.
+	                         * Unget the non-digit, the 'p', and the sign. */
+	                        PREV(d);
+	                        PREV(c);
+	                        if (psign_char)
+	                            PREV(psign_char);
+	                        /* bin_exp stays as it was (0 from the hex digits,
+	                         * minus 4 per fractional hex digit). */
+	                    } else {
+	                        bin_exp += (psign_char == '-') ? -pexp : pexp;
+	                        c = d;
+	                    }
+	                }
+	                lv.l.exp += bin_exp;
+	                goto float_done;
+	            }
 
-				if (!ignore && size) {
-					switch (subtype) {
-					case 'l':
-					case 'L':
-						*va_arg(args, double *) = v;
-						break;
-					case 'i':
-						*va_arg(args, float *) = v;
-						break;
-					}
-					blocks++;
-				}
-				break;
-			}
+	            /* Fractional part */
+	            if (VAL(c == __decimalpoint[0])) {
+	                NEXT(c);
+	                while (VAL(isdigit(c))) {
+	                    __LDL_mul_10_add(&lv, c - '0');
+	                    has_digit = 1;
+	                    ++frac_digits;
+	                    NEXT(c);
+	                }
+	            }
+
+	            if (!has_digit) {
+	                PREV(c);
+	                if (min) PREV(min);
+	                break;
+	            }
+
+	            __LDL_normalize(&lv);
+
+	            if (frac_digits > 0)
+	                lv = pow10_ld(lv, -frac_digits);
+
+	            /* Exponent part */
+	            if (VAL(tolower(c) == 'e')) {
+	                int d;
+	                int ex = 0;
+	                int has_ex_digit = 0;
+
+	                NEXT(d);
+	                if (VAL(d == '-' || d == '+')) {
+	                    mine = d;
+	                    NEXT(d);
+	                }
+
+	                while (VAL(isdigit(d))) {
+	                    ex = ex * 10 + (d - '0');
+	                    has_ex_digit = 1;
+	                    NEXT(d);
+	                }
+
+	                if (!has_ex_digit) {
+	                    /* "10e" or "10e+": 'e' is not part of the number.
+	                     * Unget the non-digit, the 'e', and the sign. */
+	                    PREV(d);
+	                    PREV(c);
+	                    if (mine) PREV(mine);
+	                    has_digit = 0;
+	                } else {
+                    	long new_exp = (long long)ex * 217706 / 65536;   /* ex * log2(10) in Q16 */
+	                    if (mine == '-') {
+                    		if (lv.l.exp - new_exp < 1L) {
+                    			// underflow
+                    			special = 3;
+                    			goto float_done;
+                    		}
+							ex = -ex;
+	                    } else if (lv.l.exp + new_exp > 32766) {
+	                    	// overflow
+							special = 1;
+							goto float_done;
+	                    }
+	                    c = d;
+	                    lv = pow10_ld(lv, ex);
+	                }
+	            } else {
+	                PREV(c);
+	            }
+
+	        float_done:
+	            if (!ignore && has_digit) {
+	                if (special == 1) {
+	                    /* inf */
+	                    if (is_L) {
+	                        long double ld = (long double)INFINITY;
+	                        if (sign < 0)
+	                            ld = -ld;
+	                        *va_arg(args, long double *) = ld;
+	                    } else {
+	                        double d = (double)INFINITY;
+	                        if (sign < 0)
+	                            d = -d;
+	                        *va_arg(args, double *) = d;
+	                    }
+	                } else if (special == 2) {
+	                    /* nan: sign of nan is not meaningful */
+	                    if (is_L)
+	                        *va_arg(args, long double *) = (long double)NAN;
+	                    else
+	                        *va_arg(args, double *) = (double)NAN;
+	                } else if (special == 3) {
+	                    /* underflow: result is +/-0.0 */
+	                    if (is_L) {
+	                        long double ld = sign < 0 ? -0.0L : 0.0L;
+	                        *va_arg(args, long double *) = ld;
+	                    } else {
+	                        double d = sign < 0 ? -0.0 : 0.0;
+	                        *va_arg(args, double *) = d;
+	                    }
+	                }
+	                else {
+	                    /* finite */
+	                    if (is_L) {
+	                        long double ld = __ldl_to_long_double(&lv);
+	                        if (sign < 0)
+	                            ld = -ld;
+	                        *va_arg(args, long double *) = ld;
+	                    } else {
+	                        double d = __ldl_to_double(&lv);
+	                        if (sign < 0)
+	                            d = -d;
+	                        *va_arg(args, double *) = d;
+	                    }
+	                }
+	                blocks++;
+	            }
+	            break;
+	        }
 #endif
 			case '%':
 				NEXT(c);
@@ -339,7 +483,7 @@ int vfscanf(FILE *stream, const char *format, va_list args) {
 						if (VAL(isxdigit(e))) {
 							c = e;
 						} else {
-//							PREV(e);
+							PREV(e);
 							break;
 						}
 					} else
@@ -347,12 +491,9 @@ int vfscanf(FILE *stream, const char *format, va_list args) {
 				}
 
 				base = type == 'x' || type == 'X' ? 16 : (type == 'o' ? 8 : 10);
-				while (VAL(
-						isxdigit(c)&&(base!=10||isdigit(c))&&(base!=8||c<='7'))) {
-					v = v * base + (isdigit(c) ? c - '0' : 0)
-							+ (isupper(c) ? c - 'A' + 10 : 0)
-							+ (islower(c) ? c - 'a' + 10 : 0);
-					NEXT(c);
+				while (VAL(isxdigit(c) && (base != 10 || isdigit(c)) && (base != 8 || c <= '7'))) {
+				    v = v * base + hexval(c);
+				    NEXT(c);
 				}
 
 				if (min && size == 2) /* If there is no valid character after sign, unget last */
