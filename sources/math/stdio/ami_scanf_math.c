@@ -46,12 +46,21 @@
  * (e.g. by checking that *x->l.high still fits, or by counting digits
  * and bailing out past ~28) if that matters.
  */
-void __LDL_mul_10_add(LDL *x, int digit)
+int __LDL_mul_10_add(LDL *x, int digit)
 {
     unsigned long hi = x->l.high, mid = x->l.middle, lo = x->l.low;
     unsigned long a_hi, a_mid, a_lo;
     unsigned long b_hi, b_mid, b_lo;
     unsigned long res_lo, res_mid, res_hi, carry;
+
+    /* Saturation: if x >= (2^96 - 1) / 10, multiplying by 10 would
+     * shift the top bits out of the 96-bit accumulator.  Leave x
+     * unchanged; the caller still consumes the digit (so frac_digits
+     * and the position of the decimal point stay correct) but the
+     * value is the truncated mantissa, which is what round-to-96-bit
+     * would do anyway. */
+    if (hi >= 0x19999999UL)
+        return 0;
 
     /* x * 10 = (x << 3) + (x << 1) = 8x + 2x.
      * This is exact (no truncation): the only loss is the carry past
@@ -87,6 +96,8 @@ void __LDL_mul_10_add(LDL *x, int digit)
     x->l.high   = res_hi;
     x->l.middle = res_mid;
     x->l.low    = res_lo;
+
+    return 1;
 }
 
 /* In-place multiply by 16 and add a hex digit:
@@ -100,10 +111,15 @@ void __LDL_mul_10_add(LDL *x, int digit)
  * approximation and no truncation: the only loss is the carry out of
  * bit 95, which is the caller's saturation concern.
  */
-void __LDL_mul_16_add(LDL *x, int digit)
+int __LDL_mul_16_add(LDL *x, int digit)
 {
 	unsigned long hi = x->l.high, mid = x->l.middle, lo = x->l.low;
 	unsigned long res_hi, res_mid, res_lo;
+
+    /* Saturation: if hi's top nibble is non-zero, × 16 would shift it
+     * out.  Leave x unchanged. */
+    if (hi >= 0x10000000UL)
+        return 0;
 
 	/* x * 16 = x << 4 */
 	res_hi  = (hi  << 4) | (mid >> 28);
@@ -122,6 +138,8 @@ void __LDL_mul_16_add(LDL *x, int digit)
 	x->l.middle = res_mid;
 	x->l.low    = res_lo;
 	/* x->l.exp unchanged (0 from the caller's initializer) */
+
+	return 1;
 }
 
 /* Normalize an LDL built by __LDL_mul_10_add (which leaves exp = 0):

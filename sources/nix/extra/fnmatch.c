@@ -1,5 +1,5 @@
 /**
- * Coded by Stefan "Bebbo" Franke in 2019. Replacement for all that copyrighted stuff.
+ * Coded by Stefan "Bebbo" Franke in 2019-2026. Replacement for all that copyrighted stuff.
  */
 #include <ctype.h>
 #include <fnmatch.h>
@@ -18,7 +18,6 @@ static struct __fx {
  * Search the matching ctype function.
  */
 static fxtype lookup(const char * name, size_t len) {
-//	printf("%s %d, %d, %d\n", name, len, sizeof(data), sizeof(struct __fx));
 	if (len == 5) {
 		size_t i;
 		for (i = 0; i < sizeof(data) / sizeof(struct __fx) - 1; ++i)
@@ -32,81 +31,118 @@ static fxtype lookup(const char * name, size_t len) {
 	return 0;
 }
 
-
 #define FLAG_PATHNAME (flags & FNM_PATHNAME)
 #define	FLAG_NOESCAPE (flags & FNM_NOESCAPE)
 #define FLAG_INPERIOD (flags & FNM_PERIOD)
 #define FLAG_CASEFOLD (flags & FNM_CASEFOLD)
 
-int fnmatch(const char *pattern, const char *string, int flags) {
-	short period = FLAG_INPERIOD;
+// Internal helper using a persistent global_start pointer across recursions
+static int fnmatch_internal(const char *pattern, const char *string, const char *global_start, int flags) {
 	unsigned char c = *string;
 	unsigned char p = *pattern;
-	while (c && p) {
-//		if (flags & 0x8000)
-//			fprintf(stderr, "%s == %s\n", pattern, string);
+
+	while (p) {
+		// POSIX: FNM_PERIOD restricts wildcards/brackets from matching '.'
+		// ONLY if it is a true leading period relative to the base path component.
+		int is_leading_period = 0;
+		if (FLAG_INPERIOD && c == '.') {
+			if (string == global_start || (FLAG_PATHNAME && string[-1] == '/')) {
+				is_leading_period = 1;
+			}
+		}
+
 		if (FLAG_CASEFOLD)
 			c = tolower(c);
+
 		switch (p) {
 			case '*':
-				if ((FLAG_PATHNAME && c == '/') || (period && c == '.')) {
-					--string;
-					break;
+				// Collapse consecutive asterisks into a single one
+				while (p == '*') {
+					p = *++pattern;
 				}
-				// try with '*' and rest of string
-				if (!fnmatch(pattern, string + 1, flags))
-					return 0;
 
-				// skip the '*'
-				--string;
-				break;
+				// If pattern ends with '*', it matches the rest of the string
+				if (!p) {
+					if (FLAG_PATHNAME && strchr(string, '/'))
+						return FNM_NOMATCH;
+					if (FLAG_INPERIOD && *string == '.') {
+						if (string == global_start || (FLAG_PATHNAME && string[-1] == '/'))
+							return FNM_NOMATCH;
+					}
+					return 0;
+				}
+
+				// An asterisk matches 0 to N characters.
+				// Recursively test every remaining suffix while maintaining global_start.
+				while (*string) {
+					if (!fnmatch_internal(pattern, string, global_start, flags))
+						return 0;
+
+					// Stop advancing the asterisk if hitting path or period boundaries
+					if (FLAG_PATHNAME && *string == '/')
+						break;
+					if (FLAG_INPERIOD && *string == '.' &&
+					   (string == global_start || (FLAG_PATHNAME && string[-1] == '/')))
+						break;
+
+					string++;
+				}
+				return FNM_NOMATCH;
+
 			case '?':
-				// skip the '?' if match isn't allowed
-				if ((FLAG_PATHNAME && c == '/') || (period && c == '.'))
-					--string;
+				if (!c)
+					return FNM_NOMATCH;
+				if ((FLAG_PATHNAME && c == '/') || is_leading_period)
+					return FNM_NOMATCH;
 				break;
+
 			case '[': {
-				const char * start;
+				const char *start = pattern;
 				short not, match;
 
-				if (c == '/' && FLAG_PATHNAME)
+				if (!c || (FLAG_PATHNAME && c == '/'))
 					return FNM_NOMATCH;
 
-				start = pattern;
+				// A bracket expression must never match a genuine LEADING period
+				if (is_leading_period)
+					return FNM_NOMATCH;
 
 				p = *++pattern;
-
 				not = 0;
-				if (p == '!') {
+				if (p == '!' || p == '^') {
 					not = 1;
 					p = *++pattern;
 				}
 
-				// unterminated '[' -> compare as characters
-				if (!p) {
+				// Look ahead to verify if the bracket expression is properly closed
+				const char *end_check = pattern;
+				if (*end_check == ']')
+					end_check++; // A leading ']' inside the bracket counts as a literal character
+				while (*end_check && *end_check != ']')
+					end_check++;
+
+				// If no closing ']' is found, treat '[' as a literal character
+				if (!*end_check) {
 					pattern = start;
 					p = *pattern;
+					if (FLAG_CASEFOLD) {
+						if (tolower(p) != c) return FNM_NOMATCH;
+					} else if (p != c) {
+						return FNM_NOMATCH;
+					}
 					break;
 				}
 
 				match = 0;
 				do {
-					if (!p) {
-						match = not;
-						break;
-					}
-					// character classes
+					// Handle POSIX character classes (e.g., [:digit:])
 					if (p == '[' && pattern[1] == ':') {
 						fxtype is;
-						const char * name = pattern += 2;
+						const char *name = pattern += 2;
 						while (*pattern && *pattern != ':')
 							++pattern;
 						is = lookup(name, pattern - name);
-						if (*pattern == 0) {
-							match = not;
-							break;
-						}
-						if (*++pattern != ']') {
+						if (*pattern == 0 || *++pattern != ']') {
 							match = not;
 							break;
 						}
@@ -114,76 +150,72 @@ int fnmatch(const char *pattern, const char *string, int flags) {
 							is = islower;
 						if (is)
 							match |= is(c);
-					} else
-					// range handling
-					if (pattern[1] == '-' && pattern[2] != ']') {
+					}
+					// Handle range expressions (e.g., a-z)
+					else if (pattern[1] == '-' && pattern[2] != ']') {
 						unsigned char to;
-
 						pattern += 2;
 						to = *pattern;
 						if (to == '\\' && !FLAG_NOESCAPE)
 							to = *++pattern;
-						while (!match && p <= to) {
-							if (!period || c == '.') {
-								if (FLAG_CASEFOLD && tolower(p) == c)
-									match = 1;
-								else if (p == c) {
-									match = 1;
-								}
-							}
-							++p;
+
+						unsigned char start_p = p;
+						if (FLAG_CASEFOLD) {
+							start_p = tolower(start_p);
+							to = tolower(to);
 						}
-					} else {
-						if (!period || c != '.') {
-							if (FLAG_CASEFOLD)
-								p = tolower(p);
-							match |= p == c;
+						if (c >= start_p && c <= to) {
+							match = 1;
 						}
+					}
+					// Handle single character match within brackets
+					else {
+						unsigned char check_p = p;
+						if (FLAG_CASEFOLD)
+							check_p = tolower(check_p);
+						if (check_p == c)
+							match = 1;
 					}
 					p = *++pattern;
-				} while (p != ']' || pattern[1] == '-');
+				} while (p != ']');
 
-				// goto next char if ok
-				if (match != not)
-					break;
-
-				// no match - try to apply this as character compare - fall through to character compare
-				pattern = start;
-				p = *pattern;
+				if (match == not)
+					return FNM_NOMATCH;
+				break;
 			}
-				/* fall through */
+
 			case '\\':
-				// recompare because of fall through - could be something else
-				if (p == '\\') {
-					if (!FLAG_NOESCAPE && pattern[1]) {
+				if (!FLAG_NOESCAPE) {
+					// Verify that another character actually follows the backslash
+					if (pattern[1] != '\0') {
 						p = *++pattern;
 					}
+					// A single trailing backslash at the very end of the pattern behaves as a literal '\'
 				}
 				/* fall through */
+
 			default:
-				// to character compare
 				if (FLAG_CASEFOLD) {
 					if (tolower(p) != c)
 						return FNM_NOMATCH;
-				} else if (p != c)
+				} else if (p != c) {
 					return FNM_NOMATCH;
+				}
 				break;
 		}
 
-		// reset dynamic period switch
-		if (FLAG_PATHNAME && c == '/')
-			period = FLAG_INPERIOD;
-		else
-			period = 0;
-		// matched
 		p = *++pattern;
-		c = *++string;
+		if (c) {
+			string++;
+			c = *string;
+		}
 	}
 
-	while (p == '*')
-		p = *++pattern;
+	// Match is successful (0) only if both the pattern and the string reached their ends
+	return (*string == '\0') ? 0 : FNM_NOMATCH;
+}
 
-//	if (flags & 0x8000)
-//		fprintf(stderr, "->%d\n", !!(p || c));
-	return p | c;
+// Public API wrapper
+int fnmatch(const char *pattern, const char *string, int flags) {
+	return fnmatch_internal(pattern, string, string, flags);
 }
