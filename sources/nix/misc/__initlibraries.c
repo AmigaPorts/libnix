@@ -5,6 +5,10 @@
 
 extern long __LIB_LIST__;
 
+/* The minimum version of the libraries opened for the program: it sets it by
+   defining, say, long __oslibversion = 39;  Common, so that definition wins. */
+__attribute__((common)) long __oslibversion;
+
 extern __attribute__((noreturn)) void exit(int returncode);
 
 #pragma GCC push_options
@@ -49,7 +53,7 @@ void __initlibraries(void) {
 	while (*l) {
 		long * base = l++;
 		char const * const name = *(char **) (l++);
-		long lib = (long)(endswithResource(name) ? OpenResource(name) : OldOpenLibrary(name));
+		long lib = (long)(endswithResource(name) ? OpenResource(name) : OpenLibrary(name, __oslibversion));
 		if (lib)
 			*base = lib;
 		else

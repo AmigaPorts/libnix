@@ -210,7 +210,8 @@ static const APTR InitTab[] = {
 /*                                                                            */
 /******************************************************************************/
 
-static const struct Resident RomTag = {
+/* used: nothing references it, but exec finds the library by it */
+static const struct Resident __attribute__((used)) RomTag = {
   RTC_MATCHWORD,
   (struct Resident *)&RomTag,
   (struct Resident *)&RomTag+1,
@@ -229,13 +230,11 @@ static const struct Resident RomTag = {
 /*                                                                            */
 /******************************************************************************/
 
+/* The standard vectors are in the array itself: as ADD2LIST()s, gcc could
+   emit them before the array, since it may reorder top-level asm and data.
+   The library's own ADD2LIST()s follow, in link order. */
 __attribute__((section(".list___FuncTable__,\"aw\"")))
-APTR __FuncTable__[] = {0};
-
-ADD2LIST(LibOpen,__FuncTable__,22);
-ADD2LIST(LibClose,__FuncTable__,22);
-ADD2LIST(LibExpunge,__FuncTable__,22);
-ADD2LIST(LibExtFunc,__FuncTable__,22);
+APTR __FuncTable__[] = {0, (APTR)LibOpen, (APTR)LibClose, (APTR)LibExpunge, (APTR)LibExtFunc};
 
 /******************************************************************************/
 /*                                                                            */

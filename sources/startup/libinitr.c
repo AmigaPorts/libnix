@@ -249,7 +249,8 @@ static const APTR InitTab[] = {
 /*                                                                            */
 /******************************************************************************/
 
-static const struct Resident RomTag = {
+/* used: nothing references it, but exec finds the library by it */
+static const struct Resident __attribute__((used)) RomTag = {
   RTC_MATCHWORD,
   (struct Resident *)&RomTag,
   (struct Resident *)&RomTag+1,
@@ -268,14 +269,7 @@ static const struct Resident RomTag = {
 /*                                                                            */
 /******************************************************************************/
 
-__attribute__((section(".list___FuncTable__,\"aw\"")))
-APTR __FuncTable__[] = {0};
-
-ADD2LIST(LibOpen,   __LibTable__,22);
-ADD2LIST(LibExtFunc,__LibTable__,22);
-ADD2LIST(LibExpunge,__LibTable__,22);
-ADD2LIST(LibExtFunc,__LibTable__,22);
-asm(".stabs \"___LibTable__\",20,0,0,-1");
+APTR __LibTable__[] = {0, (APTR)LibOpen, (APTR)LibExtFunc, (APTR)LibExpunge, (APTR)LibExtFunc, (APTR)-1};
 
 /******************************************************************************/
 /*                                                                            */
@@ -283,10 +277,11 @@ asm(".stabs \"___LibTable__\",20,0,0,-1");
 /*                                                                            */
 /******************************************************************************/
 
-ADD2LIST(LibExtFunc,__FuncTable__,22);
-ADD2LIST(LibClose,  __FuncTable__,22);
-ADD2LIST(LibExpunge,__FuncTable__,22);
-ADD2LIST(LibExtFunc,__FuncTable__,22);
+/* The standard vectors are in the array itself: as ADD2LIST()s, gcc could
+   emit them before the array, since it may reorder top-level asm and data.
+   The library's own ADD2LIST()s follow, in link order. */
+__attribute__((section(".list___FuncTable__,\"aw\"")))
+APTR __FuncTable__[] = {0, (APTR)LibExtFunc, (APTR)LibClose, (APTR)LibExpunge, (APTR)LibExtFunc};
 
 /******************************************************************************/
 /*                                                                            */
