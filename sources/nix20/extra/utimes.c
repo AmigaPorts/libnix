@@ -60,7 +60,7 @@ int SetFileDate(char const * file, struct DateStamp const * ds) {
 }
 #endif
 
-int utimes(const char *file, const struct timeval times[2]) {
+int utimes(const char *file, const struct timeval *times) {
 	struct DateStamp d;
 
 	if ((file = __amigapath(file)) == NULL)
