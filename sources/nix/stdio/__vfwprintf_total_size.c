@@ -120,7 +120,7 @@ struct piece {
  *  Returns the number of wide characters written, or -1 on stream error.
  * ==================================================================== */
 int __vfwprintf_total_size(FILE *stream, const wchar_t *format, va_list args) {
-	size_t outcount = 0;
+	unsigned long outcount = 0;
 	__STDIO_LOCK(stream);
 	while (*format) {
 		/* ============================================================
@@ -149,7 +149,7 @@ int __vfwprintf_total_size(FILE *stream, const wchar_t *format, va_list args) {
 			wchar_t *outp = outbuffer;
 #endif
 			wchar_t *buffer2 = buffer;
-			size_t size1 = 0, size2 = 0;
+			unsigned long size1 = 0, size2 = 0;
 			const wchar_t *ptr = format + 1;
 			unsigned short i, pad;
 			/* ---- 1. flags -------------------------------------------
@@ -507,12 +507,9 @@ int __vfwprintf_total_size(FILE *stream, const wchar_t *format, va_list args) {
 					/* 0. Reserve the front pad slot (always index 0) when
 					 *    the pad goes before the value.  Its count is set
 					 *    at step 9. */
-					if (width > 0 && !(flags & LALIGNFLAG)) {
-						int pad_at = (pad == '0' && sign != 0) ? 1 : 0;
-						pieces[npieces++] = (struct piece){ .startPos = pad_at, .count = 0, .c = pad };
-					} else
-						pieces[npieces++] = (struct piece){ .startPos = 0, .count = 0, .c = pad };
-
+					int pad_at = (width > 0 && !(flags & LALIGNFLAG) &&
+					              pad == '0' && sign != 0) ? 1 : 0;
+					pieces[npieces++] = (struct piece){ .startPos = pad_at, .count = 0, .c = pad };
 					if (preci == 0x7fff) {
 						if (type == L'f' || type == L'F' || type == L'e' || type == L'E' || type == L'g' || type == L'G') {
 							/* ISO C standard requires a default precision of 6 for floating-point formats */

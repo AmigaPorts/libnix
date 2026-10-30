@@ -348,7 +348,7 @@ int main(int argc, char **argv) {
 	TESTFMT("round 9 cascade|10|", "%.0f", 9.5);
 	TESTFMT("round 99 cascade|100|", "%.0f", 99.5);
 	TESTFMT("round 1.05|1.1|", "%.1f", 1.05);
-	TESTFMT("round 1.15|1.2|", "%.1f", 1.15);
+	TESTFMT("round 1.15|1.1|", "%.1f", 1.15);
 	TESTFMT("round 1.25|1.2|", "%.1f", 1.25);
 	TESTFMT("round 1.35|1.4|", "%.1f", 1.35);
 	TESTFMT("round 1.45|1.4|", "%.1f", 1.45);
@@ -356,7 +356,7 @@ int main(int argc, char **argv) {
 	TESTFMT("round 1.65|1.6|", "%.1f", 1.65);
 	TESTFMT("round 1.75|1.8|", "%.1f", 1.75);
 	TESTFMT("round 1.85|1.9|", "%.1f", 1.85);
-	TESTFMT("round 1.95|2.0|", "%.1f", 1.95);
+	TESTFMT("round 1.95|1.9|", "%.1f", 1.95);
 	printf("\n");
 	/* ==================================================================
 	 * SECTION 7: Special values (inf, NaN)
