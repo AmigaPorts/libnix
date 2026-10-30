@@ -88,7 +88,7 @@ ExAll (BPTR lock, STRPTR buffer, LONG size, LONG type, struct ExAllControl *cont
 #endif
 
 DIR* opendir(const char *dirname) {
-	DIR *dirp;
+	DIR *dirp = NULL;
 
 #ifdef IXPATHS
 	if((dirname=__amigapath(dirname))==NULL)
