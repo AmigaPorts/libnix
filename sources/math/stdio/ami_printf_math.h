@@ -282,8 +282,9 @@ LDL pow10_ld(LDL result, int n);
  * i.e. shifts and adds on the 96-bit mantissa, then bias the exponent by 3.
  * then the digit is added, 0 <= digit <= 9
  * The mantissa is not normalized, it's a 96 bit integer.
- * */
-void __LDL_mul_10_add(LDL *x, int digit);
+ * return 1 when added, 0 when saturated
+ */
+int __LDL_mul_10_add(LDL *x, int digit);
 
 /* In-place multiply by 16 and add a hex digit:
  *     *x = *x * 16 + digit,  0 <= digit <= 15
@@ -295,8 +296,9 @@ void __LDL_mul_10_add(LDL *x, int digit);
  * x * 16 is a pure left shift by 4, so there's no (x + x/4)-style
  * approximation and no truncation: the only loss is the carry out of
  * bit 95, which is the caller's saturation concern.
+ * return 1 when added, 0 when saturated
  */
-void __LDL_mul_16_add(LDL *x, int digit);
+int __LDL_mul_16_add(LDL *x, int digit);
 
 /* Normalize an LDL so the integer bit is at b95.
  *

@@ -1,18 +1,19 @@
 #include "stdio.h"
 
-double strtod(const char *nptr,char **endptr)
-{ double a=0.0;
-  unsigned long n=0;
-  sscanf(nptr,"%lf%ln",&a,&n);
-  if(endptr)
-    *endptr=(char *)nptr+n;
-  return a;
+long double strtold(const char *nptr, char **endptr) {
+	long double a = 0.0L;
+	unsigned long n = 0;
+	sscanf(nptr, "%Lf%ln", &a, &n);
+	if (endptr)
+		*endptr = (char*) nptr + n;
+	return a;
 }
 
-float strtof(const char *nptr,char **endptr) {
-	return (float)strtod(nptr, endptr);
+double strtod(const char *nptr, char **endptr) {
+	return strtold(nptr, endptr);
 }
 
-long double strtold(const char *nptr,char **endptr) {
-	return strtod(nptr, endptr);
+float strtof(const char *nptr, char **endptr) {
+	return (float) strtold(nptr, endptr);
 }
+
