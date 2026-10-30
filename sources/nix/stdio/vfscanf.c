@@ -290,19 +290,20 @@ int vfscanf(FILE *stream, const char *format, va_list args) {
 	                        has_pexp = 1;
 	                        NEXT(d);
 	                    }
+	                    PREV(d);
 	                    if (!has_pexp) {
 	                        /* "0x1p" or "0x1p+": 'p' is not part of the number.
-	                         * Unget the non-digit, the 'p', and the sign. */
-	                        PREV(d);
-	                        PREV(c);
+	                         * Unget the sign and the 'p'. */
 	                        if (psign_char)
 	                            PREV(psign_char);
+	                        PREV(c);
 	                        /* bin_exp stays as it was (0 from the hex digits,
 	                         * minus 4 per fractional hex digit). */
 	                    } else {
 	                        bin_exp += (psign_char == '-') ? -pexp : pexp;
-	                        c = d;
 	                    }
+	                } else {
+	                    PREV(c);
 	                }
 	                lv.l.exp += bin_exp;
 	                goto float_done;
@@ -348,12 +349,12 @@ int vfscanf(FILE *stream, const char *format, va_list args) {
 	                    NEXT(d);
 	                }
 
+	                PREV(d);
 	                if (!has_ex_digit) {
 	                    /* "10e" or "10e+": 'e' is not part of the number.
-	                     * Unget the non-digit, the 'e', and the sign. */
-	                    PREV(d);
-	                    PREV(c);
+	                     * Unget the sign and the 'e'. */
 	                    if (mine) PREV(mine);
+	                    PREV(c);
 	                    has_digit = 0;
 	                } else {
                     	long new_exp = (long long)ex * 217706 / 65536;   /* ex * log2(10) in Q16 */
@@ -369,7 +370,6 @@ int vfscanf(FILE *stream, const char *format, va_list args) {
 							special = 1;
 							goto float_done;
 	                    }
-	                    c = d;
 	                    lv = pow10_ld(lv, ex);
 	                }
 	            } else {
@@ -483,7 +483,9 @@ int vfscanf(FILE *stream, const char *format, va_list args) {
 						if (VAL(isxdigit(e))) {
 							c = e;
 						} else {
+							/* "0x" without digits: matching failure */
 							PREV(e);
+							size = 0;
 							break;
 						}
 					} else
