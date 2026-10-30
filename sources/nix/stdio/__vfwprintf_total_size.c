@@ -43,10 +43,46 @@
  * SECTION: plumbing, flags, constants
  * ==================================================================== */
 
+#define TCHAR wchar_t
+
 #ifdef FULL_SPECIFIERS
 extern unsigned char *__decimalpoint;
 #endif
-extern int __vfwprintf_total_size(FILE *stream, const wchar_t *fmt, va_list args);
+extern int __vfwprintf_total_size(FILE *stream, const TCHAR *fmt, va_list args);
+
+#define CX_0 L'0'
+#define CX_1 L'1'
+#define CX_5 L'5'
+#define CX_9 L'9'
+#define CX_a L'a'
+#define CX_A L'A'
+#define CX_c L'c'
+#define CX_d L'd'
+#define CX_e L'e'
+#define CX_E L'E'
+#define CX_f L'f'
+#define CX_F L'F'
+#define CX_g L'g'
+#define CX_G L'G'
+#define CX_h L'h'
+#define CX_i L'i'
+#define CX_j L'j'
+#define CX_l L'l'
+#define CX_L L'L'
+#define CX_n L'n'
+#define CX_m L'm'
+#define CX_o L'o'
+#define CX_p L'p'
+#define CX_P L'P'
+#define CX_s L's'
+#define CX_S L'S'
+#define CX_u L'u'
+#define CX_x L'x'
+#define CX_X L'X'
+#define CX_dot L'.'
+#define CX_minus L'-'
+#define CX_plus L'+'
+#define CX_space L' '
 
 /* Output one wide character and handle stream errors.
  *
@@ -59,7 +95,7 @@ extern int __vfwprintf_total_size(FILE *stream, const wchar_t *fmt, va_list args
  *
  * The count advances by one wide character per emitted character, matching
  * the character-count return value that swprintf expects.  It must NOT be
- * sizeof(wchar_t): that would return a byte count and break the sizing
+ * sizeof(TCHAR): that would return a byte count and break the sizing
  * idiom. */
 #define OUT(c)  do { \
     if (putwc((c), stream) == WEOF && !(stream->_flags & __SSTR)) { \
@@ -82,7 +118,7 @@ extern int __vfwprintf_total_size(FILE *stream, const wchar_t *fmt, va_list args
 /*
  * Float-path buffer bounds (wide chars).  After the piece-list rework,
  * outbuffer only holds bounded content (sign, "0x", mantissa hex, digits,
- * L'.', exponent), and buffer[] holds only the digit string.  Nothing that
+ * CX_dot, exponent), and buffer[] holds only the digit string.  Nothing that
  * grows with width or precision is buffered any more.
  */
 #define FLOAT_DIGBUF   (LD_DIGS + 6)                /* digit buffer for %f/%e/%g    */
@@ -100,10 +136,10 @@ extern int __vfwprintf_total_size(FILE *stream, const wchar_t *fmt, va_list args
 #define BLANKFLAG      8        /* ' '   */
 #define SIGNFLAG       16       /* '+'   */
 #define HAS_PRECI      32       /* '.' seen */
-static const wchar_t flagc[] = { L'#', L'0', L'-', L' ', L'+' };
+static const TCHAR flagc[] = { L'#', CX_0, L'-', L' ', CX_plus };
 extern unsigned __ulldivus(unsigned long long *llp, unsigned short n);
 
-/* A piece is a run of one repeated wide char, anchored at a wchar_t offset
+/* A piece is a run of one repeated wide char, anchored at a TCHAR offset
  * in outbuffer.  Pieces are emitted strictly left to right, interleaved with
  * outbuffer content.  The array is kept sorted by startPos: the front pad
  * (if reserved) sits at index 0, value pieces follow in increasing order,
@@ -112,14 +148,14 @@ extern unsigned __ulldivus(unsigned long long *llp, unsigned short n);
 struct piece {
     int     startPos;
     int     count;
-    wchar_t c;
+    TCHAR c;
 };
 
 /* ======================================================================
  *  __vfwprintf_total_size -- the wide formatter core.
  *  Returns the number of wide characters written, or -1 on stream error.
  * ==================================================================== */
-int __vfwprintf_total_size(FILE *stream, const wchar_t *format, va_list args) {
+int __vfwprintf_total_size(FILE *stream, const TCHAR *format, va_list args) {
 	unsigned long outcount = 0;
 	__STDIO_LOCK(stream);
 	while (*format) {
@@ -134,23 +170,23 @@ int __vfwprintf_total_size(FILE *stream, const wchar_t *format, va_list args) {
 		 * A '%' conversion begins here.
 		 * ========================================================== */
 		{
-			static const wchar_t lowertabel[] = { L'0', L'1', L'2', L'3', L'4', L'5', L'6', L'7', L'8', L'9', L'a', L'b', L'c', L'd', L'e', L'f' };
-			static const wchar_t uppertabel[] = { L'0', L'1', L'2', L'3', L'4', L'5', L'6', L'7', L'8', L'9', L'A', L'B', L'C', L'D', L'E', L'F' };
+			static const TCHAR lowertabel[] = { CX_0, CX_1, L'2', L'3', L'4', CX_5, L'6', L'7', L'8', CX_9, CX_a, L'b', CX_c, CX_d, CX_e, CX_f };
+			static const TCHAR uppertabel[] = { CX_0, CX_1, L'2', L'3', L'4', CX_5, L'6', L'7', L'8', CX_9, CX_A, L'B', L'C', L'D', CX_E, CX_F };
 			short width = 0;
 			unsigned short preci = 0x7fff; /* Sentinel value: no precision was specified. */
 			short flags = 0;
-			wchar_t type;
-			char orig_type;
-			wchar_t subtype = L'i';
-			wchar_t buffer1[4]; /* sign / radix prefix slot */
-			wchar_t buffer[REQUIREDBUFFER + 8];
-			wchar_t outbuffer[FLOAT_OUTBUF_MIN]; /* Float-path buffered output. */
+			TCHAR type;
+			TCHAR orig_type;
+			TCHAR subtype = CX_i;
+			TCHAR buffer1[4]; /* sign / radix prefix slot */
+			TCHAR buffer[REQUIREDBUFFER + 8];
+			TCHAR outbuffer[FLOAT_OUTBUF_MIN]; /* Float-path buffered output. */
 #ifdef FULL_SPECIFIERS
-			wchar_t *outp = outbuffer;
+			TCHAR *outp = outbuffer;
 #endif
-			wchar_t *buffer2 = buffer;
+			TCHAR *buffer2 = buffer;
 			unsigned long size1 = 0, size2 = 0;
-			const wchar_t *ptr = format + 1;
+			const TCHAR *ptr = format + 1;
 			unsigned short i, pad;
 			/* ---- 1. flags -------------------------------------------
 			 * Scan flagc[] repeatedly until a full pass finds no match
@@ -176,10 +212,10 @@ int __vfwprintf_total_size(FILE *stream, const wchar_t *format, va_list args) {
 					width = a;
 			} else {
 				while (iswdigit(*ptr))
-					width = width * 10 + (*ptr++ - L'0');
+					width = width * 10 + (*ptr++ - CX_0);
 			}
 			/* ---- 3. precision: '.' digits or '.*' -------------------- */
-			if (*ptr == L'.') {
+			if (*ptr == CX_dot) {
 				flags |= HAS_PRECI;
 				ptr++;
 				if (*ptr == L'*') /* read precision from arguments */
@@ -193,17 +229,17 @@ int __vfwprintf_total_size(FILE *stream, const wchar_t *format, va_list args) {
 						flags &= ~HAS_PRECI;
 				} else {
 					preci = 0;
-					while (*ptr >= L'0' && *ptr <= L'9')
-						preci = preci * 10 + (*ptr++ - L'0');
+					while (*ptr >= CX_0 && *ptr <= CX_9)
+						preci = preci * 10 + (*ptr++ - CX_0);
 				}
 			}
 			/* ---- 4. length modifier ----------------------------------
 			 * Internal codes: 'h' = halfword, 'i' = hh (byte),
 			 * 'l' = long, 'm' = ll / intmax, 0 = none.
 			 * --------------------------------------------------------- */
-			if (*ptr == L'h' || *ptr == L'l' || *ptr == L'L' || *ptr == L'j' || *ptr == L'z' || *ptr == L't') {
+			if (*ptr == CX_h || *ptr == CX_l || *ptr == CX_L || *ptr == CX_j || *ptr == L'z' || *ptr == L't') {
 				subtype = *ptr++;
-				if (*ptr == L'h' || *ptr == L'l')
+				if (*ptr == CX_h || *ptr == CX_l)
 					++ptr, ++subtype;
 			} else
 				subtype = 0;
@@ -212,55 +248,55 @@ int __vfwprintf_total_size(FILE *stream, const wchar_t *format, va_list args) {
 			/* ========================================================
 			 * Integer family: d i o p u x X
 			 *======================================================== */
-			case L'd':
-			case L'i':
-			case L'o':
-			case L'p':
-			case L'u':
-			case L'x':
-			case L'X': {
+			case CX_d:
+			case CX_i:
+			case CX_o:
+			case CX_p:
+			case CX_u:
+			case CX_x:
+			case CX_X: {
 				unsigned long long v;
-				const wchar_t *tabel;
+				const TCHAR *tabel;
 				int base;
 				/* %p is spelled "%#lx" */
-				if (type == L'p') {
-					subtype = L'l'; /* This is written as %#lx */
-					type = L'x';
+				if (type == CX_p) {
+					subtype = CX_l; /* This is written as %#lx */
+					type = CX_x;
 					flags |= ALTERNATEFLAG;
 				}
-				if (type == L'd' || type == L'i') {
+				if (type == CX_d || type == CX_i) {
 					/* ---- signed: magnitude -> v, prefix -> buffer1 ---- */
 					signed long long v2;
 					/* Extract the argument with proper type */
-					if (subtype == L'l')
+					if (subtype == CX_l)
 						v2 = va_arg(args, signed long);
-					else if (subtype == L'm' || subtype == L'j')
+					else if (subtype == CX_m || subtype == CX_j)
 						v2 = va_arg(args, signed long long);
 					else
 						v2 = va_arg(args, signed int);
 					/* Convert hh/h arguments to their specified width. */
-					if (subtype == L'h')
+					if (subtype == CX_h)
 						v2 = (short) v2; /* Convert to signed short instead of masking the bits. */
-					else if (subtype == L'i')
+					else if (subtype == CX_i)
 						v2 = (signed char) v2; /* Convert to signed char instead of masking the bits. */
 					/* Now v2 is correctly sign-extended */
 					if (v2 < 0) {
 						if (size1 < sizeof(buffer1) / sizeof(buffer1[0]))
-							buffer1[size1++] = L'-';
+							buffer1[size1++] = CX_minus;
 						/* -LLONG_MIN cannot be negated in signed math    */
 						v = (v2 == LLONG_MIN) ? (unsigned long long) LLONG_MAX + 1ULL : (unsigned long long) (-v2);
 					} else {
 						if (flags & SIGNFLAG)
-							buffer1[size1++] = L'+';
+							buffer1[size1++] = CX_plus;
 						else if (flags & BLANKFLAG)
-							buffer1[size1++] = L' ';
+							buffer1[size1++] = CX_space;
 						v = (unsigned long long) v2;
 					}
 				} else {
 					/* ---- unsigned family ---- */
-					if (subtype == L'l')
+					if (subtype == CX_l)
 						v = va_arg(args, unsigned long);
-					else if (subtype == L'm' || subtype == L'j')
+					else if (subtype == CX_m || subtype == CX_j)
 						v = va_arg(args, unsigned long long);
 					else
 						v = va_arg(args, unsigned int);
@@ -268,12 +304,12 @@ int __vfwprintf_total_size(FILE *stream, const wchar_t *format, va_list args) {
 					 * For unsigned types, bitmasks are correct because we want
 					 * to truncate to the specified width (0-255 for char, 0-65535 for short)
 					 */
-					if (subtype == L'h')
+					if (subtype == CX_h)
 						v &= 0xffffULL;
-					else if (subtype == L'i')
+					else if (subtype == CX_i)
 						v &= 0xffULL;
 					if (flags & ALTERNATEFLAG) {
-						if (type == L'o') {
+						if (type == CX_o) {
 							/*
 							 * For octal with # flag:
 							 * - If value is 0: just output "0" (no extra prefix)
@@ -282,19 +318,19 @@ int __vfwprintf_total_size(FILE *stream, const wchar_t *format, va_list args) {
 							 */
 							if (preci == 0x7fff && v != 0) {
 								if (size1 < sizeof(buffer1) / sizeof(buffer1[0]))
-									buffer1[size1++] = L'0';
+									buffer1[size1++] = CX_0;
 							} else if (preci != 0x7fff && v != 0) {
 								/* Precision specified and value non-zero: add prefix if needed */
 								if (size1 < sizeof(buffer1) / sizeof(buffer1[0])) {
-									buffer1[size1++] = L'0';
+									buffer1[size1++] = CX_0;
 									if (preci > 0)									
 										--preci;
 								}
 							}
 							/* If v == 0, don't add prefix - just let the digit loop output "0" */
-						} else if ((type == L'x' || type == L'X') && v) {
+						} else if ((type == CX_x || type == CX_X) && v) {
 							if (size1 + 2 <= sizeof(buffer1) / sizeof(buffer1[0])) {
-								buffer1[size1++] = L'0';
+								buffer1[size1++] = CX_0;
 								buffer1[size1++] = type;
 								if (preci != 0x7fff)
 									preci -= 2;
@@ -304,8 +340,8 @@ int __vfwprintf_total_size(FILE *stream, const wchar_t *format, va_list args) {
 				}
 				/* Divide down; digits land right-to-left in buffer.     */
 				buffer2 = &buffer[sizeof(buffer) / sizeof(buffer[0])];
-				base = (type == L'x' || type == L'X') ? 16 : (type == L'o') ? 8 : 10;
-				tabel = (type != L'X') ? lowertabel : uppertabel;
+				base = (type == CX_x || type == CX_X) ? 16 : (type == CX_o) ? 8 : 10;
+				tabel = (type != CX_X) ? lowertabel : uppertabel;
 				do {
 					if (buffer2 <= buffer) /* Prevent writing before the start of the buffer. */
 						break;
@@ -323,12 +359,12 @@ int __vfwprintf_total_size(FILE *stream, const wchar_t *format, va_list args) {
 				/* ========================================================
 				 * %c
 				 *======================================================== */
-			case L'c': {
-				wchar_t ch;
-				if (subtype == L'l')
-					ch = (wchar_t) va_arg(args, long);
+			case CX_c: {
+				TCHAR ch;
+				if (subtype == CX_l)
+					ch = (TCHAR) va_arg(args, long);
 				else
-					ch = (wchar_t) va_arg(args, int);
+					ch = (TCHAR) va_arg(args, int);
 				buffer[0] = ch;
 				buffer2 = buffer;
 				size2 = 1;
@@ -338,16 +374,16 @@ int __vfwprintf_total_size(FILE *stream, const wchar_t *format, va_list args) {
 			/* ========================================================
 			 * %s und %ls / %S  (NULL-safe)
 			 *======================================================== */
-			case L's':
-			case L'S': {
+			case CX_s:
+			case CX_S: {
 				/* 'S' ->  %ls */
-				if (type == L'S') {
-					subtype = L'l';
+				if (type == CX_S) {
+					subtype = CX_l;
 				}
 
-				if (subtype == L'l') {
-					/* %ls -> wchar_t* */
-					buffer2 = va_arg(args, wchar_t*);
+				if (subtype == CX_l) {
+					/* %ls -> TCHAR* */
+					buffer2 = va_arg(args, TCHAR*);
 					if (buffer2 == NULL) {
 						buffer2 = L"(null)";
 					}
@@ -363,7 +399,7 @@ int __vfwprintf_total_size(FILE *stream, const wchar_t *format, va_list args) {
 						size2 = 6;
 					} else {
 						/* limit size! */
-						size_t max_len = (sizeof(outbuffer) / sizeof(wchar_t)) - 1;
+						size_t max_len = (sizeof(outbuffer) / sizeof(TCHAR)) - 1;
 						if (preci < max_len) {
 							max_len = preci;
 						}
@@ -371,7 +407,7 @@ int __vfwprintf_total_size(FILE *stream, const wchar_t *format, va_list args) {
 						size2 = 0;
 						/* convert */
 						while (s[size2] != '\0' && size2 < max_len) {
-							outbuffer[size2] = (wchar_t)(unsigned char)s[size2];
+							outbuffer[size2] = (TCHAR)(unsigned char)s[size2];
 							size2++;
 						}
 						outbuffer[size2] = L'\0';
@@ -398,21 +434,21 @@ int __vfwprintf_total_size(FILE *stream, const wchar_t *format, va_list args) {
 				 *   S5  trailing-zero trimming, width bookkeeping
 				 *   S6  padded emission (piece-list interleave)
 				 *======================================================== */
-			case L'a':
-			case L'A':
-			case L'f':
-			case L'e':
-			case L'E':
-			case L'g':
-			case L'G': {
+			case CX_a:
+			case CX_A:
+			case CX_f:
+			case CX_e:
+			case CX_E:
+			case CX_g:
+			case CX_G: {
 				union _d_bits d;
 				union _ld_bits lu; /* full-width ld operand */
 				work_float_t ld_val; /* working precision     */
-				int is_ld = (subtype == L'L');
+				int is_ld = (subtype == CX_L);
 				short exponent = 0; /* power of ten          */
 				char sign = 0;
 				const char *infnan = 0;
-				wchar_t pad = ((flags & ZEROPADFLAG) && !(flags & LALIGNFLAG)) ? L'0' : L' ';
+				TCHAR pad = ((flags & ZEROPADFLAG) && !(flags & LALIGNFLAG)) ? CX_0 : L' ';
                 const int MEANINGFUL_DIGITS = is_ld ? LD_DIGS : D_DIGS;
 				/* -------- S1: load + make magnitude + specials ------- */
 				if (is_ld) {
@@ -420,12 +456,12 @@ int __vfwprintf_total_size(FILE *stream, const wchar_t *format, va_list args) {
 					lu.ld = raw_ld;
                     ld_val = __LDL_from_long_double(raw_ld);   /* ignore sign*/
 					if (_ld_signbit(lu)) {
-						sign = '-';
+						sign = CX_minus;
 						lu.b.sign = 0; /* erase sign field      */
 					} else if (flags & SIGNFLAG)
-						sign = '+';
+						sign = CX_plus;
 					else if (flags & BLANKFLAG)
-						sign = ' ';
+						sign = CX_space;
 					if (_ld_isnan(lu)) {
 						infnan = "NaN";
 						sign = 0; /* NaN carries no sign   */
@@ -437,11 +473,11 @@ int __vfwprintf_total_size(FILE *stream, const wchar_t *format, va_list args) {
 					ld_val = __LDL_from_double(d.d);
 					if (_d_signbit(d)) {
 						d.b.sign = 0;
-						sign = '-';
+						sign = CX_minus;
 					} else if (flags & SIGNFLAG)
-						sign = '+';
+						sign = CX_plus;
 					else if (flags & BLANKFLAG)
-						sign = ' ';
+						sign = CX_space;
 					if (_d_isnan(d)) {
 						infnan = "NaN";
 						sign = 0;
@@ -508,13 +544,13 @@ int __vfwprintf_total_size(FILE *stream, const wchar_t *format, va_list args) {
 					 *    the pad goes before the value.  Its count is set
 					 *    at step 9. */
 					int pad_at = (width > 0 && !(flags & LALIGNFLAG) &&
-					              pad == '0' && sign != 0) ? 1 : 0;
+					              pad == CX_0 && sign != 0) ? 1 : 0;
 					pieces[npieces++] = (struct piece){ .startPos = pad_at, .count = 0, .c = pad };
 					if (preci == 0x7fff) {
-						if (type == L'f' || type == L'F' || type == L'e' || type == L'E' || type == L'g' || type == L'G') {
+						if (type == CX_f || type == CX_F || type == CX_e || type == CX_E || type == CX_g || type == CX_G) {
 							/* ISO C standard requires a default precision of 6 for floating-point formats */
 							preci = 6;
-						} else if (type == L'a' || type == L'A') {
+						} else if (type == CX_a || type == CX_A) {
 							/* -1 signals the hex formatter to output enough digits for an exact value */
 							preci = -1;
 						} else {
@@ -523,8 +559,8 @@ int __vfwprintf_total_size(FILE *stream, const wchar_t *format, va_list args) {
 					}
 					if (!infnan) {
 						int original_preci = (preci == 0) ? 1 : preci;
-						if (type != L'a' && type != L'A') {
-							if (type == L'g' || type == L'G') {
+						if (type != CX_a && type != CX_A) {
+							if (type == CX_g || type == CX_G) {
 								isg = 1;
 								if (exponent >= -4 && exponent < original_preci) {
 									--type; /* Fixed-point 'f' or 'F' */
@@ -554,7 +590,7 @@ int __vfwprintf_total_size(FILE *stream, const wchar_t *format, va_list args) {
 								if (!(flags & ALTERNATEFLAG)) {
 									killZero = 1;
 								}
-							} else if (type == L'f' || type == L'F') {
+							} else if (type == CX_f || type == CX_F) {
 								if (exponent >= 0) {
 									digits_to_compute = exponent + preci + 1;
 								} else {
@@ -562,7 +598,7 @@ int __vfwprintf_total_size(FILE *stream, const wchar_t *format, va_list args) {
 									if (digits_to_compute < 0)
 										digits_to_compute = 0;
 								}
-							} else if (type == L'e' || type == L'E') {
+							} else if (type == CX_e || type == CX_E) {
 								digits_to_compute = preci + 1;
 								if (digits_to_compute > MEANINGFUL_DIGITS)
 									digits_to_compute = MEANINGFUL_DIGITS;
@@ -575,11 +611,11 @@ int __vfwprintf_total_size(FILE *stream, const wchar_t *format, va_list args) {
 								digits_to_compute = MEANINGFUL_DIGITS;
 							}
 							/* Use ld_val for digit extraction, not d.d */
-							buffer[0] = L'0';
+							buffer[0] = CX_0;
 							startPos = pos = 1;
 
 							for (; pos <= digits_to_compute && pos < FLOAT_DIGBUF; ++pos) {
-								buffer[pos] = L'0' + __LDL_mul_10_extract(&ld_val);
+								buffer[pos] = CX_0 + __LDL_mul_10_extract(&ld_val);
 							}
 							/* Perform rounding */
 							if (__LDL_cmp_5(&ld_val) >= 0) {
@@ -590,34 +626,34 @@ int __vfwprintf_total_size(FILE *stream, const wchar_t *format, va_list args) {
 										break;
 
 								while (tpos > 0) {
-									if (++buffer[tpos] <= L'9')
+									if (++buffer[tpos] <= CX_9)
 										break;
-									buffer[tpos--] = L'0';
+									buffer[tpos--] = CX_0;
 								}
 								/* Handle carry overflow (e.g., 9.99 -> 10.00 or 0.099 -> 0.100) */
 								if (tpos == 0) {
 								    startPos = 0;
-								    buffer[0] = L'1';
+								    buffer[0] = CX_1;
 								    exponent++;
 								    if (isg && exponent >= original_preci) {
 								        /* Rounding pushed the value into scientific territory.
 								         * Switch from %f/%g to %e (or F to E). */
-								        type = (type & 0x20) ? L'e' : L'E';
+								        type = (type & 0x20) ? CX_e : CX_E;
 								        leading = 1;
 								        preci = original_preci - 1;
 								    } else if (exponent > 0) {
 								        ++leading;
 								        ++digits_to_compute;
 								    }
-								} else if (exponent + preci < 0 && buffer[tpos] == L'5' && (type == L'f' || type == L'F')) {
+								} else if (exponent + preci < 0 && buffer[tpos] == CX_5 && (type == CX_f || type == CX_F)) {
 									startPos = 0;
-									buffer[0] = L'1';
+									buffer[0] = CX_1;
 									exponent++; /* Exponent shifts up globally for all format paths */
 								}
 								} while (0); // end do
 							}
 							/* Set the number of integer digits; this matters only for %f. */
-							if (type == L'f' || type == L'F') {
+							if (type == CX_f || type == CX_F) {
 								leading = (exponent >= 0) ? (exponent + 1) : 0;
 							} else {
 								leading = 1;
@@ -626,12 +662,12 @@ int __vfwprintf_total_size(FILE *stream, const wchar_t *format, va_list args) {
 							/* 'a' 'A' format - pure bit operations */
 							if (!(flags & HAS_PRECI))
 								killZero = 1;
-							TOUT(L'0');
-							TOUT(type + (L'X' - L'A'));
-							buffer[0] = L'0';
+							TOUT(CX_0);
+							TOUT(type + (CX_X - CX_A));
+							buffer[0] = CX_0;
 							startPos = 0;
 							pos = 1;
-							const wchar_t *hexdigits = (type == L'A') ? L"0123456789ABCDEF" : L"0123456789abcdef";
+							const TCHAR *hexdigits = (type == CX_A) ? L"0123456789ABCDEF" : L"0123456789abcdef";
 							if (is_ld) {
 								if (lu.b.exp == 0) {
 									if (lu.b.mant == 0) {
@@ -642,7 +678,7 @@ int __vfwprintf_total_size(FILE *stream, const wchar_t *format, va_list args) {
 									}
 								} else {
 									exponent = (short) (lu.b.exp - 16383);
-									buffer[0] = L'1';
+									buffer[0] = CX_1;
 								}
 								/* Extract mantissa for long double */
 								unsigned long long mant = lu.b.mant;
@@ -658,7 +694,7 @@ int __vfwprintf_total_size(FILE *stream, const wchar_t *format, va_list args) {
 									exponent = 0;
 								} else {
 									exponent = d.b.exp - 1023;
-									buffer[0] = L'1';
+									buffer[0] = CX_1;
 								}
 								/* Extract 52-bit mantissa for double */
 								unsigned long long mant = ((unsigned long long)d.b.frac0 << 32) | d.b.frac1;
@@ -670,7 +706,7 @@ int __vfwprintf_total_size(FILE *stream, const wchar_t *format, va_list args) {
 								    buffer[pos++] = hexdigits[digit];
 								}
 							}
-							type += L'P' - L'A';
+							type += CX_P - CX_A;
 							leading = 1;
 						}
 					}
@@ -681,7 +717,7 @@ int __vfwprintf_total_size(FILE *stream, const wchar_t *format, va_list args) {
 					 * Build a tiny piece list of unbounded runs (zeros / pad),
 					 * anchored at outbuffer offsets, then emit outbuffer
 					 * interleaved with those runs.  Only bounded content
-					 * (sign, "0x", digits, L'.', exponent) ever goes into
+					 * (sign, "0x", digits, CX_dot, exponent) ever goes into
 					 * outbuffer, so any width or precision is safe.
 					 */
 					/* 1. Sign (bounded; stays in outbuffer[0]). */
@@ -696,14 +732,14 @@ int __vfwprintf_total_size(FILE *stream, const wchar_t *format, va_list args) {
 						TOUT(infnan[1]);
 						TOUT(infnan[2]);
 						if (width > 0 && !(flags & LALIGNFLAG))
-							pieces[0].c = L' ';
+							pieces[0].c = CX_space;
 					} else {
 						unsigned short frac = preci;
 
 						/* 2. Integer part. */
-						if (exponent < 0 && (type == L'f' || type == L'F')) {
+						if (exponent < 0 && (type == CX_f || type == CX_F)) {
 							/* For small fixed-point numbers (e.g., 0.00123), print the mandatory leading '0' */
-							TOUT(L'0');
+							TOUT(CX_0);
 						} else {
 							if (isg)
 								preci -= leading;
@@ -722,16 +758,16 @@ int __vfwprintf_total_size(FILE *stream, const wchar_t *format, va_list args) {
 								TOUT(buffer[k]);
 							/* Remaining integer zeros go into a piece. */
 							if (leading > 0)
-								PUSH((int)(outp - outbuffer), leading, L'0');
-							if (type == L'f' || type == L'F') {
+								PUSH((int)(outp - outbuffer), leading, CX_0);
+							if (type == CX_f || type == CX_F) {
 								if (rpad > 0)
-									PUSH((int)(outp - outbuffer), rpad, L'0');
+									PUSH((int)(outp - outbuffer), rpad, CX_0);
 							}
 						}
 						/* 3. Trim trailing zeros in the digit buffer (g/G). */
 						if (killZero) {
 							int stop = pos - 1;
-							while (stop >= startPos && buffer[stop] == L'0') {
+							while (stop >= startPos && buffer[stop] == CX_0) {
 								stop--;
 							}
 							preci = stop - startPos + 1;   /* Number of significant digits. */
@@ -741,19 +777,19 @@ int __vfwprintf_total_size(FILE *stream, const wchar_t *format, va_list args) {
 						}
 						/* 4. Decimal point. */
 						if (preci || (flags & ALTERNATEFLAG) != 0) {
-							TOUT((__decimalpoint && __decimalpoint[0]) ? (wchar_t)__decimalpoint[0] : L'.');
+							TOUT((__decimalpoint && __decimalpoint[0]) ? (TCHAR)__decimalpoint[0] : CX_dot);
 						}
 						/* limit output */
 						if (pos > startPos + preci) {
 							pos = startPos + preci;
 						}
 						/* 5. Leading fractional zeros for small %f numbers. */
-						if (exponent < 0 && (type == L'f' || type == L'F')) {
+						if (exponent < 0 && (type == CX_f || type == CX_F)) {
 							int fractional_zeros = -exponent - 1; /* e.g., exp = -3 -> 2 zeros */
 							if (fractional_zeros > frac)
 								fractional_zeros = frac;
 							if (fractional_zeros > 0) {
-								PUSH((int)(outp - outbuffer), fractional_zeros, L'0');
+								PUSH((int)(outp - outbuffer), fractional_zeros, CX_0);
 								if (!isg)
 									preci -= fractional_zeros;
 							}
@@ -767,42 +803,42 @@ int __vfwprintf_total_size(FILE *stream, const wchar_t *format, va_list args) {
 						}
 						/* 7. Trailing zeros to satisfy precision. */
 						if (preci > 0) {
-							PUSH((int)(outp - outbuffer), preci, L'0');
+							PUSH((int)(outp - outbuffer), preci, CX_0);
 							preci = 0;
 						}
 						/* 8. Exponent. */
-						if (!(type == L'f' || type == L'F')) {
+						if (!(type == CX_f || type == CX_F)) {
 							int xout = 0;
-							wchar_t t_lower = (wchar_t) (type | 0x20); /* Convert to lowercase ('e' or 'p') */
+							TCHAR t_lower = (TCHAR) (type | 0x20); /* Convert to lowercase ('e' or 'p') */
 							TOUT(type);
 							if (exponent < 0) {
-								TOUT(L'-');
+								TOUT(CX_minus);
 								exponent = -exponent;
 							} else {
-								TOUT(L'+');
+								TOUT(CX_plus);
 							}
 							/* Thousands digit (e.g., for long double extremes like e+4932) */
 							if (exponent > 999) {
 								int z = exponent / 1000;
-								TOUT(L'0' + z);
+								TOUT(CX_0 + z);
 								exponent -= z * 1000;
 								xout = 1;
 							}
 							/* Hundreds digit */
 							if (xout || exponent > 99) {
 								int z = exponent / 100;
-								TOUT(L'0' + z);
+								TOUT(CX_0 + z);
 								exponent -= z * 100;
 								xout = 1;
 							}
 							/* Tens digit: Forced to print for 'e'/'E' to guarantee at least 2 digits (e+00) */
-							if (xout || exponent > 9 || t_lower == L'e') {
+							if (xout || exponent > 9 || t_lower == CX_e) {
 								int z = exponent / 10;
-								TOUT(L'0' + z);
+								TOUT(CX_0 + z);
 								exponent -= z * 10;
 							}
 							/* Units digit (always printed) */
-							TOUT(L'0' + exponent);
+							TOUT(CX_0 + exponent);
 						}
 					}
 					/* 9. Fill in the pad count.
@@ -827,7 +863,7 @@ int __vfwprintf_total_size(FILE *stream, const wchar_t *format, va_list args) {
 							if (flags & LALIGNFLAG) {
 								/* Tail pad: append at the end so its
 								 * startPos (== outp) is the largest. */
-								PUSH((int)(outp - outbuffer), padcount, L' ');
+								PUSH((int)(outp - outbuffer), padcount, CX_space);
 							} else {
 								/* Front pad: the slot at index 0 was
 								 * reserved.  padcount > 0 implies
@@ -845,7 +881,7 @@ int __vfwprintf_total_size(FILE *stream, const wchar_t *format, va_list args) {
 						for (int k = 0; k < len; ++k) {
 							while (pi < npieces && pieces[pi].startPos == k) {
 								int cnt = pieces[pi].count;
-								wchar_t pc = pieces[pi].c;
+								TCHAR pc = pieces[pi].c;
 								for (int j = 0; j < cnt; ++j)
 									OUT(pc);
 								++pi;
@@ -856,7 +892,7 @@ int __vfwprintf_total_size(FILE *stream, const wchar_t *format, va_list args) {
 						 * or width pad when outbuffer is empty). */
 						while (pi < npieces) {
 							int cnt = pieces[pi].count;
-							wchar_t pc = pieces[pi].c;
+							TCHAR pc = pieces[pi].c;
 							for (int j = 0; j < cnt; ++j)
 								OUT(pc);
 							++pi;
@@ -873,26 +909,26 @@ int __vfwprintf_total_size(FILE *stream, const wchar_t *format, va_list args) {
 				size2 = 1;
 				preci = 0;
 				break;
-			case L'n':
+			case CX_n:
 				*va_arg(args, int*) = outcount;
 				width = preci = 0;
 				break;
 			default:
 				if (!type)
 					ptr--; /* We've gone too far - step one back */
-				buffer2 = (wchar_t*) format;
+				buffer2 = (TCHAR*) format;
 				size2 = ptr - format;
 				width = preci = 0;
 				break;
 			}
 			if ((flags & HAS_PRECI) && !(flags & ALTERNATEFLAG)) {
-				if (size2 == 1 && !preci && buffer2[0] == L'0')
+				if (size2 == 1 && !preci && buffer2[0] == CX_0)
 					size2 = 0;
 			}
 			if ((flags & HAS_PRECI) && !preci) {
-			    if (size2 == 1 && buffer2[0] == '0' &&
-			        (orig_type == 'd' || orig_type == 'i' ||
-			         orig_type == 'x' || orig_type == 'X'))
+			    if (size2 == 1 && buffer2[0] == CX_0 &&
+			        (orig_type == CX_d || orig_type == CX_i ||
+			         orig_type == CX_x || orig_type == CX_X))
 			        size2 = 0;
 			}
 			pad = size1 + (size2 >= preci ? size2 : preci); /* Calculate the number of characters */
@@ -902,17 +938,17 @@ int __vfwprintf_total_size(FILE *stream, const wchar_t *format, va_list args) {
 					OUT(buffer1[i]);
 			if (!(flags & LALIGNFLAG)) /* Pad left */
 				for (i = 0; i < pad; i++)
-					OUT(flags & ZEROPADFLAG ? L'0' : L' ');
+					OUT(flags & ZEROPADFLAG ? CX_0 : CX_space);
 			if (!(flags & ZEROPADFLAG)) /* Print the sign when zero padding is not used. */
 				for (i = 0; i < size1; i++)
 					OUT(buffer1[i]);
 			for (i = size2; i < preci; i++) /* extend to precision */
-				OUT(L'0');
+				OUT(CX_0);
 			for (i = 0; i < size2; i++) /* Print the converted value. */
 				OUT(buffer2[i]);
 			if (flags & LALIGNFLAG) /* Pad right */
 				for (i = 0; i < pad; i++)
-					OUT(L' ');
+					OUT(CX_space);
 			format = ptr;
 		}
 	}
