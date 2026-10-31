@@ -23,14 +23,26 @@ const struct Resident __RomTag;
 const char __libName[80];
 
 // place into data segment -> init with zero
+// One object, as gcc may reorder separate ones: the library base must start
+// the data segment, since __LibOpen copies the data from &__lib and points a4
+// at the copy as ___a4_init points at __lib, and the list must follow it,
+// since in each copy its place becomes the node __LibOpen links into it.
 __attribute__((section(".data")))
- struct Library __lib = { {0, 0, NT_LIBRARY, 0, (char *)__libName},
-		 LIBF_CHANGED | LIBF_SUMUSED, 0,
-		 0, 0,
-		 0, 0};
-// track all instantiated libs, the lib_Sum fields is used to track the opening Task
-__attribute__((section(".data")))
- struct List __libList = { 0 };
+struct {
+	struct Library lib;
+	// track all instantiated libs, the lib_Sum fields is used to track the opening Task
+	struct List list;
+} __libdata = {
+	.lib = {
+		.lib_Node = {
+			.ln_Type = NT_LIBRARY,
+			.ln_Name = (char *)__libName,
+		},
+		.lib_Flags = LIBF_CHANGED | LIBF_SUMUSED,
+	},
+};
+#define __lib __libdata.lib
+#define __libList __libdata.list
 
 const char __libName[80] = { 0 };
 const APTR __FuncTable__[];
