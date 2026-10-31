@@ -26,6 +26,9 @@
 
 #include "ami_printf_math.h"
 
+/* The snprintf() truncation tests truncate on purpose. */
+#pragma GCC diagnostic ignored "-Wformat-truncation"
+
 /* Test counter */
 static int tests_run = 0;
 static int tests_passed = 0;
@@ -553,7 +556,7 @@ int main(int argc, char **argv) {
 	/* ==================================================================
 	 * SECTION 15: Integer alternate-form tests (%#hho and %#hhx)
 	 * ================================================================== */
-	printf("--- Integer alternate-form (%#hho and %#hhx) tests ---\n");
+	printf("--- Integer alternate-form (%%#hho and %%#hhx) tests ---\n");
 	{
 		unsigned char a;
 
