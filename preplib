@@ -33,6 +33,7 @@ find nix -name "*.o" \
   -not -name vsscanf.o  \
   -not -name __vfprintf_total_size.o \
   -not -name __vfwprintf_total_size.o \
+  -not -name stkchk.o \
   -not -name swprintf.o \
   -not -name vfwprintf.o \
   -not -name vswprintf.o \
