@@ -42,14 +42,6 @@ static inline int hexval(int c)
 }
 
 #ifdef FULL_SPECIFIERS
-static const unsigned char undef[3][sizeof(double)] = /* Undefined numeric values, IEEE */
-{ { 0x7f, 0xf0, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00 }, /* +inf */
-{ 0xff, 0xf0, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00 }, /* -inf */
-{ 0x7f, 0xf7, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff } /*  NaN */
-};
-#endif
-
-#ifdef FULL_SPECIFIERS
 extern unsigned char * __decimalpoint;
 #endif
 
@@ -246,7 +238,6 @@ int vfscanf(FILE *stream, const char *format, va_list args) {
 	            }
 
 	            if (c && VAL(c == 'x') && lv.l.high == 0 && lv.l.middle == 0 && lv.l.low == 0) {
-	                size_t before_hex = size;   /* remember where 'x' started */
 	                int has_hex = 0;
 	                int bin_exp = 0;
 

@@ -291,7 +291,6 @@ LDL __LDL_mul(LDL a, LDL b)
 
 void __LDL_mul_10(LDL * x)
 {
-	LDL r;
 	unsigned long hi, mid, lo;
 	unsigned long hi2, mid2, lo2;
 	unsigned long res_lo, res_mid, res_hi, carry;
