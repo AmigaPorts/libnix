@@ -8,7 +8,7 @@ static int check(const wchar_t *got, int n, const wchar_t *want)
 {
 	if (n == (int)wcslen(want) && wcscmp(got, want) == 0)
 		return 0;
-	printf("got %d \"%ls\", want \"%ls\"\n", n, got, want);
+	wprintf(L"got %d \"%s\", want \"%s\"\n", n, got, want);
 	return 1;
 }
 
