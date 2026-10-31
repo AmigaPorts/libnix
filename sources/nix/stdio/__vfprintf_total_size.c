@@ -35,7 +35,6 @@
 #include <float.h>
 #include <stdio.h>
 
-#include "ami_printf_math.h"
 
 /* ======================================================================
  * SECTION: plumbing, flags, constants
@@ -44,6 +43,8 @@
 #define TCHAR char
 
 #ifdef FULL_SPECIFIERS
+#include "../../math/stdio/ami_printf_math.h"
+
 extern unsigned char *__decimalpoint;
 #endif
 extern int __vfprintf_total_size(FILE *stream, const TCHAR *fmt, va_list args);
@@ -483,9 +484,10 @@ int __vfprintf_total_size(FILE *stream, const TCHAR *format, va_list args) {
 				 * ---------------------------------------------------- */
 				{
 					int pos = 0;
-					int startPos;
+					int startPos = 0;
 					short leading = 1;
 					short killZero = 0;
+					short rounds = 1; /* can the dropped digits round up? */
 					int digits_to_compute = MEANINGFUL_DIGITS;
 					short isg = 0;
 					/* Piece list for this conversion.  Index 0 may be the
@@ -554,8 +556,12 @@ int __vfprintf_total_size(FILE *stream, const TCHAR *format, va_list args) {
 									digits_to_compute = exponent + preci + 1;
 								} else {
 									digits_to_compute = preci + exponent + 1;
-									if (digits_to_compute < 0)
+									/* Below 0 the value starts more than one place past
+									 * the last digit printed, so it rounds to zero. */
+									if (digits_to_compute < 0) {
 										digits_to_compute = 0;
+										rounds = 0;
+									}
 								}
 							} else if (type == CX_e || type == CX_E) {
 								digits_to_compute = preci + 1;
@@ -577,7 +583,7 @@ int __vfprintf_total_size(FILE *stream, const TCHAR *format, va_list args) {
 								buffer[pos] = CX_0 + __LDL_mul_10_extract(&ld_val);
 							}
 							/* Perform rounding */
-							if (__LDL_cmp_5(&ld_val) >= 0) {
+							if (rounds && __LDL_cmp_5(&ld_val) >= 0) {
 								int tpos = pos - 1;
 								do { // while (0);
 									// even number

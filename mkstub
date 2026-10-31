@@ -113,9 +113,7 @@ fi
 
 extern void * __export_${n};
 __attribute__((section(\".dlist_so_export_${n}\")))
-char const * __name_${n} = \"${n}\";
-__attribute__((section(\".dlist_so_export_${n}\")))
-void ** __ptr_to_${n} = &__export_${n};
+void * __export_entry_${n}[2] = { (void *)\"${n}\", (void *)&__export_${n} };
 "
 
   	else
@@ -123,9 +121,7 @@ void ** __ptr_to_${n} = &__export_${n};
 	echo >>$dir/export-$out.c "
 extern void *${n};
 __attribute__((section(\".dlist_so_export_${n}\")))
-char const * __name_${n} = \"${n}\";
-__attribute__((section(\".dlist_so_export_${n}\")))
-void ** __ptr_to_${n} = (void **)&${n};
+void * __export_entry_${n}[2] = { (void *)\"${n}\", (void *)&${n} };
 "
   		
   	fi
@@ -156,9 +152,7 @@ echo >>$dir/export-$out.c "
 
 extern void * ${n}__data;
 __attribute__((section(\".dlist_so_export_${n}\")))
-char const * __name_${n} = \"${n}\";
-__attribute__((section(\".dlist_so_export_${n}\")))
-void ** __ptr_to_${n} = (void**)&${n}__data;
+void * __export_entry_${n}[2] = { (void *)\"${n}\", (void *)&${n}__data };
 "
 
   echo creating $dir/stub-${n}.s  	

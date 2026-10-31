@@ -120,6 +120,8 @@
  * unsigned char *, the wide one must be wchar_t * (libnix declares
  * it as such for the wide build). */
 #ifdef FULL_SPECIFIERS
+#include "../../math/stdio/ami_printf_math.h"
+
 extern TCHAR * __decimalpoint;
 #endif
 
@@ -170,6 +172,9 @@ int VSCANF_NAME(FILE *stream, const TCHAR *format, va_list args) {
 	__STDIO_LOCK(stream);
 	size_t blocks = 0, incount = 0;
 	int c = 0;
+	/* EOF only for an input failure before the first conversion, even one
+	   that assigns nothing (%*d) */
+	int converted = 0;
 
 	while (*format) {
 		size_t size = 0;
@@ -397,12 +402,12 @@ int VSCANF_NAME(FILE *stream, const TCHAR *format, va_list args) {
 					}
 
 					if (!has_hex) {
-						/* "0x" with no hex digits: 'x' is not
-						 * part of the number, fall back to the
-						 * decimal value (which is 0). */
-						PREV(c);
-						has_digit = 0;
-						goto float_done;
+	                    /* "0x" with no hex digits: scanf pushes back one character
+	                     * only, so "0x" stays consumed and is a matching failure. */
+	                    PREV(c);
+	                    has_digit = 0;
+	                    size = 0;
+	                    goto float_done;
 					}
 
 					__LDL_normalize(&lv);
@@ -425,9 +430,9 @@ int VSCANF_NAME(FILE *stream, const TCHAR *format, va_list args) {
 						}
 						PREV(d);
 						if (!has_pexp) {
-							if (psign_char)
-								PREV(psign_char);
-							PREV(c);
+	                        /* "0x1p" or "0x1p+": as for "0x", a matching failure */
+	                        has_digit = 0;
+	                        size = 0;
 						} else {
 							bin_exp += (psign_char == CX_minus) ? -pexp : pexp;
 						}
@@ -488,9 +493,9 @@ int VSCANF_NAME(FILE *stream, const TCHAR *format, va_list args) {
 
 					PREV(d);
 					if (!has_ex_digit) {
-						if (mine) PREV(mine);
-						PREV(c);
-						has_digit = 0;
+	                    /* "10e" or "10e+": as for "0x", a matching failure */
+	                    has_digit = 0;
+	                    size = 0;
 					} else {
 						long long new_exp = (long long)ex * 217706 / 65536;
 						if (mine == CX_minus) {
@@ -668,6 +673,8 @@ int VSCANF_NAME(FILE *stream, const TCHAR *format, va_list args) {
 				break;
 			}
 			}
+			if (size && type != 'n' && type != '%')
+				converted = 1;
 			format = ptr;
 		} else {
 			if (ISSPACE((int )*format)) {
@@ -686,7 +693,7 @@ int VSCANF_NAME(FILE *stream, const TCHAR *format, va_list args) {
 			break;
 	}
 	__STDIO_UNLOCK(stream);
-	if (c == CX_EOF && !blocks)
+	if (c == EOF && !blocks && !converted)
 		return c;
 	else
 		return blocks;

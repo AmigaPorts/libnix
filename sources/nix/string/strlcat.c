@@ -1,4 +1,5 @@
 #include <stddef.h>
+#include <string.h>
 
 /*
  * Appends src to string dst of size dsize (unlike strncat, dsize is the

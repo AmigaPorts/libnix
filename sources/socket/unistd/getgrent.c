@@ -20,7 +20,7 @@ static gid_t nextgid;
 /*
  ** builtin group info
  */
-static char *dummy_members[] = { 0 };
+static unsigned char *dummy_members[] = { 0 };
 
 static const struct group builtin_wheel = { "wheel", "*", 0, dummy_members };
 
@@ -82,7 +82,7 @@ static int gr_scan(int search, gid_t gid, const char *name, struct SocketSetting
 		if (search && !name && lss->lx_grp.gr_gid != gid)
 			continue;
 
-		for (lss->lx_grp.gr_mem = (m = lss->lx_members);; ++m) {
+		for (lss->lx_grp.gr_mem = (__STRPTR*)(m = lss->lx_members);; ++m) {
 			if (m == &lss->lx_members[MAXGRP - 1]) {
 				*m = NULL;
 				break;
