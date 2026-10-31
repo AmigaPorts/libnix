@@ -44,6 +44,7 @@ TARGET_TESTS = \
 	sscanf \
 	stack \
 	strto \
+	sysinfo \
 	vfprintf_test \
 	vfwprintf_test \
 	wprintf
@@ -142,6 +143,8 @@ stack_SRCS = ../sources/misc/swapstack.c
 
 strto_SRCS = $(addprefix ../sources/nix/stdlib/,strtol.c strtoul.c strtoll.c strtoull.c wcstol.c)
 strto_CFLAGS = -fno-builtin
+
+sysinfo_SRCS = ../sources/nix20/misc/uname.c ../sources/nix/extra/getpid.c ../sources/nix20/stdlib/kill.c ../sources/nix/extra/sysconf.c
 
 wprintf_SRCS = $(addprefix ../sources/nix/stdio/,__vfwprintf_total_size.c vswprintf.c vfwprintf.c wprintf.c) ../sources/math/stdio/ami_printf_math.c
 wprintf_LIBFLAGS = -DFULL_SPECIFIERS
