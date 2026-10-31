@@ -111,6 +111,8 @@ int main(int argc, char **argv) {
 	TESTFMT(L"zero sci alt right pad|              0.e+00|", L"%#20.0e", 0.0);
 	TESTFMT(L"zero g alt right pad|                 0.0|", L"%#20.1g", 0.0);
 	TESTFMT(L"negative zero|-0|", L"%.0f", -0.0);
+	TESTFMT(L"f tiny rounds to zero|0.000000|", L"%f", 6e-9);
+	TESTFMT(L"f tiny rounds up|0.000001|", L"%f", 6e-7);
 	TESTFMT(L"zero with plus|+0|", L"%+.0f", 0.0);
 	TESTFMT(L"zero with space| 0|", L"% .0f", 0.0);
 	TESTFMT(L"zero prec 5|0.00000|", L"%.5f", 0.0);

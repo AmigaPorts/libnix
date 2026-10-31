@@ -187,6 +187,20 @@ int main(int argc, char **argv) {
 	 * SECTION 3: Fixed-point (%f) decade walk
 	 * ================================================================== */
 	printf("--- Fixed-point %%f decade walk ---\n");
+	/* Far below the last place, so the leading digit must not round up. */
+	d = 9.999999999999999e-13;
+	TESTFMT("f tiny 9|0.000000|", "%f", d);
+	d = 6e-9;
+	TESTFMT("f tiny 6|0.000000|", "%f", d);
+	d = 6e-3;
+	TESTFMT("f tiny .1|0.0|", "%.1f", d);
+	d = 6e-3;
+	TESTFMT("f tiny .0|0|", "%.0f", d);
+	/* Directly below the last place, so it must. */
+	d = 6e-7;
+	TESTFMT("f round up|0.000001|", "%f", d);
+	d = 6e-2;
+	TESTFMT("f round .1|0.1|", "%.1f", d);
 	d = 1.2345678902468e-13L;
 	TESTFMT("f e-13|           0.0000000|", "%20.7f", d);
 	d = 1.2345678902468e-12L;
