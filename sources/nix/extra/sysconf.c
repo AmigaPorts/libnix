@@ -1,3 +1,5 @@
+#include <errno.h>
+#include <time.h>
 #include <unistd.h>
 long sysconf(int name) {
 	switch (name) {
@@ -7,8 +9,10 @@ long sysconf(int name) {
 	case _SC_NPROCESSORS_ONLN:
 		return 1;
 	case _SC_CLK_TCK:
-		return 50;
+		/* the unit of times() */
+		return CLK_TCK;
 	default:
+		errno = EINVAL;
 		return -1;
 	}
 }
