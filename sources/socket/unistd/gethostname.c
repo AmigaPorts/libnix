@@ -14,7 +14,7 @@ int gethostname(char *name, size_t namelen)
     char *host, domain[257+1];
     int len;
     if ((host=getenv("HOSTNAME")) || (host=getenv("hostname"))) {
-      if (!strchr(host, '.')) {
+      if (!strchr(host, '.') && strlen(host) < sizeof(domain) - 2) {
         strcpy(domain, host);
         domain[len=strlen(domain)] = '.';
         if (++len,!getdomainname(domain+len,sizeof(domain)-len))
@@ -23,7 +23,11 @@ int gethostname(char *name, size_t namelen)
     }
     else
       host = "localhost";
-    strncpy(name, host, namelen); return 0;
+    strncpy(name, host, namelen);
+    /* a name cut short is still terminated */
+    if (namelen)
+      name[namelen - 1] = 0;
+    return 0;
   }
 }
 
