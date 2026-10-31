@@ -57,6 +57,9 @@ int vfscanf(FILE *stream, const char *format, va_list args) {
 	__STDIO_LOCK(stream);
 	size_t blocks = 0, incount = 0;
 	int c = 0;
+	/* EOF only for an input failure before the first conversion, even one
+	   that assigns nothing (%*d) */
+	int converted = 0;
 
 	while (*format) {
 		size_t size = 0;
@@ -265,11 +268,12 @@ int vfscanf(FILE *stream, const char *format, va_list args) {
 	                }
 
 	                if (!has_hex) {
-	                    /* "0x" with no hex digits: the 'x' is not part of the number.
-	                     * Unget the 'x' and fall back to the decimal value (which is 0). */
+	                    /* "0x" with no hex digits: scanf pushes back one character
+	                     * only, so "0x" stays consumed and is a matching failure. */
 	                    PREV(c);
 	                    has_digit = 0;
-	                    goto float_done;   /* skip hex, keep lv = 0 */
+	                    size = 0;
+	                    goto float_done;
 	                }
 
 	                __LDL_normalize(&lv);
@@ -292,13 +296,9 @@ int vfscanf(FILE *stream, const char *format, va_list args) {
 	                    }
 	                    PREV(d);
 	                    if (!has_pexp) {
-	                        /* "0x1p" or "0x1p+": 'p' is not part of the number.
-	                         * Unget the sign and the 'p'. */
-	                        if (psign_char)
-	                            PREV(psign_char);
-	                        PREV(c);
-	                        /* bin_exp stays as it was (0 from the hex digits,
-	                         * minus 4 per fractional hex digit). */
+	                        /* "0x1p" or "0x1p+": as for "0x", a matching failure */
+	                        has_digit = 0;
+	                        size = 0;
 	                    } else {
 	                        bin_exp += (psign_char == '-') ? -pexp : pexp;
 	                    }
@@ -351,11 +351,9 @@ int vfscanf(FILE *stream, const char *format, va_list args) {
 
 	                PREV(d);
 	                if (!has_ex_digit) {
-	                    /* "10e" or "10e+": 'e' is not part of the number.
-	                     * Unget the sign and the 'e'. */
-	                    if (mine) PREV(mine);
-	                    PREV(c);
+	                    /* "10e" or "10e+": as for "0x", a matching failure */
 	                    has_digit = 0;
+	                    size = 0;
 	                } else {
                     	long new_exp = (long long)ex * 217706 / 65536;   /* ex * log2(10) in Q16 */
 	                    if (mine == '-') {
@@ -545,6 +543,8 @@ int vfscanf(FILE *stream, const char *format, va_list args) {
 				break;
 			}
 			}
+			if (size && type != 'n' && type != '%')
+				converted = 1;
 			format = ptr;
 		} else {
 			if (isspace((int)*format)) {
@@ -563,7 +563,7 @@ int vfscanf(FILE *stream, const char *format, va_list args) {
 			break;
 	}
 	__STDIO_UNLOCK(stream);
-	if (c == EOF && !blocks)
+	if (c == EOF && !blocks && !converted)
 		return c;
 	else
 		return blocks;
