@@ -33,6 +33,9 @@ find nix -name "*.o" \
   -not -name vsscanf.o  \
   -not -name __vfprintf_total_size.o \
   -not -name __vfwprintf_total_size.o \
+  -not -name swprintf.o \
+  -not -name vfwprintf.o \
+  -not -name vswprintf.o \
   -not -name tmpfile.o  \
   > ofiles.txt
 find nix20   -name "*.o" \
