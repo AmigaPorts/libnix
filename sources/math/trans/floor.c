@@ -3,7 +3,7 @@
 #include "fpu_math.h"
 
 double floor(double x)
-{ return fpu_round_to_integer(x, SIGN_BIT); }
+{ return __fpu_round_to_integer(x, SIGN_BIT); }
 
 #else
 
