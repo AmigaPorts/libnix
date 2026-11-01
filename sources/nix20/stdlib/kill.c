@@ -10,16 +10,17 @@
    is a task address, see getpid().  */
 static struct Task *findpid(pid_t pid) {
 	struct Task *want = (struct Task *)((unsigned long)pid << 2), *t;
-	struct List *lists[2] = { &SysBase->TaskReady, &SysBase->TaskWait };
-	int i;
 
 	if (want == SysBase->ThisTask)
 		return want;
-	for (i = 0; i < 2; i++)
-		for (t = (struct Task *)lists[i]->lh_Head; t->tc_Node.ln_Succ;
-		     t = (struct Task *)t->tc_Node.ln_Succ)
-			if (t == want)
-				return t;
+	for (t = (struct Task *)SysBase->TaskReady.lh_Head; t->tc_Node.ln_Succ;
+	     t = (struct Task *)t->tc_Node.ln_Succ)
+		if (t == want)
+			return t;
+	for (t = (struct Task *)SysBase->TaskWait.lh_Head; t->tc_Node.ln_Succ;
+	     t = (struct Task *)t->tc_Node.ln_Succ)
+		if (t == want)
+			return t;
 	return NULL;
 }
 
