@@ -3,7 +3,7 @@
 #include "fpu_math.h"
 
 float ceilf(float x)
-{ return fpu_round_to_integerf(x, 0); }
+{ return __fpu_round_to_integerf(x, 0); }
 
 #else
 

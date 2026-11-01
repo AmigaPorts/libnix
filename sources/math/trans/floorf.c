@@ -3,7 +3,7 @@
 #include "fpu_math.h"
 
 float floorf(float x)
-{ return fpu_round_to_integerf(x, SIGN_BIT); }
+{ return __fpu_round_to_integerf(x, SIGN_BIT); }
 
 #else
 
