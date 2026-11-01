@@ -7,7 +7,7 @@
  *
  * --------------------------------------------------------------------------
  *  Copyright and license
- * --------------------------------------------------------------------------
+ * ----------------------------------------------------le----------------------
  *
  *  This file is part of the libnix C library for AmigaOS / m68k.
  *
@@ -22,10 +22,11 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <stdarg.h>
+#include <stdio.h>
 #include <string.h>
 #include <errno.h>
 
-#include "ami_printf_math.h"
+#include "../sources/math/stdio/ami_printf_math.h"
 
 /* The snprintf() truncation tests truncate on purpose. */
 #pragma GCC diagnostic ignored "-Wformat-truncation"

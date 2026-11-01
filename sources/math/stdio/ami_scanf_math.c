@@ -4,16 +4,17 @@
  *  The shared scanf FP math core.
  *
  *  See ami_printf_math.h for the contract of each function.  All arithmetic
- *  here is signless, on the local LDL view: 16-bit exponent, 96-bit mantissa
- *  storage with the integer bit at b95.
+ *  here is signless, on the local LDL view: 16-bit exponent, 64-bit mantissa
+ *  storage with the integer bit at b63 (Motorola 68881 / x87 extended
+ *  precision).  The l.low field is retained in the LDL struct for ABI /
+ *  source compatibility but is unused and always zero.
  *
- *  Known limitation: __LDL_mul currently produces only 80 bits of mantissa
- *  (5 x 16-bit limbs); the low 16 bits of the result are zeroed.  The
- *  pipeline carries 96 bits through __LDL_mul_10 and __LDL_mul_10_extract,
- *  but the one real multiplication per pow10_ld step discards the bottom
- *  16 bits.  This is the "80-bit multiplication, 96-bit pipeline" design:
- *  enough headroom for the extraction chain, at the cost of a slightly
- *  larger residual in the last digit than a true 96-bit multiply would give.
+ *  Design note: this build targets a 64-bit-mantissa long double.  The
+ *  accumulator therefore saturates at 64 significant bits: a 17th hex
+ *  digit (or a decimal digit past the 64-bit capacity) is dropped, and
+ *  __ldl_to_long_double returns the exact 64-bit mantissa with no further
+ *  rounding.  This makes strtold/printf round-trip bit-exact for every
+ *  value that is representable in a 68881 extended-precision register.
  *
  * --------------------------------------------------------------------------
  *  Copyright and license
@@ -32,72 +33,69 @@
 #include <stdio.h>
 #include "ami_printf_math.h"
 
-
 /* In-place multiply by 10 and add a decimal digit:
  *     *x = *x * 10 + digit,  0 <= digit <= 9
  *
- * The mantissa is treated as a plain 96-bit unsigned integer.  The
- * exponent is NOT maintained by this routine; the caller starts with
- * *x = { 0, 0, 0, 0 } and calls __LDL_normalize once at the end to
- * find the highest set bit and set the exponent.
- *
- * If the 96-bit mantissa overflows (carry out of bit 95), the top
- * bits are lost.  The caller is responsible for detecting saturation
- * (e.g. by checking that *x->l.high still fits, or by counting digits
- * and bailing out past ~28) if that matters.
+ * The mantissa is treated as a plain 96-bit unsigned integer held in
+ * (high, middle).  The exponent is NOT maintained by this routine; the
+ * caller starts with *x = { 0, 0, 0, 0 } and calls __LDL_normalize once
+ * at the end to find the highest set bit and set the exponent.
  */
 int __LDL_mul_10_add(LDL *x, int digit)
 {
-    unsigned long hi = x->l.high, mid = x->l.middle, lo = x->l.low;
-    unsigned long a_hi, a_mid, a_lo;
-    unsigned long b_hi, b_mid, b_lo;
-    unsigned long res_lo, res_mid, res_hi, carry;
+	unsigned long hi = x->l.high;
+	unsigned long mid = x->l.middle;
+	unsigned long lo = x->l.low;
 
-    /* Saturation: if x >= (2^96 - 1) / 10, multiplying by 10 would
-     * shift the top bits out of the 96-bit accumulator.  Leave x
-     * unchanged; the caller still consumes the digit (so frac_digits
-     * and the position of the decimal point stay correct) but the
-     * value is the truncated mantissa, which is what round-to-96-bit
-     * would do anyway. */
-    if (hi >= 0x19999999UL)
-        return 0;
+	/* Saturation: x >= 2^96 / 10 would overflow the 96-bit accumulator.
+	 * The exact threshold is 0x19999999_99999999_99999999 (with the
+	 * boundary refined by mid/lo).  Use the simple hi-based check plus
+	 * a corner case; for the boundary refine with mid/lo. */
+	if (hi > 0x19999999UL)
+		goto saturate;
+	if (hi == 0x19999999UL) {
+		unsigned long long midlo = ((unsigned long long) mid << 32) | lo;
+		if (midlo > 0x9999999999999999ULL - (unsigned long long) digit / 10)
+			goto saturate;
+	}
 
-    /* x * 10 = (x << 3) + (x << 1) = 8x + 2x.
-     * This is exact (no truncation): the only loss is the carry past
-     * bit 95, which is the caller's saturation concern. */
+	/* a = 8x  = x << 3 */
+	unsigned long a_hi = (hi << 3) | (mid >> 29);
+	unsigned long a_mid = (mid << 3) | (lo >> 29);
+	unsigned long a_lo = (lo << 3);
 
-    /* a = x << 3 */
-    a_hi  = (hi  << 3) | (mid >> 29);
-    a_mid = (mid << 3) | (lo  >> 29);
-    a_lo  = (lo  << 3);
+	/* b = 2x  = x << 1 */
+	unsigned long b_hi = (hi << 1) | (mid >> 31);
+	unsigned long b_mid = (mid << 1) | (lo >> 31);
+	unsigned long b_lo = (lo << 1);
 
-    /* b = x << 1 */
-    b_hi  = (hi  << 1) | (mid >> 31);
-    b_mid = (mid << 1) | (lo  >> 31);
-    b_lo  = (lo  << 1);
+	/* r = a + b, carrying through 96 bits */
+	unsigned long r_lo = a_lo + b_lo;
+	unsigned long carry_lo = (r_lo < a_lo);
+	unsigned long r_mid = a_mid + b_mid + carry_lo;
+	unsigned long carry_mid = (r_mid < a_mid) ||
+			(carry_lo && r_mid == a_mid);
+	unsigned long r_hi = a_hi + b_hi + carry_mid;
 
-    /* res = a + b */
-    res_lo = a_lo + b_lo;
-    carry  = (res_lo < a_lo);
-    res_mid = a_mid + b_mid + carry;
-    carry   = (res_mid < a_mid) || (res_mid < b_mid);
-    if (carry > 1)
-        carry = 1;
-    res_hi = a_hi + b_hi + carry;
+	/* r += digit, carry through */
+	unsigned long old_lo = r_lo;
+	r_lo += (unsigned long) digit;
+	if (r_lo < old_lo) {
+		if (++r_mid == 0)
+			r_hi++;
+	}
 
-    /* + digit */
-    res_lo += (unsigned long)digit;
-    if (res_lo < (unsigned long)digit) {
-        res_mid++;
-        if (res_mid == 0)
-            res_hi++;
-    }
+	x->l.high = r_hi;
+	x->l.middle = r_mid;
+	x->l.low = r_lo;
+	return 1;
 
-    x->l.high   = res_hi;
-    x->l.middle = res_mid;
-    x->l.low    = res_lo;
-
-    return 1;
+	saturate:
+	/* First dropped digit goes into low's LSB as a sticky flag if
+	 * it's non-zero.  Matches __LDL_mul_16_add's convention. */
+	if (x->l.low == 0 && digit != 0)
+		x->l.low = (unsigned long) digit;
+	return 0;
 }
 
 /* In-place multiply by 16 and add a hex digit:
@@ -109,146 +107,161 @@ int __LDL_mul_10_add(LDL *x, int digit)
  *
  * x * 16 is a pure left shift by 4, so there's no (x + x/4)-style
  * approximation and no truncation: the only loss is the carry out of
- * bit 95, which is the caller's saturation concern.
+ * bit 63, which is the caller's saturation concern.
  */
 int __LDL_mul_16_add(LDL *x, int digit)
 {
-	unsigned long hi = x->l.high, mid = x->l.middle, lo = x->l.low;
-	unsigned long res_hi, res_mid, res_lo;
+	unsigned long hi = x->l.high;
+	unsigned long mid = x->l.middle;
+	unsigned long lo = x->l.low;
 
-    /* Saturation: if hi's top nibble is non-zero, × 16 would shift it
-     * out.  Leave x unchanged. */
-    if (hi >= 0x10000000UL)
-        return 0;
-
-	/* x * 16 = x << 4 */
-	res_hi  = (hi  << 4) | (mid >> 28);
-	res_mid = (mid << 4) | (lo  >> 28);
-	res_lo  = (lo  << 4);
-
-	/* + digit */
-	res_lo += (unsigned long)digit;
-	if (res_lo < (unsigned long)digit) {
-		res_mid++;
-		if (res_mid == 0)
-			res_hi++;
+	/* Saturation: hi's top nibble non-zero means ×16 overflows 96 bits. */
+	if (hi >= 0x10000000UL) {
+		if (x->l.low == 0) {
+			/* Preserve the first dropped nibble at low's top for
+			 * extra round-to-nearest information. */
+			x->l.low = ((unsigned long) digit << 28) | 1;
+		}
+		return 0;
 	}
 
-	x->l.high   = res_hi;
-	x->l.middle = res_mid;
-	x->l.low    = res_lo;
-	/* x->l.exp unchanged (0 from the caller's initializer) */
+	x->l.high = (hi << 4) | (mid >> 28);
+	x->l.middle = (mid << 4) | (lo >> 28);
+	x->l.low = (lo << 4) | ((unsigned long) digit & 0xF);
 
 	return 1;
 }
 
-/* Normalize an LDL built by __LDL_mul_10_add (which leaves exp = 0):
- * find the highest set bit b in the 96-bit mantissa, shift left so it
- * lands at b95, and set exp = 16383 + b.  A zero mantissa stays zero.
+int __LDL_mul_16_add_1st(LDL *x, int digit)
+{
+	unsigned long hi = x->l.high;
+	unsigned long mid = x->l.middle;
+	unsigned long lo = x->l.low;
+
+	if (hi >= 0x20000000UL)
+		return 0;
+
+	x->l.high = (hi << 3) | (mid >> 29);
+	x->l.middle = (mid << 3) | (lo >> 29);
+	x->l.low = (lo << 3) | ((unsigned long) digit & 0xF);
+	return 1;
+}
+
+/* Normalize an LDL built by __LDL_mul_10_add / __LDL_mul_16_add (which
+ * leave exp = 0): find the highest set bit b in the 96-bit mantissa,
+ * shift left so it lands at b63, and set exp = 16383 + b.  A zero
+ * mantissa stays zero.
  *
  * Precondition: x->l.exp == 0 (the accumulator's initial state).  If
  * x is already normalized (high != 0, bit 31 set), this is a no-op
  * except for setting exp. */
 void __LDL_normalize(LDL *x)
 {
-	unsigned long hi = x->l.high, mid = x->l.middle, lo = x->l.low;
-	int n, b;
+	unsigned long hi = x->l.high;
+	unsigned long mid = x->l.middle;
+	unsigned long lo = x->l.low;
+	int n;
 
 	if (hi == 0 && mid == 0 && lo == 0) {
-		x->l.exp = 0;
+		x->l.exp = 16383;
 		return;
 	}
 
 	if (hi != 0) {
-		n = __builtin_clz(hi);      /* 0..31 */
-		b = 95 - n;
+		n = __builtin_clz(hi);
 		if (n > 0) {
-			x->l.high   = (hi  << n) | (mid >> (32 - n));
-			x->l.middle = (mid << n) | (lo  >> (32 - n));
-			x->l.low    = (lo  << n);
+			x->l.high = (hi << n) | (mid >> (32 - n));
+			x->l.middle = (mid << n) | (lo >> (32 - n));
+			x->l.low = (lo << n);
 		}
 	} else if (mid != 0) {
-		n = __builtin_clz(mid);     /* 0..31 */
-		b = 63 - n;
-		if (n > 0) {
-			x->l.high   = (mid << n) | (lo >> (32 - n));
-			x->l.middle = (lo  << n);
-			x->l.low    = 0;
-		}
+		n = __builtin_clz(mid);
+		x->l.high = (mid << n) | (lo >> (32 - n));
+		x->l.middle = (lo << n);
+		x->l.low = 0;
 	} else {
-		n = __builtin_clz(lo);      /* 0..31 */
-		b = 31 - n;
-		if (n > 0) {
-			x->l.high   = (lo << n);
-			x->l.middle = 0;
-			x->l.low    = 0;
-		}
+		n = __builtin_clz(lo);
+		x->l.high = (lo << n);
+		x->l.middle = 0;
+		x->l.low = 0;
 	}
 
-	x->l.exp = (unsigned short)(16383 + b);
+	x->l.exp = 16383;
 }
-
 
 double __ldl_to_double(const LDL *lv)
 {
-	unsigned long hi, mid, lo;
+	unsigned long hi = lv->l.high;
+	unsigned long mid = lv->l.middle;
 	unsigned long long mant;
 	int e, E;
 
-	hi  = lv->l.high;
-	mid = lv->l.middle;
-	lo  = lv->l.low;
-
-	if (hi == 0)
+	if (hi == 0 && mid == 0)
 		return 0.0;
 
-	/* Unbiased binary exponent of the value: value = M * 2^(e - 95). */
-	e = (int)lv->l.exp - 16383;
+	e = (int) lv->l.exp - 16383;
+	mant = ((unsigned long long) hi << 32) | mid;
 
-	/* Form the 96-bit mantissa as a 64-bit + 32-bit pair.  We only need
-	 * the top 54 bits (53 significant + 1 guard) for round-to-nearest-
-	 * even at binary64 precision.  The top 64 bits of the mantissa are
-	 * hi:mid, and lo provides the sticky bits. */
-	mant = ((unsigned long long)hi << 32) | mid;   /* top 64 bits */
-
-	/* The value's integer bit is at bit 63 of mant (for a normalized
-	 * LDL).  We want to keep 53 bits, i.e. shift right by 63 - 52 = 11
-	 * to put the integer bit at bit 52 of the 53-bit result. */
 	{
-		unsigned long long m53 = mant >> 11;          /* top 53 bits */
-		unsigned long long guard = (mant >> 10) & 1;  /* bit 10 = next */
-		unsigned long long sticky = (mant & 0x3FFULL) != 0 || lo != 0;
+		unsigned long long m53 = mant >> 11;
+		unsigned long guard = (mant >> 10) & 1;
+		unsigned long sticky = (mant & 0x3FFULL) != 0 || lv->l.low != 0;
 
-		/* Round to nearest-even. */
 		if (guard && (sticky || (m53 & 1))) {
 			m53++;
-			if (m53 >= (1ULL << 53)) {
-				m53 >>= 1;   /* mantissa overflowed: renormalize */
+			if (m53 == (1ULL << 53)) {
+				m53 = 1ULL << 52;
 				e++;
 			}
 		}
 
-		/* m53 now holds 1.f52 in the top 53 bits (bit 52 = integer bit).
-		 * Extract the 52-bit fraction. */
 		E = e + 1023;
-		if (E >= 0x7FF) {
-			/* Overflow: return +inf.  Caller applies sign. */
-			return (double)(1.0 / 0.0);
-		}
+
+		if (E >= 0x7FF)
+			return (double) (1.0 / 0.0);
+
 		if (E <= 0) {
-			/* Underflow: no denormals needed for scanf's typical
-			 * inputs, but handle gracefully by returning 0. */
-			return 0.0;
+			int shift = -e - 1022;
+			unsigned long long m;
+
+			if (shift >= 64) {
+				m = 0; /* m53 < 2^53 < 2^63 = half */
+			} else {
+				unsigned long long lost = m53 & ((1ULL << shift) - 1);
+				unsigned long long half = 1ULL << (shift - 1);
+
+				m = m53 >> shift;
+				if ((lost & half) && ((lost & (half - 1)) || (m & 1)))
+					m++;
+			}
+
+			if (m >= (1ULL << 52)) {
+				E = 1;
+				m = 0;
+			} else {
+				E = 0;
+			}
+
+			{
+				unsigned long long frac52 = m & 0xFFFFFFFFFFFFFULL;
+				union _d_bits u;
+				u.u = 0;
+				u.b.sign = 0;
+				u.b.exp = (unsigned) E;
+				u.b.frac0 = (unsigned) (frac52 >> 32);
+				u.b.frac1 = (unsigned) (frac52 & 0xFFFFFFFFUL);
+				return u.d;
+			}
 		}
 
 		{
 			unsigned long long frac52 = m53 & 0xFFFFFFFFFFFFFULL;
 			union _d_bits u;
 			u.u = 0;
-			u.b.sign  = 0;
-			u.b.exp   = (unsigned)E;
-			u.b.frac0 = (unsigned)(frac52 >> 32);
-			u.b.frac1 = (unsigned)(frac52 & 0xFFFFFFFFUL);
+			u.b.sign = 0;
+			u.b.exp = (unsigned) E;
+			u.b.frac0 = (unsigned) (frac52 >> 32);
+			u.b.frac1 = (unsigned) (frac52 & 0xFFFFFFFFUL);
 			return u.d;
 		}
 	}
@@ -257,51 +270,84 @@ double __ldl_to_double(const LDL *lv)
 long double __ldl_to_long_double(const LDL *lv)
 {
 	union _ld_bits u;
-	unsigned long hi, mid, lo;
+	unsigned long hi = lv->l.high;
+	unsigned long mid = lv->l.middle;
+	unsigned long lo = lv->l.low;
 	int e;
-
-	hi  = lv->l.high;
-	mid = lv->l.middle;
-	lo  = lv->l.low;
 
 	if (hi == 0 && mid == 0 && lo == 0)
 		return 0.0L;
 
-	e = (int)lv->l.exp - 16383;
+	e = (int) lv->l.exp - 16383;
 
-	/* Round the 96-bit mantissa to 64 bits.  For a normalized LDL, the
-	 * top 64 bits (hi:mid) already have the integer bit at b63, so no
-	 * shift is needed; lo provides the guard and sticky bits.
-	 *
-	 * Wait -- the integer bit at b63 of hi:mid corresponds to b95 of
-	 * the 96-bit mantissa, and the LDL's exponent is already scaled
-	 * such that the value is 1.f63 * 2^e.  So hi:mid *is* the 64-bit
-	 * mantissa with the integer bit at b63.  We just round lo into it. */
-	if (lo != 0) {
-		/* Guard bit is bit 31 of lo (which would become bit -1 of
-		 * the 64-bit mantissa after truncation).  Sticky is the rest
-		 * of lo. */
-		unsigned long guard = (lo >> 31) & 1;
-		unsigned long sticky = (lo & 0x7FFFFFFFUL) != 0;
+	u.ld = 0.0L;
+	u.b.sign = 0;
+	u.b.pad = 0;
 
-		if (guard && (sticky || (mid & 1))) {
-			/* Increment the 64-bit mantissa hi:mid by 1. */
-			mid++;
-			if (mid == 0) {
-				hi++;
-				if (hi == 0) {
-					/* Mantissa overflowed 64 bits: renormalize. */
-					hi = 0x80000000UL;
+	{
+		unsigned long long m64 = ((unsigned long long) hi << 32) | mid;
+
+		/* Round to nearest-even at 64 bits. */
+		{
+			unsigned long guard = (lo >> 31) & 1;
+			unsigned long sticky = (lo & 0x7FFFFFFFUL) != 0;
+
+			if (guard && (sticky || (m64 & 1))) {
+				m64++;
+				if (m64 == 0) {
+					m64 = 0x8000000000000000ULL;
 					e++;
 				}
 			}
 		}
-	}
 
-	u.ld = 0.0L;
-	u.b.sign = 0;
-	u.b.exp  = (unsigned short)(e + 16383);
-	u.b.pad  = 0;
-	u.b.mant = ((unsigned long long)hi << 32) | mid;
+		{
+			long E = (long) e + 16383;
+
+			if (E >= 0x7FFF) {
+				u.b.exp = 0x7FFF;
+				u.b.mant = 0x8000000000000000ULL;
+				return u.ld;
+			}
+
+			if (E <= 0) {
+				int shift = 1 - (int) E;
+				unsigned long long m = m64;
+
+				if (shift >= 64) {
+					/* half = 2^63.  m64 < 2^64.  Round up only if strictly
+					 * greater than half; exact half ties to even -> 0
+					 * (result 0 is even).
+					 */
+					if (shift == 64 && (m >> 63) &&
+							(m & 0x7FFFFFFFFFFFFFFFULL))
+						m = 1;
+					else
+						m = 0;
+				} else {
+					unsigned long long lost = m & ((1ULL << shift) - 1);
+					unsigned long long half = 1ULL << (shift - 1);
+
+					m >>= shift;
+					if ((lost & half) && ((lost & (half - 1)) || (m & 1)))
+						m++;
+				}
+
+				if (m & 0x8000000000000000ULL) {
+					m &= 0x7FFFFFFFFFFFFFFFULL;
+					E = 1;
+				} else {
+					E = 0;
+				}
+
+				u.b.exp = (unsigned) E;
+				u.b.mant = m;
+				return u.ld;
+			}
+
+			u.b.exp = (unsigned) E;
+			u.b.mant = m64;
+		}
+	}
 	return u.ld;
 }

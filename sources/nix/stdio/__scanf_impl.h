@@ -5,6 +5,9 @@
  * char version.  Define VSCANF_NAME to the exported function name
  * (vfscanf or vfwscanf) before including this header.
  * -------------------------------------------------------------------- */
+#ifndef __SCANF_IMPL_H
+#define __SCANF_IMPL_H
+
 #ifdef WIDE
 
 # include "wchar.h"
@@ -120,6 +123,19 @@
  * unsigned char *, the wide one must be wchar_t * (libnix declares
  * it as such for the wide build). */
 #ifdef FULL_SPECIFIERS
+#include "../../math/stdio/ami_printf_math.h"
+
+static int __LDL_bin_exp(const LDL *x)
+{
+    if (x->l.high)
+        return 95 - __builtin_clz(x->l.high);
+    if (x->l.middle)
+        return 63 - __builtin_clz(x->l.middle);
+    if (x->l.low)
+        return 31 - __builtin_clz(x->l.low);
+    return 0;
+}
+
 extern TCHAR * __decimalpoint;
 #endif
 
@@ -170,6 +186,9 @@ int VSCANF_NAME(FILE *stream, const TCHAR *format, va_list args) {
 	__STDIO_LOCK(stream);
 	size_t blocks = 0, incount = 0;
 	int c = 0;
+	/* EOF only for an input failure before the first conversion, even one
+	 that assigns nothing (%*d) */
+	int converted = 0;
 
 	while (*format) {
 		size_t size = 0;
@@ -212,12 +231,12 @@ int VSCANF_NAME(FILE *stream, const TCHAR *format, va_list args) {
 				if (width == ULONG_MAX) /* Default */
 					width = 1;
 
-				if (!ignore)
+if (!ignore)
 					bp = va_arg(args, TCHAR *);
 				else
 					bp = NULL; /* Just to get the compiler happy */
 
-								NEXT(c); /* 'c' did not skip whitespace */
+												NEXT(c); /* 'c' did not skip whitespace */
 				while (VAL(c != CX_EOF)) {
 					if (!ignore)
 						*bp++ = (TCHAR) c;
@@ -259,12 +278,12 @@ int VSCANF_NAME(FILE *stream, const TCHAR *format, va_list args) {
 					}
 				}
 
-				if (!ignore)
+if (!ignore)
 					bp = va_arg(args, TCHAR *);
 				else
 					bp = NULL; /* Just to get the compiler happy */
 
-								NEXT(c);
+												NEXT(c);
 				while (VAL(c != CX_EOF && c >= 0 && c < 256 &&
 						(tab[c/8] & (1<<(c&7))))) {
 					if (!ignore)
@@ -283,9 +302,9 @@ int VSCANF_NAME(FILE *stream, const TCHAR *format, va_list args) {
 				TCHAR *bp;
 
 				if (!ignore)
-					bp = va_arg(args, TCHAR *);
+				bp = va_arg(args, TCHAR *);
 				else
-					bp = NULL; /* Just to get the compiler happy */
+				bp = NULL; /* Just to get the compiler happy */
 
 				while (VAL(c != CX_EOF && !ISSPACE(c))) {
 					if (!ignore)
@@ -304,254 +323,294 @@ int VSCANF_NAME(FILE *stream, const TCHAR *format, va_list args) {
 			case CX_e:
 			case CX_f:
 			case CX_g: {
-				LDL lv = { .l = { 0, 0, 0, 0 } };
-				int frac_digits = 0;   /* fractional digits in lv */
-				int min = 0, mine = 0;
-				int sign = 1;
-				int has_digit = 0;
-				int is_L = (subtype == CX_L);
-				int special = 0;   /* 0 = finite, 1 = inf, 2 = nan, 3 = +/-0.0 */
-				int overflow = 0;
+			    LDL lv = { .l = { 0, 0, 0, 0 } };
+			    int frac_digits = 0;   /* fractional digits accumulated into lv */
+			    int min = 0, mine = 0;
+			    int sign = 1;
+			    int has_digit = 0;
+			    int is_L = (subtype == CX_L);
+			    int special = 0;   /* 0 = finite, 1 = inf, 2 = nan, 3 = +/-0.0 */
+			    int overflow = 0;
+			    int bin_exp = 0;
+			    int has_non_zero = 0;
 
-				if (VAL(c == CX_minus || c == CX_plus)) {
-					min = c;
-					sign = (c == CX_minus) ? -1 : 1;
-					NEXT(c);
-				}
+			    if (VAL(c == CX_minus || c == CX_plus)) {
+			        min = c;
+			        sign = (c == CX_minus) ? -1 : 1;
+			        NEXT(c);
+			    }
 
-				/* inf / nan */
-				if (VAL(TOLOWER(c) == CX_i)) {
-					int d;
-					NEXT(d);
-					if (VAL(TOLOWER(d) == CX_n)) {
-						int e;
-						NEXT(e);
-						if (VAL(TOLOWER(e) == CX_f)) {
-							special = 1;
-							has_digit = 1;
-							goto float_done;
-						}
-						PREV(e);
-					}
-					PREV(d);
-				} else if (VAL(TOLOWER(c) == CX_n)) {
-					int d;
-					NEXT(d);
-					if (VAL(TOLOWER(d) == CX_a)) {
-						int e;
-						NEXT(e);
-						if (VAL(TOLOWER(e) == CX_n)) {
-							special = 2;
-							has_digit = 1;
-							goto float_done;
-						}
-						PREV(e);
-					}
-					PREV(d);
-				}
+			    /* inf / nan */
+			    if (VAL(TOLOWER(c) == CX_i)) {
+			        int d;
+			        NEXT(d);
+			        if (VAL(TOLOWER(d) == CX_n)) {
+			            int e;
+			            NEXT(e);
+			            if (VAL(TOLOWER(e) == CX_f)) {
+			                special = 1;
+			                has_digit = 1;
+			                goto float_done;
+			            }
+			            PREV(e);
+			        }
+			        PREV(d);
+			    } else if (VAL(TOLOWER(c) == CX_n)) {
+			        int d;
+			        NEXT(d);
+			        if (VAL(TOLOWER(d) == CX_a)) {
+			            int e;
+			            NEXT(e);
+			            if (VAL(TOLOWER(e) == CX_n)) {
+			                special = 2;
+			                has_digit = 1;
+			                goto float_done;
+			            }
+			            PREV(e);
+			        }
+			        PREV(d);
+			    }
 
-				/* Integer part.  __LDL_mul_10_add returns 0 when the
-				 * 96-bit accumulator is saturated; we keep consuming
-				 * digits (so the position of the decimal point stays
-				 * correct) but don't count them for scaling, and set
-				 * overflow if any integer digit was skipped. */
-				while (VAL(ISDIGIT(c))) {
-					if (!__LDL_mul_10_add(&lv, c - CX_0)) {
-						/* saturated: consume the rest, overflow */
-						overflow = 1;
-						while (VAL(ISDIGIT(c)))
-							NEXT(c);
-						break;
-					}
-					has_digit = 1;
-					NEXT(c);
-				}
+			    /* Integer part.  __LDL_mul_10_add returns 0 when the
+			     * accumulator is saturated; we keep consuming digits
+			     * (so the position of the decimal point stays correct)
+			     * but don't count them for scaling, and set overflow if
+			     * any integer digit was skipped. */
+			    while (VAL(ISDIGIT(c))) {
+			        if (!__LDL_mul_10_add(&lv, c - CX_0)) {
+			            /* saturated: consume the rest, overflow */
+			            overflow = 1;
+			            while (VAL(ISDIGIT(c)))
+			                NEXT(c);
+			            break;
+			        }
+			        has_digit = 1;
+			        NEXT(c);
+			    }
 
-				if (!overflow && c && VAL(c == CX_x) &&
-				    lv.l.high == 0 && lv.l.middle == 0 && lv.l.low == 0) {
-					int has_hex = 0;
-					int bin_exp = 0;
+			    /* Hex float path: only when integer part was exactly "0" */
+			    if (!overflow && VAL(c == CX_x) &&
+			        lv.l.high == 0 && lv.l.middle == 0 && lv.l.low == 0) {
+			        int has_hex = 0;
 
-					NEXT(c);   /* consume 'x' */
+			        NEXT(c);   /* consume 'x' */
 
-					/* Integer hex digits.  A digit that doesn't fit
-					 * shifts the value left by 4 bits, so bump
-					 * bin_exp by 4 for each skipped integer digit. */
-					while (VAL(ISXDIGIT(c))) {
-						if (!__LDL_mul_16_add(&lv, hexval(c)))
+			        /* Integer hex digits.  Every accepted digit contributes
+			         * 4 bits of value; once the accumulator saturates, the
+			         * digit's own bit-length determines how much the value
+			         * grows (all subsequent digits are below the LSB, so
+			         * they're worth 4 bits each). */
+			        while (VAL(ISXDIGIT(c))) {
+			            int v = hexval(c);
+			            if (!__LDL_mul_16_add(&lv, v))
 							bin_exp += 4;
-						has_hex = 1;
-						NEXT(c);
-					}
-					/* Fractional hex digits.  Only accumulated
-					 * digits count for bin_exp; skipped ones are
-					 * below the 96-bit precision and are noise. */
-					if (VAL(c == __decimalpoint[0])) {
-						NEXT(c);
-						while (VAL(ISXDIGIT(c))) {
-							if (__LDL_mul_16_add(&lv, hexval(c)))
-								bin_exp -= 4;
-							has_hex = 1;
-							NEXT(c);
-						}
-					}
+			            has_non_zero |= v;
+			            has_hex = 1;
+			            has_digit = 1;
+			            NEXT(c);
+			        }
 
-					if (!has_hex) {
-						/* "0x" with no hex digits: 'x' is not
-						 * part of the number, fall back to the
-						 * decimal value (which is 0). */
-						PREV(c);
-						has_digit = 0;
-						goto float_done;
-					}
+			        /* Fold in the bit-length of the accumulated mantissa. */
+			        bin_exp += __LDL_bin_exp(&lv);
 
-					__LDL_normalize(&lv);
+			        /* Fractional hex digits.  Only accumulated digits
+			         * contribute to bin_exp; skipped ones are below the
+			         * 96-bit precision and are noise. */
+			        if (VAL(c == __decimalpoint[0])) {
+			            NEXT(c);
+			            if (has_non_zero) {
+			                if (is_L && VAL(ISXDIGIT(c))) {
+			                    int v = hexval(c);
+			                    __LDL_mul_16_add_1st(&lv, v);
+			                    NEXT(c);
+			                    has_digit = 1;
+			                }
+			            } else
+			                bin_exp = -1;
+			            while (VAL(ISXDIGIT(c))) {
+			                int v = hexval(c);
+			                if (__LDL_mul_16_add(&lv, v) && !has_non_zero) {
+			                    if (v == 0)
+			                        bin_exp -= 4;
+			                    else if (v == 1)
+			                        bin_exp -= 3;
+			                    else if (v <= 3)
+			                        bin_exp -= 2;
+			                    else if (v <= 7)
+			                        bin_exp -= 1;
+			                }
+			                has_non_zero |= v;
+			                has_hex = 1;
+			                has_digit = 1;
+			                NEXT(c);
+			            }
+			        }
 
-					if (VAL(TOLOWER(c) == CX_p)) {
-						int d;
-						int pexp = 0;
-						int psign_char = 0;
-						int has_pexp = 0;
+			        if (!has_hex) {
+			            /* "0x" with no hex digits: matching failure. */
+			            PREV(c);
+			            has_digit = 0;
+			            size = 0;
+			            goto float_done;
+			        }
 
-						NEXT(d);
-						if (VAL(d == CX_minus || d == CX_plus)) {
-							psign_char = d;
-							NEXT(d);
-						}
-						while (VAL(ISDIGIT(d))) {
-							pexp = pexp * 10 + (d - CX_0);
-							has_pexp = 1;
-							NEXT(d);
-						}
-						PREV(d);
-						if (!has_pexp) {
-							if (psign_char)
-								PREV(psign_char);
-							PREV(c);
-						} else {
-							bin_exp += (psign_char == CX_minus) ? -pexp : pexp;
-						}
-					} else {
-						PREV(c);
-					}
-					lv.l.exp += bin_exp;
-					goto float_done;
-				}
+			        __LDL_normalize(&lv);
 
-				if (overflow) {
-					special = 1;
-					goto float_done;
-				}
+			        if (VAL(TOLOWER(c) == CX_p)) {
+			            int d;
+			            int pexp = 0;
+			            int psign_char = 0;
+			            int has_pexp = 0;
 
-				/* Fractional part.  frac_digits counts only the
-				 * accumulated digits: skipped ones are below the
-				 * 96-bit precision, so pow10_ld(lv, -frac_digits)
-				 * scales the truncated mantissa correctly. */
-				if (VAL(c == __decimalpoint[0])) {
-					NEXT(c);
-					while (VAL(ISDIGIT(c))) {
-						if (__LDL_mul_10_add(&lv, c - CX_0))
-							++frac_digits;
-						has_digit = 1;
-						NEXT(c);
-					}
-				}
+			            NEXT(d);
+			            if (VAL(d == CX_minus || d == CX_plus)) {
+			                psign_char = d;
+			                NEXT(d);
+			            }
+			            while (VAL(ISDIGIT(d))) {
+			                pexp = pexp * 10 + (d - CX_0);
+			                has_pexp = 1;
+			                NEXT(d);
+			            }
+			            PREV(d);
+			            if (!has_pexp) {
+			                /* "0x1p" or "0x1p+": matching failure. */
+			                has_digit = 0;
+			                size = 0;
+			            } else {
+			                bin_exp += (psign_char == CX_minus) ? -pexp : pexp;
+			            }
+			        } else {
+			            PREV(c);
+			        }
+			        lv.l.exp += bin_exp;
 
-				if (!has_digit) {
-					PREV(c);
-					if (min) PREV(min);
-					break;
-				}
+			        goto float_done;
+			    }
 
-				__LDL_normalize(&lv);
+			    if (overflow) {
+			        /* Clamp to the value that rounds to DBL_MAX, with a sticky bit
+			         * so that any non-zero dropped integer digit pushes us to inf. */
+			    	if (is_L) {
+			    		lv.l.high   = 0xFFFFFFFF;
+			    		lv.l.middle = 0xFFFFFFFF;
+			    		lv.l.low    = 0;
+			    		lv.l.exp    = 16383 + 16383;   /* LDBL_MAX's biased exponent */
+			    	} else {
+			    		lv.l.high   = 0xFFFFFFFF;
+			    		lv.l.middle = 0xFFFFF800;      /* clears guard+sticky for round-to-even */
+			    		lv.l.low    = 0;
+			    		lv.l.exp    = 16383 + 1023;
+			    	}
+			        goto float_done;
+			    }
 
-				if (frac_digits > 0)
-					lv = pow10_ld(lv, -frac_digits);
+			    /* Decimal fractional part. frac_digits counts only the
+			     * accumulated digits: skipped ones are below the 96-bit
+			     * precision, so pow10_ld(lv, -frac_digits) scales the
+			     * truncated mantissa correctly. */
+			    if (VAL(c == __decimalpoint[0])) {
+			        NEXT(c);
+			        while (VAL(ISDIGIT(c))) {
+			            if (__LDL_mul_10_add(&lv, c - CX_0))
+			                ++frac_digits;
+			            has_digit = 1;
+			            NEXT(c);
+			        }
+			    }
 
-				/* Exponent part */
-				if (VAL(TOLOWER(c) == CX_e)) {
-					int d;
-					int ex = 0;
-					int has_ex_digit = 0;
+			    if (!has_digit) {
+			        PREV(c);
+			        if (min) PREV(min);
+			        break;
+			    }
 
-					NEXT(d);
-					if (VAL(d == CX_minus || d == CX_plus)) {
-						mine = d;
-						NEXT(d);
-					}
+			    /* bin_exp = floor(log2(integer part)) = number of bits the
+			     * normalized mantissa is left-shifted by __LDL_normalize.
+			     * Zero if the integer part was empty (fraction-only value). */
+			    bin_exp = __LDL_bin_exp(&lv);
 
-					while (VAL(ISDIGIT(d))) {
-						ex = ex * 10 + (d - CX_0);
-						has_ex_digit = 1;
-						NEXT(d);
-					}
+			    __LDL_normalize(&lv);          /* lv.l.exp = 16383 + b */
+			    lv.l.exp += bin_exp;
 
-					PREV(d);
-					if (!has_ex_digit) {
-						if (mine) PREV(mine);
-						PREV(c);
-						has_digit = 0;
-					} else {
-						long long new_exp = (long long)ex * 217706 / 65536;
-						if (mine == CX_minus) {
-							if (lv.l.exp - new_exp < 1L) {
-								special = 3;
-								goto float_done;
-							}
-							ex = -ex;
-						} else if (lv.l.exp + new_exp > 32766) {
-							special = 1;
-							goto float_done;
-						}
-						lv = pow10_ld(lv, ex);
-					}
-				} else {
-					PREV(c);
-				}
+			    /* Exponent part */
+			    if (VAL(TOLOWER(c) == CX_e)) {
+			        int d;
+			        int ex = 0;
+			        int has_ex_digit = 0;
+
+			        NEXT(d);
+			        if (VAL(d == CX_minus || d == CX_plus)) {
+			            mine = d;
+			            NEXT(d);
+			        }
+
+			        while (VAL(ISDIGIT(d))) {
+			            ex = ex * 10 + (d - CX_0);
+			            has_ex_digit = 1;
+			            NEXT(d);
+			        }
+
+			        PREV(d);
+			        if (!has_ex_digit) {
+			            /* "10e" or "10e+": matching failure. */
+			            has_digit = 0;
+			            size = 0;
+			        } else {
+			            if (mine == CX_minus)
+			                ex = -ex;
+			            lv = pow10_ld(lv, ex - frac_digits);
+			            frac_digits = 0;
+			        }
+			    } else {
+			        PREV(c);
+			    }
+			    if (frac_digits > 0)
+			        lv = pow10_ld(lv, -frac_digits); /* apply fraction scale if not done*/
 
 			float_done:
-				if (!ignore && has_digit) {
-					if (special == 1) {
-						if (is_L) {
-							long double ld = (long double)INFINITY;
-							if (sign < 0)
-								ld = -ld;
-							*va_arg(args, long double *) = ld;
-						} else {
-							double d = (double)INFINITY;
-							if (sign < 0)
-								d = -d;
-							*va_arg(args, double *) = d;
-						}
-					} else if (special == 2) {
-						if (is_L)
-							*va_arg(args, long double *) = (long double)NAN;
-						else
-							*va_arg(args, double *) = (double)NAN;
-					} else if (special == 3) {
-						if (is_L) {
-							long double ld = sign < 0 ? -0.0L : 0.0L;
-							*va_arg(args, long double *) = ld;
-						} else {
-							double d = sign < 0 ? -0.0 : 0.0;
-							*va_arg(args, double *) = d;
-						}
-					} else {
-						if (is_L) {
-							long double ld = __ldl_to_long_double(&lv);
-							if (sign < 0)
-								ld = -ld;
-							*va_arg(args, long double *) = ld;
-						} else {
-							double d = __ldl_to_double(&lv);
-							if (sign < 0)
-								d = -d;
-							*va_arg(args, double *) = d;
-						}
-					}
-					blocks++;
-				}
-				break;
+			    if (!ignore && has_digit) {
+			        if (special == 1) {
+			            if (is_L) {
+			                long double ld = (long double)INFINITY;
+			                if (sign < 0)
+			                    ld = -ld;
+			                *va_arg(args, long double *) = ld;
+			            } else {
+			                double d = (double)INFINITY;
+			                if (sign < 0)
+			                    d = -d;
+			                *va_arg(args, double *) = d;
+			            }
+			        } else if (special == 2) {
+			            if (is_L)
+			                *va_arg(args, long double *) = (long double)NAN;
+			            else
+			                *va_arg(args, double *) = (double)NAN;
+			        } else if (special == 3) {
+			            if (is_L) {
+			                long double ld = sign < 0 ? -0.0L : 0.0L;
+			                *va_arg(args, long double *) = ld;
+			            } else {
+			                double d = sign < 0 ? -0.0 : 0.0;
+			                *va_arg(args, double *) = d;
+			            }
+			        } else {
+			            if (is_L) {
+			                long double ld = __ldl_to_long_double(&lv);
+			                if (sign < 0)
+			                    ld = -ld;
+			                *va_arg(args, long double *) = ld;
+			            } else {
+			                double d = __ldl_to_double(&lv);
+			                if (sign < 0)
+			                    d = -d;
+			                *va_arg(args, double *) = d;
+			            }
+			        }
+			        blocks++;
+			    }
+			    break;
 			}
 #endif
 			case CX_percent:
@@ -560,8 +619,8 @@ int VSCANF_NAME(FILE *stream, const TCHAR *format, va_list args) {
 					PREV(c);
 				break;
 			case CX_n:
-				if (!ignore)
-					*va_arg(args, int *) = incount;
+								if (!ignore)
+				*va_arg(args, int *) = incount;
 				size = 1;
 				break;
 			default: {
@@ -636,13 +695,13 @@ int VSCANF_NAME(FILE *stream, const TCHAR *format, va_list args) {
 					switch (subtype) {
 					case CX_l:
 						case CX_L:
-							*va_arg(args, unsigned long *) = v;
+												*va_arg(args, unsigned long *) = v;
 						break;
 					case CX_i:
-							*va_arg(args, unsigned int *) = v;
+												*va_arg(args, unsigned int *) = v;
 						break;
 					case CX_h:
-							*va_arg(args, unsigned short *) = v;
+												*va_arg(args, unsigned short *) = v;
 						break;
 					}
 				else {
@@ -654,13 +713,13 @@ int VSCANF_NAME(FILE *stream, const TCHAR *format, va_list args) {
 					switch (subtype) {
 					case CX_l:
 						case CX_L:
-							*va_arg(args, signed long *) = v2;
+												*va_arg(args, signed long *) = v2;
 						break;
 					case CX_i:
-							*va_arg(args, signed int *) = v2;
+												*va_arg(args, signed int *) = v2;
 						break;
 					case CX_h:
-							*va_arg(args, signed short *) = v2;
+												*va_arg(args, signed short *) = v2;
 						break;
 					}
 				}
@@ -668,6 +727,8 @@ int VSCANF_NAME(FILE *stream, const TCHAR *format, va_list args) {
 				break;
 			}
 			}
+			if (size && type != 'n' && type != '%')
+				converted = 1;
 			format = ptr;
 		} else {
 			if (ISSPACE((int )*format)) {
@@ -686,8 +747,9 @@ int VSCANF_NAME(FILE *stream, const TCHAR *format, va_list args) {
 			break;
 	}
 	__STDIO_UNLOCK(stream);
-	if (c == CX_EOF && !blocks)
+	if (c == EOF && !blocks && !converted)
 		return c;
 	else
 		return blocks;
 }
+#endif // __SCANF_IMPL_H
