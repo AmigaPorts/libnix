@@ -483,7 +483,7 @@ int __vfprintf_total_size(FILE *stream, const TCHAR *format, va_list args) {
 				 * ---------------------------------------------------- */
 				{
 					int pos = 0;
-					int startPos;
+					int startPos = 0; /* set on every path; -Os can't see it */
 					short leading = 1;
 					short killZero = 0;
 					short rounds = 1; /* can the dropped digits round up? */
