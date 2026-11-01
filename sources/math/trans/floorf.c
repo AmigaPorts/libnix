@@ -2,7 +2,8 @@
 
 #include "fpu_math.h"
 
-FPU_FUNCTION_FPCR(float, floorf, "fint", FPCR_ROUNDING, FPCR_DOWNWARD)
+float floorf(float x)
+{ return fpu_round_to_integerf(x, SIGN_BIT); }
 
 #else
 

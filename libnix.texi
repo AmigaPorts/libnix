@@ -554,6 +554,7 @@ use this library.
 * Locale::
 * Formatted I/O::
 * atof strtod::
+* FPU math::
 * Memory management::
 * Standard I/O::
 * Signal handling::
@@ -626,7 +627,7 @@ So if you want to use one of the formatted I/O specifiers for floats
 you should link with the math library @samp{-lm}.
 @end itemize
 
-@node atof strtod,Memory management,Formatted I/O,libnix.a
+@node atof strtod,FPU math,Formatted I/O,libnix.a
 @subsection atof strtod
 
 The two functions @samp{atof} and @samp{strtod} require a working
@@ -635,7 +636,22 @@ require the formatted I/O functions in the math library.
 Since @samp{libm.a} is linked before @samp{libnix.a} these
 two functions have been gone into the math library.
 
-@node Memory management,Standard I/O,atof strtod,libnix.a
+@node FPU math,Memory management,atof strtod,libnix.a
+@subsection FPU math
+
+With @samp{-m68881}, the functions in @samp{libm.a} use the FPU's own
+instructions, such as @samp{fsin}, @samp{fetox} and @samp{flogn}, and not
+the mathieee libraries. That way they raise the exception flags and
+follow the rounding mode.
+
+The 68040 and the 68060 don't have these instructions in hardware.
+On those CPUs a program that calls @samp{sin}, @samp{exp}, @samp{log}
+and the like needs @samp{68040.library} or @samp{68060.library}, which
+SetPatch normally loads, and crashes without them. This also goes for
+code built with @samp{-m68060}, which otherwise runs without
+@samp{68060.library}. @samp{ceil} and @samp{floor} don't need the library.
+
+@node Memory management,Standard I/O,FPU math,libnix.a
 @subsection Memory management
 
 Most of the memory management of this library runs through malloc().

@@ -18,7 +18,8 @@ asm(
 #if defined(mc68060)
 /* AFF_FPU40 without AFF_68881 is an 040/060 FPU whose emulation library
    is not loaded.  Code built for the 68060 does not use the instructions
-   only that library provides, so the FPU alone is enough.  */
+   only that library provides, so the FPU alone is enough, unless it calls
+   a math function that uses them.  */
 "	btst	#6,d0;"
 "	jne	1f;"
 #endif
