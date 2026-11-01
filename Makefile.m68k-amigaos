@@ -44,6 +44,8 @@ AS = $(target)-as
 # prefixed with '@' (libb/libm020;@fbaserel@m68020-60).  The base directory
 # '.' is built in lib/, every other one in a directory of its own name, and
 # the FPU directories (m68881) only get libm: nothing else depends on the FPU.
+# All but the FPU directories are built at -Os, whatever CFLAGS says: $(flags)
+# comes last on the command line.
 MULTILIBS := $(shell $(CC) -print-multi-lib)
 multilib_dir = $(word 1,$(subst ;, ,$1))
 multilib_flags = $(strip $(subst @, -,$(word 2,$(subst ;, ,$1))))
@@ -126,7 +128,7 @@ $(VARIANTS_TO_BUILD): $(STARTUPS)
 # the base multilib, in lib/
 lib:
 	@mkdir -p $@
-	$(MAKE) one kind=$@
+	$(MAKE) one kind=$@ flags="-Os"
 	if [ -e lib/libstubs.a ] && $(AR) t lib/libstubs.a | grep -q __initlib; then rm -f lib/libstubs.a; fi
 
 # every other multilib: build in its directory, install into the same
@@ -135,7 +137,7 @@ define multilib_rules
 .PHONY: $(1) install_$(subst /,_,$(1))
 $(1):
 	@mkdir -p $$@
-	$$(MAKE) one kind=$$@ flags="$(2)" $(if $(findstring m68881,$(2)),LIBS_TO_BUILD=libm)
+	$$(MAKE) one kind=$$@ flags="$(2)$(if $(findstring m68881,$(2)),, -Os)" $(if $(findstring m68881,$(2)),LIBS_TO_BUILD=libm)
 install_$(subst /,_,$(1)):
 	$$(MAKE) install_one kind=$(1) to="$(1)/"
 endef
@@ -218,6 +220,10 @@ rest: detach.o
 detach.o: $(root)/sources/misc/detach.c
 	$(CC) -c -Os -fomit-frame-pointer $(flags) $^ -o $@
 
+# The string and memory functions, which sit in their callers' inner loops,
+# stay at -O2 where $(flags) asks for -Os: at -Os, memmove() is 5-10% slower.
+O2_SOURCES = /nix/string/|/nix/misc/b(copy|zero)\.c$$
+
 # Build lib$(libname).a from sources/$(lib), for $(kind) with $(flags).
 # Only the sources newer than the archive are recompiled, all of them if a header or this file changed.
 # Every source compiles to <basename>.o in $(lib), so two sources with the same basename would replace each other's object, in the order find happens to list them.
@@ -229,8 +235,11 @@ lib$(libname).a: $(shell find $(root)/sources/$(lib)/* -name '*.c') $(stolen) $(
 	@touch -t 0001010000 $(lib)/stamp && if [ -e $@ ]; then touch -r $@ $(lib)/stamp; fi
 	@if [ "$$(find $(root)/sources/headers/* -newer $(lib)/stamp)" != "" ]; then rm -f $(lib)/*.o $@; touch -t 0001010000 $(lib)/stamp; fi
 	@if [ "$$(find $(root)/Makefile.m68k-amigaos -newer $(lib)/stamp)" != "" ]; then rm -f $(lib)/*.o $@; touch -t 0001010000 $(lib)/stamp; fi
-	@cd $(lib) && files="$$(find $^ -name '*.c' -newer stamp)" && echo "$(CC) -c $(CFLAGS) $(flags) $$files" && \
-	$(CC) -c $(CFLAGS) $(flags) $$files
+	@cd $(lib) && files="$$(find $^ -name '*.c' -newer stamp)" && \
+	o2="$$(printf '%s\n' $$files | grep -E '$(O2_SOURCES)' | xargs)" && \
+	files="$$(printf '%s\n' $$files | grep -vE '$(O2_SOURCES)' | xargs)" && \
+	if [ -n "$$files" ]; then echo "$(CC) -c $(CFLAGS) $(flags) $$files" && $(CC) -c $(CFLAGS) $(flags) $$files; fi && \
+	if [ -n "$$o2" ]; then echo "$(CC) -c $(CFLAGS) $(flags) -O2 $$o2" && $(CC) -c $(CFLAGS) $(flags) -O2 $$o2; fi
 	@objs="$$(find ./$(lib)/* -name '*.o' -newer $(lib)/stamp)" && echo "$(AR) rcs $@ $$objs" && \
 	$(AR) rcs $@ $$objs
 
