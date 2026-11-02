@@ -15,6 +15,7 @@
  */
 
 #include "fdlibm.h"
+#include "math_errno.h"
 
 #ifdef __STDC__
 static const float 
@@ -161,8 +162,9 @@ static float zero=  0.0000000000e+00;
         /* purge off +-inf, NaN, +-0, and negative arguments */
 	*signgamp = 1;
 	ix = hx&0x7fffffff;
-	if(ix>=0x7f800000) return x*x;
-	if(ix==0) return one/zero;
+	if(ix>=0x7f800000)
+	    return __MATH_SOFT(x*x, __math_nan_float(x) ? x : __builtin_huge_valf());
+	if(ix==0) return __MATH_SOFT(one/zero, __math_overflowf(1.0f));
 	if(ix<0x1c800000) {	/* |x|<2**-70, return -log(|x|) */
 	    if(hx<0) {
 	        *signgamp = -1;
@@ -171,9 +173,9 @@ static float zero=  0.0000000000e+00;
 	}
 	if(hx<0) {
 	    if(ix>=0x4b000000) 	/* |x|>=2**23, must be -integer */
-		return one/zero;
+		return __MATH_SOFT(one/zero, __math_overflowf(1.0f));
 	    t = sin_pif(x);
-	    if(t==zero) return one/zero; /* -integer */
+	    if(t==zero) return __MATH_SOFT(one/zero, __math_overflowf(1.0f)); /* -integer */
 	    nadj = logf(pi/fabsf(t*x));
 	    if(t<zero) *signgamp = -1;
 	    x = -x;
@@ -238,9 +240,13 @@ static float zero=  0.0000000000e+00;
 	    y = z*z;
 	    w = w0+z*(w1+y*(w2+y*(w3+y*(w4+y*(w5+y*w6)))));
 	    r = (x-half)*(t-one)+w;
-	} else 
+	} else {
     /* 2**58 <= x <= inf */
+#ifdef __MATH_SETS_ERRNO
+	    if(x>4.0850e+36f) return __math_overflowf(1.0f);
+#endif
 	    r =  x*(logf(x)-one);
+	}
 	if(hx<0) r = nadj - r;
 	return r;
 }

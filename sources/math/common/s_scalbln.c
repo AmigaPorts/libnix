@@ -18,6 +18,7 @@
  */
 
 #include "fdlibm.h"
+#include "math_errno.h"
 
 #ifndef _DOUBLE_IS_32BITS
 
@@ -47,15 +48,15 @@ tiny   = 1.0e-300;
 	    GET_HIGH_WORD(hx,x);
 	    k = ((hx&0x7ff00000)>>20) - 54;
 	    }
-        if (k==0x7ff) return x+x;		/* NaN or Inf */
+        if (k==0x7ff) return __MATH_SOFT(x+x, x);		/* NaN or Inf */
         k = k+n;
         if (n> 50000 || k >  0x7fe)
-	  return huge*copysign(huge,x); /* overflow  */
-	if (n< -50000) return tiny*copysign(tiny,x); /*underflow*/
+	  return __MATH_SOFT(huge*copysign(huge,x), __math_overflow(x)); /* overflow  */
+	if (n< -50000) return __MATH_SOFT(tiny*copysign(tiny,x), __math_underflow(x)); /*underflow*/
         if (k > 0) 				/* normal result */
 	    {SET_HIGH_WORD(x,(hx&0x800fffff)|(k<<20)); return x;}
         if (k <= -54)
-	  return tiny*copysign(tiny,x); 	/*underflow*/
+	  return __MATH_SOFT(tiny*copysign(tiny,x), __math_underflow(x)); 	/*underflow*/
         k += 54;				/* subnormal result */
 	SET_HIGH_WORD(x,(hx&0x800fffff)|(k<<20));
         return x*twom54;

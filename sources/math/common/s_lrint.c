@@ -60,6 +60,7 @@ ANSI C, POSIX
  */
 
 #include "fdlibm.h"
+#include "math_errno.h"
 
 #ifndef _DOUBLE_IS_32BITS
 
@@ -79,7 +80,7 @@ TWO52[2]={
 };
 
 #ifdef __STDC__
-	long int lrint(double x)
+	__MATH_UNCHECKED(long int, lrint)(double x)
 #else
 	long int lrint(x)
 	double x;
@@ -162,5 +163,14 @@ TWO52[2]={
   
   return sx ? -result : result;
 }
+
+#ifdef __MATH_SETS_ERRNO
+
+long int lrint(double x)
+{
+  __MATH_ROUND_ERRNO(double, , x, rint, __MATH_LONG_BITS);
+  return __lrint_unchecked(x);
+}
+#endif
 
 #endif /* _DOUBLE_IS_32BITS */

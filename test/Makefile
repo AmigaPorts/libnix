@@ -38,6 +38,7 @@ TARGET_TESTS = \
 	ftruncate \
 	ftw \
 	inet \
+	math_errno \
 	mathfp \
 	printf \
 	romtag \
@@ -112,6 +113,11 @@ ftw_CFLAGS = -I../sources/headers
 # catch: an out-of-range lookup reads whatever precedes the table.
 inet_SRCS = ../sources/socket/arpa/inet_aton.c ../sources/socket/arpa/inet_network.c
 inet_LIBFLAGS = -Wall -Werror=char-subscripts
+
+# Against the installed libraries, in both forms: test/math_errno.c, -m68000 and
+# -m68020 -m68881.
+math_errno_CFLAGS = -fno-builtin
+math_errno_LIBS = -lm
 
 mathfp_SRCS = $(addprefix ../sources/math/mathfp/,fmod.c fmodf.c frexp.c ldexp.c fabs.c fabsf.c)
 mathfp_CFLAGS = -fno-builtin

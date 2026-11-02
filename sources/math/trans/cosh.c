@@ -7,8 +7,13 @@ FPU_FUNCTION(double, cosh, "fcosh")
 #else
 
 #include <proto/mathieeedoubtrans.h>
+#include "math_errno.h"
 
 double cosh(double x)
-{ return IEEEDPCosh(x); }
+{
+  if (__math_power_double(x) >= 9)
+    return __math_hyperbolic(x, 1.0);
+  return IEEEDPCosh(x);
+}
 
 #endif

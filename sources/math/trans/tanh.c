@@ -7,8 +7,13 @@ FPU_FUNCTION(double, tanh, "ftanh")
 #else
 
 #include <proto/mathieeedoubtrans.h>
+#include "math_errno.h"
 
 double tanh(double x)
-{ return IEEEDPTanh(x); }
+{
+  if (__math_nan_double(x))
+    return x;
+  return IEEEDPTanh(x);
+}
 
 #endif

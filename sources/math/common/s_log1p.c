@@ -113,6 +113,7 @@ Interface Definition (Issue 2).
  */
 
 #include "fdlibm.h"
+#include "math_errno.h"
 
 #ifndef _DOUBLE_IS_32BITS
 
@@ -139,7 +140,7 @@ static double zero = 0.0;
 #endif
 
 #ifdef __STDC__
-	double log1p(double x)
+	__MATH_UNCHECKED(double, log1p)(double x)
 #else
 	double log1p(x)
 	double x;
@@ -205,5 +206,15 @@ static double zero = 0.0;
 	if(k==0) return f-(hfsq-s*(hfsq+R)); else
 		 return k*ln2_hi-((hfsq-(s*(hfsq+R)+(k*ln2_lo+c)))-f);
 }
+
+#ifdef __MATH_SETS_ERRNO
+
+double log1p(double x)
+{
+  if (__math_special_double(x) || __math_high(x) >= 0xbff00000UL)
+    return __math_log1p_special(x);
+  return __log1p_unchecked(x);
+}
+#endif
 
 #endif /* _DOUBLE_IS_32BITS */

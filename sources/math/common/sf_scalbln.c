@@ -14,6 +14,7 @@
  */
 
 #include "fdlibm.h"
+#include "math_errno.h"
 
 #ifdef __STDC__
 static const float
@@ -41,16 +42,16 @@ tiny   = 1.0e-30;
 	    GET_FLOAT_WORD(ix,x);
 	    k = ((ix&0x7f800000)>>23) - 25;
 	    }
-        if (k==0xff) return x+x;		/* NaN or Inf */
+        if (k==0xff) return __MATH_SOFT(x+x, x);		/* NaN or Inf */
         k = k+n;
         if (n> 50000 || k >  0xfe)
-	  return huge*copysignf(huge,x); /* overflow  */
+	  return __MATH_SOFT(huge*copysignf(huge,x), __math_overflowf(x)); /* overflow  */
 	if (n< -50000)
-	  return tiny*copysignf(tiny,x);	/*underflow*/
+	  return __MATH_SOFT(tiny*copysignf(tiny,x), __math_underflowf(x));	/*underflow*/
         if (k > 0) 				/* normal result */
 	    {SET_FLOAT_WORD(x,(ix&0x807fffff)|(k<<23)); return x;}
         if (k <= -25)
-	    return tiny*copysignf(tiny,x);	/*underflow*/
+	    return __MATH_SOFT(tiny*copysignf(tiny,x), __math_underflowf(x));	/*underflow*/
         k += 25;				/* subnormal result */
 	SET_FLOAT_WORD(x,(ix&0x807fffff)|(k<<23));
         return x*twom25;

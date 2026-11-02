@@ -26,6 +26,18 @@ static inline int __ldbl_isnan(long double x)
   return LDBL_EXPFIELD(u) == 0x7fff && ((u.p.hi & 0x7fffffffUL) | u.p.lo);
 }
 
+/* Is a rounded x inside a type of bits value bits and a sign?  -2^bits is.  */
+static inline int __ldbl_fits(long double x, int bits)
+{
+  union ldbits u;
+  int power;
+  u.v = x;
+  power = LDBL_EXPFIELD(u) - 0x3fff;
+  if (power != bits)
+    return power < bits;
+  return (u.p.se & 0x8000) && u.p.hi == 0x80000000UL && u.p.lo == 0;
+}
+
 static inline long double __ldbl_inf(int negative)
 {
   union ldbits u;

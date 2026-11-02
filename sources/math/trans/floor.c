@@ -8,8 +8,13 @@ double floor(double x)
 #else
 
 #include <proto/mathieeedoubbas.h>
+#include "math_errno.h"
 
 double floor(double x)
-{ return IEEEDPFloor(x); }
+{
+  if (__math_special_double(x) || __math_zero_double(x))
+    return x;
+  return IEEEDPFloor(x);
+}
 
 #endif

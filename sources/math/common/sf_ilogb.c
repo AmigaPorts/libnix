@@ -15,9 +15,10 @@
 
 #include <limits.h>
 #include "fdlibm.h"
+#include "math_errno.h"
 
 #ifdef __STDC__
-	int ilogbf(float x)
+	__MATH_UNCHECKED(int, ilogbf)(float x)
 #else
 	int ilogbf(x)
 	float x;
@@ -39,6 +40,16 @@
 	else if (!FLT_UWORD_IS_FINITE(hx)) return INT_MAX;
 	else return (hx>>23)-127;
 }
+
+#ifdef __MATH_SETS_ERRNO
+
+int ilogbf(float x)
+{
+  if (__math_special_float(x) || __math_zero_float(x))
+    errno = EDOM;
+  return __ilogbf_unchecked(x);
+}
+#endif
 
 #ifdef _DOUBLE_IS_32BITS
 

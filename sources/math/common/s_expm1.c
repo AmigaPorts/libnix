@@ -142,6 +142,7 @@ PORTABILITY
  */
 
 #include "fdlibm.h"
+#include "math_errno.h"
 
 #ifndef _DOUBLE_IS_32BITS
 
@@ -165,7 +166,7 @@ Q4  =   4.00821782732936239552e-06, /* 3ED0CFCA 86E65239 */
 Q5  =  -2.01099218183624371326e-07; /* BE8AFDB7 6E09C32D */
 
 #ifdef __STDC__
-	double expm1(double x)
+	__MATH_UNCHECKED(double, expm1)(double x)
 #else
 	double expm1(x)
 	double x;
@@ -260,5 +261,16 @@ Q5  =  -2.01099218183624371326e-07; /* BE8AFDB7 6E09C32D */
 	}
 	return y;
 }
+
+#ifdef __MATH_SETS_ERRNO
+
+double expm1(double x)
+{
+  if (__math_power_double(x) >= 9 &&
+      (__math_special_double(x) || x > 709.78271289338397))
+    return __math_expm1_special(x);
+  return __expm1_unchecked(x);
+}
+#endif
 
 #endif /* _DOUBLE_IS_32BITS */

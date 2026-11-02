@@ -14,6 +14,7 @@
  */
 
 #include "fdlibm.h"
+#include "math_errno.h"
 
 #ifdef __STDC__
 	float nextafterf(float x, float y)
@@ -52,7 +53,7 @@
 	    }
 	}
 	hy = hx&0x7f800000;
-	if(hy>FLT_UWORD_MAX) return x+x;	/* overflow  */
+	if(hy>FLT_UWORD_MAX) return __MATH_SOFT(x+x, __math_overflowf(x));	/* overflow  */
 	if(hy<0x00800000) {		/* underflow */
 	    y = x*x;
 	    if(y!=x) {		/* raise underflow flag */

@@ -20,6 +20,7 @@
  */
 
 #include "fdlibm.h"
+#include "math_errno.h"
 
 #ifdef __STDC__
 static const float one = 1.0, Zero[] = {0.0, -0.0,};
@@ -28,7 +29,7 @@ static float one = 1.0, Zero[] = {0.0, -0.0,};
 #endif
 
 #ifdef __STDC__
-	float fmodf(float x, float y)
+	__MATH_UNCHECKED(float, fmodf)(float x, float y)
 #else
 	float fmodf(x,y)
 	float x,y ;
@@ -111,3 +112,14 @@ static float one = 1.0, Zero[] = {0.0, -0.0,};
 	}
 	return x;		/* exact output */
 }
+
+#ifdef __MATH_SETS_ERRNO
+
+float fmodf(float x, float y)
+{
+  if (__math_special_float(x) || __math_special_float(y) ||
+      __math_zero_float(y))
+    return __math_fmod_specialf(x, y);
+  return __fmodf_unchecked(x, y);
+}
+#endif

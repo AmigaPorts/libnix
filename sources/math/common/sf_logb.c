@@ -19,6 +19,7 @@
  */
 
 #include "fdlibm.h"
+#include "math_errno.h"
 
 float
 #ifdef __STDC__
@@ -36,7 +37,7 @@ float x;
 		float  xx;
 		/* arg==0:  return -inf and raise divide-by-zero exception */
 		SET_FLOAT_WORD(xx,hx);	/* +0.0 */
-		return -1./xx;	/* logbf(0) = -inf */
+		return __MATH_SOFT(-1./xx, __math_log_specialf(xx));	/* logbf(0) = -inf */
 		}
 	if(FLT_UWORD_IS_SUBNORMAL(hx)) {
 	    for (ix = -126,hx<<=8; hx>0; hx<<=1) ix -=1;

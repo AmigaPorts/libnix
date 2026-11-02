@@ -7,8 +7,13 @@ FPU_FUNCTION(double, sinh, "fsinh")
 #else
 
 #include <proto/mathieeedoubtrans.h>
+#include "math_errno.h"
 
 double sinh(double x)
-{ return IEEEDPSinh(x); }
+{
+  if (__math_power_double(x) >= 9)
+    return __math_hyperbolic(x, x);
+  return IEEEDPSinh(x);
+}
 
 #endif
