@@ -396,7 +396,7 @@ static double zero=  0.00000000000000000000e+00;
 	} else {
     /* 2**58 <= x <= inf */
 #ifdef __MATH_SETS_ERRNO
-	    if(x>2.556348163871690e+305) return __math_overflow(1.0);
+	    if(x>2.5599833278516383e+305) return __math_overflow(1.0);
 #endif
 	    r =  x*(log(x)-one);
 	}

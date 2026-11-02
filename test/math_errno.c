@@ -229,6 +229,37 @@ int main(void)
   CHECK(sinh(710 * one), r > 1.1e308 && r < 1.2e308, 0);
   CHECK(cosh(-710 * one), r > 1.1e308 && r < 1.2e308, 0);
 
+  /* Either side of the end of the range.  The libraries stop at DBL_MAX,
+     so pow(2,1024) and pow(DBL_MAX,1) look the same to them.  */
+  IS_INF(pow(two, 1024 * one), 1, ERANGE);
+  IS_INF(pow(0.5 * one, -1024 * one), 1, ERANGE);
+  IS_INF(pow(16 * one, 256 * one), 1, ERANGE);
+  IS_INF(exp2(1024 * one), 1, ERANGE);
+  IS(pow(two, 1023 * one), 0x1p1023, 0);
+  IS(pow(-max, one), -DBL_MAX, 0);
+  IS_INF(pow(10 * one, max), 1, ERANGE);
+  IS(pow(10 * one, -max), 0, ERANGE);
+  IS(pow(-one, max), 1, 0);
+  IS_INF(powf(ftwo, 128 * fone), 1, ERANGE);
+  IS_INF(powf(4 * fone, 64 * fone), 1, ERANGE);
+  IS(powf(ftwo, 127 * fone), 0x1p127f, 0);
+  IS(powf(FLT_MAX * fone, fone), FLT_MAX, 0);
+  IS_INF(powf(10 * fone, FLT_MAX * fone), 1, ERANGE);
+  IS(powf(10 * fone, -FLT_MAX * fone), 0, ERANGE);
+  CHECK(lgamma(2.5599833278516383e305 * one), r > 1.79e308 && !is_inf(r, 1), 0);
+  IS_INF(lgamma(2.5599833278516387e305 * one), 1, ERANGE);
+  CHECK(lgammaf(4.085003108497519e36f * fone), r > 3.4e38 && !is_inf(r, 1), 0);
+#ifndef __HAVE_68881__
+  IS_INF(lgammaf(4.085003425410169e36f * fone), 1, ERANGE);
+#else
+  /* x * (logf(x) - 1) on the FPU comes out an ulp short of overflowing.  */
+  CHECK(lgammaf(4.085003425410169e36f * fone), r >= FLT_MAX, 0);
+#endif
+  CHECK(coshf(89.41598510742188f * fone), r > 3.4e38 && !is_inf(r, 1), 0);
+  CHECK(sinhf(-89.41598510742188f * fone), r < -3.4e38 && !is_inf(r, -1), 0);
+  IS_INF(coshf(-89.4159927368164f * fone), 1, ERANGE);
+  IS_INF(sinhf(89.4159927368164f * fone), 1, ERANGE);
+
   /* The integer functions: C leaves this open, and glibc says EDOM.  */
 #ifndef __HAVE_68881__
     {
