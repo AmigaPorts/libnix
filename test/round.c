@@ -1,8 +1,9 @@
 /* lround() at the end of a 32-bit long's range, where rounding up can
    carry out of it: 2147483647.5 came out as LONG_MIN.  A result that does
    not fit is LONG_MAX or LONG_MIN by its sign, as the conversion gives for
-   anything larger, and with an FPU it raises FE_INVALID.  Prints what
-   fails; the exit code is the number of failures.  */
+   anything larger, and with an FPU it raises FE_INVALID.  And llround()
+   from 2^53 up, which lost the low word's top bits.  Prints what fails;
+   the exit code is the number of failures.  */
 
 #include <fenv.h>
 #include <limits.h>
@@ -74,6 +75,31 @@ int main(void)
   lr(-2147483648.5, LONG_MIN, 1, "lround(-2147483648.5) is LONG_MIN, invalid");
   lr(-2147483649.0, LONG_MIN, 1, "lround(-2147483649) is LONG_MIN, invalid");
   lr(-1e10, LONG_MIN, 1, "lround(-1e10) is LONG_MIN, invalid");
+
+  /* llround() from 2^53 up shifts the low word left */
+  {
+    static const struct { double x; long long want; } ll[] = {
+      { 0x1p52, 1LL << 52 },
+      { 0x1p53 + 2, (1LL << 53) + 2 },
+      { 0x1p53 + 0x1p32, (1LL << 53) + (1LL << 32) },
+      { 0x1p53 + 0x1p32 + 2, (1LL << 53) + (1LL << 32) + 2 },
+      { -0x1p53 - 0x1p32, -(1LL << 53) - (1LL << 32) },
+      { 0x1.fffffffffffffp+61, 0x3ffffffffffffe00LL },
+      { 0x1.fffffffffffffp+62, 0x7ffffffffffffc00LL },
+      { -0x1p63, LLONG_MIN },
+    };
+    unsigned i;
+
+    for (i = 0; i < sizeof ll / sizeof *ll; i++)
+      {
+        volatile double v = ll[i].x;
+        if (llround(v) != ll[i].want)
+          {
+            printf("FAIL: llround(%.17g) == %lld, not %lld\n", ll[i].x, llround(v), ll[i].want);
+            failures++;
+          }
+      }
+  }
 
   /* halves round away from zero in any rounding mode: the FPU builds */
 #if defined(FE_UPWARD) && defined(FE_DOWNWARD) && defined(FE_TOWARDZERO)
