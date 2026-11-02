@@ -59,6 +59,20 @@ typedef unsigned long __attribute__((__may_alias__)) __math_long;
 #define __math_suspect_double(x)  (__math_power_double(x) >= 1023)
 #define __math_suspect_float(x)   (__math_power_float(x) >= 127)
 
+/* Each of these has a file of its own, so that a program only links the ones it
+   calls.  */
+static inline double __math_range(double result)
+{
+  errno = ERANGE;
+  return result;
+}
+
+static inline float __math_rangef(float result)
+{
+  errno = ERANGE;
+  return result;
+}
+
 extern double __math_domain(double x);
 extern float __math_domainf(float x);
 extern double __math_overflow(double sign);
