@@ -3,6 +3,7 @@
 
 #include <proto/dos.h>
 
+#include "stdio.h"
 #include "stabs.h"
 
 #include "amigapath.h"

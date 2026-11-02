@@ -63,6 +63,8 @@ sysdep/libnix/sources/math/stdio/isinf.c
 sysdep/libnix/sources/math/stdio/isnan.c
 sysdep/libnix/sources/math/stdlib/atof.c
 sysdep/libnix/sources/math/stdlib/strtod.c
+sysdep/libnix/sources/math/trans/__fpu_round.c
+sysdep/libnix/sources/math/trans/__fpu_roundf.c
 sysdep/libnix/sources/math/trans/acos.c
 sysdep/libnix/sources/math/trans/asin.c
 sysdep/libnix/sources/math/trans/atan.c
