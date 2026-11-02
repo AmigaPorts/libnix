@@ -45,10 +45,18 @@ float powf(float x, float y)
     x = -x;
   }
 
+  /* From |y| = 1e10 on, every x but 1 is out of range, and IEEESPPow()
+     returns 1 for powf(10,FLT_MAX).  Such a y is even, so x = -1 is 1 too.  */
+  if (fabsf(y) >= 1e10f && !__math_one_float(x))
+    return __math_above_one_float(x) != __math_negative(y) ?
+	   __math_overflowf(1.0f) : __math_underflowf(1.0f);
+
   result = IEEESPPow(y, x);
 
+  /* An overflow comes back as infinity, which y * logf(x) can't always
+     tell from FLT_MAX: powf(2,128) is 88.72284f either way.  */
   if (__math_suspect_float(result)) {
-    if (y * logf(x) > 88.7229f)
+    if (__math_inf_float(result) || y * logf(x) > 88.7229f)
       result = __math_overflowf(1.0f);
   } else if (__math_zero_float(result)) {
     errno = ERANGE;

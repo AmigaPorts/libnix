@@ -243,7 +243,7 @@ static float zero=  0.0000000000e+00;
 	} else {
     /* 2**58 <= x <= inf */
 #ifdef __MATH_SETS_ERRNO
-	    if(x>4.0850e+36f) return __math_overflowf(1.0f);
+	    if(x>4.085003108497519e+36f) return __math_overflowf(1.0f);
 #endif
 	    r =  x*(logf(x)-one);
 	}
