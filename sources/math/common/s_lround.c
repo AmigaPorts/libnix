@@ -69,6 +69,12 @@ ANSI C, POSIX
   sign = ((msw & 0x80000000) ? -1 : 1);
   /* Extract exponent field. */
   exponent_less_1023 = ((msw & 0x7ff00000) >> 20) - 1023;
+  /* With a 32-bit long, rounding from 2^30 up can leave its range, which
+     the shifts below would overflow into.  Adding the half is exact up to
+     2^31, so the conversion's truncation rounds, and it raises the invalid
+     exception for a result that does not fit, as for anything larger.  */
+  if (sizeof (long int) == 4 && exponent_less_1023 >= 30)
+    return (long int) (x + (sign > 0 ? 0.5 : -0.5));
   msw &= 0x000fffff;
   msw |= 0x00100000;
   /* exponent_less_1023 in [-1023,1024] */

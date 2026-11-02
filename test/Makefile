@@ -41,6 +41,7 @@ TARGET_TESTS = \
 	mathfp \
 	printf \
 	romtag \
+	round \
 	sscanf \
 	stack \
 	strto \
@@ -125,6 +126,10 @@ printf_LIBS = -lm
 # The startup code of -ramiga-lib, linked into a program.
 romtag_SRCS = ../sources/startup/libinit.c
 romtag_CFLAGS = -I../sources/headers
+
+round_SRCS = ../sources/math/common/s_lround.c
+round_CFLAGS = -fno-builtin
+round_LIBS = -lm
 
 # bebbo's self-tests of the narrow and wide printf engines.
 vfprintf_test_SRCS = ../sources/nix/stdio/__vfprintf_total_size.c ../sources/math/stdio/ami_printf_math.c
