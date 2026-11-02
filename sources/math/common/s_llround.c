@@ -59,7 +59,7 @@ llround(double x)
 	/* 64bit longlong: shift amt in [32,42] */
         result = ((long long int) msw << (exponent_less_1023 - 20))
 		    /* 64bit longlong: shift amt in [0,10] */
-                    | (lsw << (exponent_less_1023 - 52));
+                    | ((long long int) lsw << (exponent_less_1023 - 52));
       else
         {
 	  /* 64bit longlong: exponent_less_1023 in [20,51] */

@@ -127,7 +127,7 @@ printf_LIBS = -lm
 romtag_SRCS = ../sources/startup/libinit.c
 romtag_CFLAGS = -I../sources/headers
 
-round_SRCS = ../sources/math/common/s_lround.c
+round_SRCS = ../sources/math/common/s_lround.c ../sources/math/common/s_llround.c
 round_CFLAGS = -fno-builtin
 round_LIBS = -lm
 
