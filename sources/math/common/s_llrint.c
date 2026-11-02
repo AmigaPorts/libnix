@@ -22,6 +22,7 @@
  */
 
 #include "fdlibm.h"
+#include "math_errno.h"
 
 #ifndef _DOUBLE_IS_32BITS
 
@@ -40,10 +41,10 @@ TWO52[2]={
  -4.50359962737049600000e+15, /* 0xC3300000, 0x00000000 */
 };
 
-long long int
 #ifdef __STDC__
-	llrint(double x)
+	__MATH_UNCHECKED(long long int, llrint)(double x)
 #else
+long long int
 	llrint(x)
 	double x;
 #endif
@@ -120,5 +121,14 @@ long long int
   
   return sx ? -result : result;
 }
+
+#ifdef __MATH_SETS_ERRNO
+
+long long int llrint(double x)
+{
+  __MATH_ROUND_ERRNO(double, , x, rint, __MATH_LONG_LONG_BITS);
+  return __llrint_unchecked(x);
+}
+#endif
 
 #endif /* _DOUBLE_IS_32BITS */

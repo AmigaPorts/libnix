@@ -15,6 +15,7 @@
  */
 
 #include "fdlibm.h"
+#include "math_errno.h"
 
 #ifdef __STDC__
 static const float one = 1.0, huge = 1e30;
@@ -29,7 +30,7 @@ static float zero = 0.0;
 #endif
 
 #ifdef __STDC__
-	float atanhf(float x)
+	__MATH_UNCHECKED(float, atanhf)(float x)
 #else
 	float atanhf(x)
 	float x;
@@ -52,3 +53,13 @@ static float zero = 0.0;
 	    t = (float)0.5*log1pf((x+x)/(one-x));
 	if(hx>=0) return t; else return -t;
 }
+
+#ifdef __MATH_SETS_ERRNO
+
+float atanhf(float x)
+{
+  if (__math_above_one_float(x) || __math_one_float(x))
+    return __math_atanh_specialf(x);
+  return __atanhf_unchecked(x);
+}
+#endif

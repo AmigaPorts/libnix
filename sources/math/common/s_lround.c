@@ -48,11 +48,12 @@ ANSI C, POSIX
 */
 
 #include "fdlibm.h"
+#include "math_errno.h"
 
 #ifndef _DOUBLE_IS_32BITS
 
 #ifdef __STDC__
-	long int lround(double x)
+	__MATH_UNCHECKED(long int, lround)(double x)
 #else
 	long int lround(x)
 	double x;
@@ -125,5 +126,14 @@ ANSI C, POSIX
 
   return sign * result;
 }
+
+#ifdef __MATH_SETS_ERRNO
+
+long int lround(double x)
+{
+  __MATH_ROUND_ERRNO(double, , x, round, __MATH_LONG_BITS);
+  return __lround_unchecked(x);
+}
+#endif
 
 #endif /* _DOUBLE_IS_32BITS */

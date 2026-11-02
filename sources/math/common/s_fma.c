@@ -31,6 +31,7 @@
 #include <stdint.h>
 #include <float.h>
 #include <math.h>
+#include "math_errno.h"
 
 #define ZEROINFNAN (0x7ff-0x3ff-52-1)
 
@@ -73,7 +74,7 @@ static void mul(uint64_t *hi, uint64_t *lo, uint64_t x, uint64_t y)
 	*hi = t3 + (t2>>32) + (t1 > *lo);
 }
 
-double fma(double x, double y, double z)
+__MATH_UNCHECKED(double, fma)(double x, double y, double z)
 {
 	/* normalize so top 10bits and last bit are 0 */
 	struct num nx, ny, nz;
@@ -217,3 +218,14 @@ double fma(double x, double y, double z)
 	}
 	return scalbn(r, e);
 }
+
+#ifdef __MATH_SETS_ERRNO
+/* The result goes through scalbn(), which reports an overflow.  */
+double fma(double x, double y, double z)
+{
+  if (__math_special_double(x) || __math_special_double(y) ||
+      __math_special_double(z))
+    return __math_fma_special(x, y, z);
+  return __fma_unchecked(x, y, z);
+}
+#endif

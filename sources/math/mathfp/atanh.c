@@ -31,6 +31,7 @@
  */
 
 #include "fdlibm.h"
+#include "math_errno.h"
 
 #ifndef _DOUBLE_IS_32BITS
 
@@ -47,7 +48,7 @@ static double zero = 0.0;
 #endif
 
 #ifdef __STDC__
-	double atanh(double x)
+	__MATH_UNCHECKED(double, atanh)(double x)
 #else
 	double atanh(x)
 	double x;
@@ -71,5 +72,15 @@ static double zero = 0.0;
 	    t = 0.5*log1p((x+x)/(one-x));
 	if(hx>=0) return t; else return -t;
 }
+
+#ifdef __MATH_SETS_ERRNO
+
+double atanh(double x)
+{
+  if (__math_above_one_double(x) || __math_one_double(x))
+    return __math_atanh_special(x);
+  return __atanh_unchecked(x);
+}
+#endif
 
 #endif /* defined(_DOUBLE_IS_32BITS) */

@@ -60,6 +60,7 @@ C99, POSIX.
 #include <limits.h>
 #include <math.h>
 #include "fdlibm.h"
+#include "math_errno.h"
 
 /* For quotient, return either all 31 bits that can from calculation (using
  * int32_t), or as many as can fit into an int that is smaller than 32 bits.  */
@@ -79,8 +80,7 @@ static const double Zero[] = {0.0, -0.0,};
  * method.  In practice, this is far more bits than are needed to use
  * remquo in reduction algorithms.
  */
-double
-remquo(double x, double y, int *quo)
+__MATH_UNCHECKED(double, remquo)(double x, double y, int *quo)
 {
 	__int32_t n,hx,hy,hz,ix,iy,sx,i;
 	__uint32_t lx,ly,lz,q,sxy;
@@ -206,3 +206,16 @@ fixup:
 	*quo = (sxy ? -q : q);
 	return x;
 }
+
+#ifdef __MATH_SETS_ERRNO
+
+double remquo(double x, double y, int *quo)
+{
+  if (__math_special_double(x) || __math_special_double(y) ||
+      __math_zero_double(y)) {
+    *quo = 0;
+    return __math_fmod_special(x, y);
+  }
+  return __remquo_unchecked(x, y, quo);
+}
+#endif

@@ -21,6 +21,7 @@
  */
 
 #include "fdlibm.h"
+#include "math_errno.h"
 
 #ifndef _DOUBLE_IS_32BITS
 
@@ -32,7 +33,7 @@ static double zero = 0.0;
 
 
 #ifdef __STDC__
-	double remainder(double x, double p)
+	__MATH_UNCHECKED(double, remainder)(double x, double p)
 #else
 	double remainder(x,p)
 	double x,p;
@@ -76,5 +77,16 @@ static double zero = 0.0;
 	SET_HIGH_WORD(x,hx^sx);
 	return x;
 }
+
+#ifdef __MATH_SETS_ERRNO
+
+double remainder(double x, double p)
+{
+  if (__math_special_double(x) || __math_special_double(p) ||
+      __math_zero_double(p))
+    return __math_fmod_special(x, p);
+  return __remainder_unchecked(x, p);
+}
+#endif
 
 #endif /* defined(_DOUBLE_IS_32BITS) */

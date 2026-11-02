@@ -38,6 +38,8 @@ ANSI C, POSIX.
 */
 
 #include "fdlibm.h"
+#include "math_errno.h"
+#include <float.h>
 
 #ifndef _DOUBLE_IS_32BITS
 
@@ -53,9 +55,20 @@ ANSI C, POSIX.
   if (c == FP_NAN)  return(x);
   if (__fpclassifyd(y) == FP_NAN)  return(y);
   if (c == FP_INFINITE)
-    return HUGE_VAL;
-
+    return !__math_negative(x) && !(__math_inf_double(y) && !__math_negative(y)) ? HUGE_VAL : 0.0;
+  if (__math_inf_double(y))
+    return __math_negative(y) ? HUGE_VAL : 0.0;
+#ifdef __MATH_SETS_ERRNO
+  if (x > y) {
+    double result = x - y;
+    if (__math_suspect_double(result) && 0.5 * x - 0.5 * y > DBL_MAX / 2)
+      return __math_overflow(1.0);
+    return result;
+  }
+  return 0.0;
+#else
   return x > y ? x - y : 0.0;
+#endif
 }
 
 #endif /* _DOUBLE_IS_32BITS */

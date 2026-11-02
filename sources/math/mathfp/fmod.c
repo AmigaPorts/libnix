@@ -20,6 +20,7 @@
  */
 
 #include "fdlibm.h"
+#include "math_errno.h"
 
 #ifndef _DOUBLE_IS_32BITS
 
@@ -30,7 +31,7 @@ static double one = 1.0, Zero[] = {0.0, -0.0,};
 #endif
 
 #ifdef __STDC__
-	double fmod(double x, double y)
+	__MATH_UNCHECKED(double, fmod)(double x, double y)
 #else
 	double fmod(x,y)
 	double x,y ;
@@ -138,5 +139,16 @@ static double one = 1.0, Zero[] = {0.0, -0.0,};
 	}
 	return x;		/* exact output */
 }
+
+#ifdef __MATH_SETS_ERRNO
+
+double fmod(double x, double y)
+{
+  if (__math_special_double(x) || __math_special_double(y) ||
+      __math_zero_double(y))
+    return __math_fmod_special(x, y);
+  return __fmod_unchecked(x, y);
+}
+#endif
 
 #endif /* defined(_DOUBLE_IS_32BITS) */

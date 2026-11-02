@@ -14,6 +14,7 @@
  */
 
 #include "fdlibm.h"
+#include "math_errno.h"
 
 #ifdef __STDC__
 static const float
@@ -38,7 +39,7 @@ static float zero = 0.0;
 #endif
 
 #ifdef __STDC__
-	float log1pf(float x)
+	__MATH_UNCHECKED(float, log1pf)(float x)
 #else
 	float log1pf(x)
 	float x;
@@ -105,6 +106,16 @@ static float zero = 0.0;
 	if(k==0) return f-(hfsq-s*(hfsq+R)); else
 		 return k*ln2_hi-((hfsq-(s*(hfsq+R)+(k*ln2_lo+c)))-f);
 }
+
+#ifdef __MATH_SETS_ERRNO
+
+float log1pf(float x)
+{
+  if (__math_special_float(x) || __math_high(x) >= 0xbf800000UL)
+    return __math_log1p_specialf(x);
+  return __log1pf_unchecked(x);
+}
+#endif
 
 #ifdef _DOUBLE_IS_32BITS
 

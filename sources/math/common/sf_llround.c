@@ -11,9 +11,9 @@
  */
 
 #include "fdlibm.h"
+#include "math_errno.h"
 
-long long int
-llroundf(float x)
+__MATH_UNCHECKED(long long int, llroundf)(float x)
 {
   __int32_t exponent_less_127;
   __uint32_t w;
@@ -43,6 +43,15 @@ llroundf(float x)
 
   return sign * result;
 }
+
+#ifdef __MATH_SETS_ERRNO
+
+long long int llroundf(float x)
+{
+  __MATH_ROUND_ERRNO(float, f, x, roundf, __MATH_LONG_LONG_BITS);
+  return __llroundf_unchecked(x);
+}
+#endif
 
 #ifdef _DOUBLE_IS_32BITS
 

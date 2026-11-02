@@ -27,6 +27,7 @@
  */
 
 #include "fdlibm.h"
+#include "math_errno.h"
 
 #ifndef _DOUBLE_IS_32BITS
 
@@ -38,7 +39,7 @@ static double
 one	= 1.0,
 ln2	= 6.93147180559945286227e-01;  /* 0x3FE62E42, 0xFEFA39EF */
 
-double acosh(double x)
+__MATH_UNCHECKED(double, acosh)(double x)
 {	
 	double t;
 	__int32_t hx;
@@ -61,5 +62,15 @@ double acosh(double x)
 	    return log1p(t+sqrt(2.0*t+t*t));
 	}
 }
+
+#ifdef __MATH_SETS_ERRNO
+
+double acosh(double x)
+{
+  if (__math_special_double(x) || (long)__math_high(x) < 0x3ff00000L)
+    return __math_acosh_special(x);
+  return __acosh_unchecked(x);
+}
+#endif
 
 #endif /* defined(_DOUBLE_IS_32BITS) */
