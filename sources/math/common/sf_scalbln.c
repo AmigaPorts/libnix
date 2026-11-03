@@ -54,7 +54,9 @@ tiny   = 1.0e-30;
 	    return __MATH_SOFT(tiny*copysignf(tiny,x), __math_underflowf(x));	/*underflow*/
         k += 25;				/* subnormal result */
 	SET_FLOAT_WORD(x,(ix&0x807fffff)|(k<<23));
-        return x*twom25;
+        x *= twom25;
+	/* a result that rounds to 0 underflows too */
+	return __MATH_SOFT(x, x == 0 ? __math_rangef(x) : x);
 }
 
 #ifdef _DOUBLE_IS_32BITS

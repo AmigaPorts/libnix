@@ -59,7 +59,9 @@ tiny   = 1.0e-300;
 	  return __MATH_SOFT(tiny*copysign(tiny,x), __math_underflow(x)); 	/*underflow*/
         k += 54;				/* subnormal result */
 	SET_HIGH_WORD(x,(hx&0x800fffff)|(k<<20));
-        return x*twom54;
+        x *= twom54;
+	/* a result that rounds to 0 underflows too */
+	return __MATH_SOFT(x, x == 0 ? __math_range(x) : x);
 }
 
 #endif /* _DOUBLE_IS_32BITS */
