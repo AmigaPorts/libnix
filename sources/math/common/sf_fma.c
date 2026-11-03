@@ -73,7 +73,10 @@ float fmaf(float x, float y, float z)
       __math_special_float(z))
     return (float)__math_fma_special(x, y, z);
   result = __fmaf_unchecked(x, y, z);
-  if (__math_special_float(result))
+  /* The product is exact in double, so its sum with z is 0 only when the two
+     cancel: a 0 from anything else is an underflow.  */
+  if (__math_special_float(result) ||
+      (result == 0 && (double)x * y + z != 0))
     errno = ERANGE;
   return result;
 }

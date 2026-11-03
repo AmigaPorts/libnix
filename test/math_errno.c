@@ -166,6 +166,14 @@ int main(void)
   IS(exp(-1000 * one), 0, ERANGE);
   IS(expf(-1000 * fone), 0, ERANGE);
   IS(pow(10 * one, -1000 * one), 0, ERANGE);
+  /* Results that round to 0 rather than to the smallest subnormal.  */
+  IS(exp(-745.13321910194122 * one), 0, ERANGE);
+  IS(scalbn(one, -1075), 0, ERANGE);
+  IS(scalbln(one, -1075L), 0, ERANGE);
+  IS(scalblnf(fone, -150L), 0, ERANGE);
+  IS(fmaf(FLT_MIN * fone, FLT_MIN * fone, fzero), 0, ERANGE);
+  IS(fmaf(fone, -fone, fone), 0, 0);
+  IS(fma(one, -one, one), 0, 0);
 
   /* NaN in, NaN out, and no error.  */
   IS_NAN(sin(nan), 0);
