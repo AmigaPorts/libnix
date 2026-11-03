@@ -220,14 +220,17 @@ detach.o: $(root)/sources/misc/detach.c
 
 # Build lib$(libname).a from sources/$(lib), for $(kind) with $(flags).
 # Only the sources newer than the archive are recompiled, all of them if a header or this file changed.
+# The headers are the public ones in sources/headers and the private ones next to the sources, like
+# the printf and scanf engines.
 # Every source compiles to <basename>.o in $(lib), so two sources with the same basename would replace each other's object, in the order find happens to list them.
-lib$(libname).a: $(shell find $(root)/sources/$(lib)/* -name '*.c') $(stolen) $(shell find $(root)/sources/headers/* -name '*.h') $(root)/Makefile.m68k-amigaos
+headers := $(shell find $(root)/sources -name '*.h')
+lib$(libname).a: $(shell find $(root)/sources/$(lib)/* -name '*.c') $(stolen) $(headers) $(root)/Makefile.m68k-amigaos
 	@dups="$$(find $(root)/sources/$(lib)/* -name '*.c' | xargs -n1 basename | sort | uniq -d | xargs)"; \
 	if [ -n "$$dups" ]; then echo "sources/$(lib) has more than one file named: $$dups" >&2; exit 1; fi
 	@mkdir -p $(lib)
 	@echo compiling for $(kind)/$@ using $(CC) -c $(CFLAGS) $(flags)
 	@touch -t 0001010000 $(lib)/stamp && if [ -e $@ ]; then touch -r $@ $(lib)/stamp; fi
-	@if [ "$$(find $(root)/sources/headers/* -newer $(lib)/stamp)" != "" ]; then rm -f $(lib)/*.o $@; touch -t 0001010000 $(lib)/stamp; fi
+	@if [ "$$(find $(headers) -newer $(lib)/stamp)" != "" ]; then rm -f $(lib)/*.o $@; touch -t 0001010000 $(lib)/stamp; fi
 	@if [ "$$(find $(root)/Makefile.m68k-amigaos -newer $(lib)/stamp)" != "" ]; then rm -f $(lib)/*.o $@; touch -t 0001010000 $(lib)/stamp; fi
 	@cd $(lib) && files="$$(find $^ -name '*.c' -newer stamp)" && echo "$(CC) -c $(CFLAGS) $(flags) $$files" && \
 	$(CC) -c $(CFLAGS) $(flags) $$files

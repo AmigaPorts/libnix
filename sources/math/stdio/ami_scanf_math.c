@@ -47,15 +47,14 @@ int __LDL_mul_10_add(LDL *x, int digit)
 	unsigned long mid = x->l.middle;
 	unsigned long lo = x->l.low;
 
-	/* Saturation: x >= 2^96 / 10 would overflow the 96-bit accumulator.
-	 * The exact threshold is 0x19999999_99999999_99999999 (with the
-	 * boundary refined by mid/lo).  Use the simple hi-based check plus
-	 * a corner case; for the boundary refine with mid/lo. */
+	/* Saturation: x * 10 + digit must stay below 2^96.  (2^96 - 1) / 10 is
+	 * 0x19999999_99999999_99999999 with remainder 5, so at that x only
+	 * the digits up to 5 still fit. */
 	if (hi > 0x19999999UL)
 		goto saturate;
 	if (hi == 0x19999999UL) {
 		unsigned long long midlo = ((unsigned long long) mid << 32) | lo;
-		if (midlo > 0x9999999999999999ULL - (unsigned long long) digit / 10)
+		if (midlo > 0x9999999999999999ULL - (digit > 5))
 			goto saturate;
 	}
 
@@ -132,21 +131,6 @@ int __LDL_mul_16_add(LDL *x, int digit)
 	return 1;
 }
 
-int __LDL_mul_16_add_1st(LDL *x, int digit)
-{
-	unsigned long hi = x->l.high;
-	unsigned long mid = x->l.middle;
-	unsigned long lo = x->l.low;
-
-	if (hi >= 0x20000000UL)
-		return 0;
-
-	x->l.high = (hi << 3) | (mid >> 29);
-	x->l.middle = (mid << 3) | (lo >> 29);
-	x->l.low = (lo << 3) | ((unsigned long) digit & 0xF);
-	return 1;
-}
-
 /* Normalize an LDL built by __LDL_mul_10_add / __LDL_mul_16_add (which
  * leave exp = 0): find the highest set bit b in the 96-bit mantissa,
  * shift left so it lands at b63, and set exp = 16383 + b.  A zero
@@ -176,7 +160,7 @@ void __LDL_normalize(LDL *x)
 		}
 	} else if (mid != 0) {
 		n = __builtin_clz(mid);
-		x->l.high = (mid << n) | (lo >> (32 - n));
+		x->l.high = (mid << n) | (n ? lo >> (32 - n) : 0);
 		x->l.middle = (lo << n);
 		x->l.low = 0;
 	} else {
@@ -202,6 +186,35 @@ double __ldl_to_double(const LDL *lv)
 	e = (int) lv->l.exp - 16383;
 	mant = ((unsigned long long) hi << 32) | mid;
 
+	if (e + 1023 <= 0) {
+		/* Subnormal: round once, from the whole mantissa, to the bits
+		 * left above 2^-1074.  Rounding up to 2^52 gives the smallest
+		 * normal number, which has the same bits. */
+		int shift = -e - 1011;
+		unsigned long long m;
+		union _d_bits u;
+
+		if (shift > 64) {
+			m = 0;
+		} else if (shift == 64) {
+			/* the top bit is the half; ties go to the even 0 */
+			m = (mant << 1) != 0 || lv->l.low != 0;
+		} else {
+			unsigned long long half = 1ULL << (shift - 1);
+			unsigned long long lost = mant & ((half << 1) - 1);
+
+			m = mant >> shift;
+			if ((lost & half) && ((lost & (half - 1)) || lv->l.low != 0 || (m & 1)))
+				m++;
+		}
+		u.u = 0;
+		u.b.sign = 0;
+		u.b.exp = (unsigned) (m >> 52);
+		u.b.frac0 = (unsigned) ((m >> 32) & 0xFFFFFUL);
+		u.b.frac1 = (unsigned) (m & 0xFFFFFFFFUL);
+		return u.d;
+	}
+
 	{
 		unsigned long long m53 = mant >> 11;
 		unsigned long guard = (mant >> 10) & 1;
@@ -219,40 +232,6 @@ double __ldl_to_double(const LDL *lv)
 
 		if (E >= 0x7FF)
 			return (double) (1.0 / 0.0);
-
-		if (E <= 0) {
-			int shift = -e - 1022;
-			unsigned long long m;
-
-			if (shift >= 64) {
-				m = 0; /* m53 < 2^53 < 2^63 = half */
-			} else {
-				unsigned long long lost = m53 & ((1ULL << shift) - 1);
-				unsigned long long half = 1ULL << (shift - 1);
-
-				m = m53 >> shift;
-				if ((lost & half) && ((lost & (half - 1)) || (m & 1)))
-					m++;
-			}
-
-			if (m >= (1ULL << 52)) {
-				E = 1;
-				m = 0;
-			} else {
-				E = 0;
-			}
-
-			{
-				unsigned long long frac52 = m & 0xFFFFFFFFFFFFFULL;
-				union _d_bits u;
-				u.u = 0;
-				u.b.sign = 0;
-				u.b.exp = (unsigned) E;
-				u.b.frac0 = (unsigned) (frac52 >> 32);
-				u.b.frac1 = (unsigned) (frac52 & 0xFFFFFFFFUL);
-				return u.d;
-			}
-		}
 
 		{
 			unsigned long long frac52 = m53 & 0xFFFFFFFFFFFFFULL;
@@ -287,6 +266,33 @@ long double __ldl_to_long_double(const LDL *lv)
 	{
 		unsigned long long m64 = ((unsigned long long) hi << 32) | mid;
 
+		if ((long) e + 16383 < 0) {
+			/* Denormal.  On the 68881 the exponent field 0 has the same
+			 * scale as 1, 2^-16383 for the integer bit: with that bit set
+			 * it is LDBL_MIN, and the denormals reach down to 2^-16446.
+			 * Round once, from the whole mantissa; rounding up to the
+			 * integer bit gives LDBL_MIN. */
+			int shift = -e - 16383;
+			unsigned long long m;
+
+			if (shift > 64) {
+				m = 0;
+			} else if (shift == 64) {
+				/* the top bit is the half; ties go to the even 0 */
+				m = (m64 << 1) != 0 || lo != 0;
+			} else {
+				unsigned long long half = 1ULL << (shift - 1);
+				unsigned long long lost = m64 & ((half << 1) - 1);
+
+				m = m64 >> shift;
+				if ((lost & half) && ((lost & (half - 1)) || lo != 0 || (m & 1)))
+					m++;
+			}
+			u.b.exp = 0;
+			u.b.mant = m;
+			return u.ld;
+		}
+
 		/* Round to nearest-even at 64 bits. */
 		{
 			unsigned long guard = (lo >> 31) & 1;
@@ -307,41 +313,6 @@ long double __ldl_to_long_double(const LDL *lv)
 			if (E >= 0x7FFF) {
 				u.b.exp = 0x7FFF;
 				u.b.mant = 0x8000000000000000ULL;
-				return u.ld;
-			}
-
-			if (E <= 0) {
-				int shift = 1 - (int) E;
-				unsigned long long m = m64;
-
-				if (shift >= 64) {
-					/* half = 2^63.  m64 < 2^64.  Round up only if strictly
-					 * greater than half; exact half ties to even -> 0
-					 * (result 0 is even).
-					 */
-					if (shift == 64 && (m >> 63) &&
-							(m & 0x7FFFFFFFFFFFFFFFULL))
-						m = 1;
-					else
-						m = 0;
-				} else {
-					unsigned long long lost = m & ((1ULL << shift) - 1);
-					unsigned long long half = 1ULL << (shift - 1);
-
-					m >>= shift;
-					if ((lost & half) && ((lost & (half - 1)) || (m & 1)))
-						m++;
-				}
-
-				if (m & 0x8000000000000000ULL) {
-					m &= 0x7FFFFFFFFFFFFFFFULL;
-					E = 1;
-				} else {
-					E = 0;
-				}
-
-				u.b.exp = (unsigned) E;
-				u.b.mant = m;
 				return u.ld;
 			}
 

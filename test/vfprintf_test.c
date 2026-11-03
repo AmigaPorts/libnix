@@ -7,7 +7,7 @@
  *
  * --------------------------------------------------------------------------
  *  Copyright and license
- * ----------------------------------------------------le----------------------
+ * --------------------------------------------------------------------------
  *
  *  This file is part of the libnix C library for AmigaOS / m68k.
  *
@@ -22,7 +22,6 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <stdarg.h>
-#include <stdio.h>
 #include <string.h>
 #include <errno.h>
 

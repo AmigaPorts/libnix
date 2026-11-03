@@ -954,7 +954,7 @@ int PRINTF_FN(FILE *stream, const TCHAR *format, va_list args) {
 							    xout = 1;
 							}
 							/* Thousands */
-							if (exponent > 999) {
+							if (xout || exponent > 999) {
 								int z = exponent / 1000;
 								TOUT(CX_0 + z);
 								exponent -= z * 1000;

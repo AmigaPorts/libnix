@@ -118,8 +118,19 @@ static int fnmatch_internal(const char *pattern, const char *string, const char 
 				const char *end_check = pattern;
 				if (*end_check == ']')
 					end_check++; // A leading ']' inside the bracket counts as a literal character
-				while (*end_check && *end_check != ']')
+				while (*end_check && *end_check != ']') {
+					// the ']' of a [:class:] doesn't close the bracket
+					if (end_check[0] == '[' && end_check[1] == ':') {
+						const char *e = end_check + 2;
+						while (*e && !(e[0] == ':' && e[1] == ']'))
+							e++;
+						if (*e) {
+							end_check = e + 2;
+							continue;
+						}
+					}
 					end_check++;
+				}
 
 				// If no closing ']' is found, treat '[' as a literal character
 				if (!*end_check) {

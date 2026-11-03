@@ -136,8 +136,20 @@ static int __LDL_bin_exp(const LDL *x)
     return 0;
 }
 
-extern TCHAR * __decimalpoint;
+extern char * __decimalpoint;
 #endif
+
+/* %c, %s and %[ store char, and wchar_t with the l modifier, in both the
+ * char and the wchar_t scanf */
+static inline char *store_char(char *bp, int wide, int c)
+{
+	if (wide) {
+		*(wchar_t *) bp = (wchar_t) c;
+		return bp + sizeof(wchar_t);
+	}
+	*bp = (char) c;
+	return bp + 1;
+}
 
 /* some macros to cut this short
  * NEXT(c);     read next character
@@ -226,20 +238,20 @@ int VSCANF_NAME(FILE *stream, const TCHAR *format, va_list args) {
 
 			switch (type) {
 			case CX_c: {
-				TCHAR *bp;
+				char *bp;
 
 				if (width == ULONG_MAX) /* Default */
 					width = 1;
 
 if (!ignore)
-					bp = va_arg(args, TCHAR *);
+					bp = va_arg(args, char *);
 				else
 					bp = NULL; /* Just to get the compiler happy */
 
 												NEXT(c); /* 'c' did not skip whitespace */
 				while (VAL(c != CX_EOF)) {
 					if (!ignore)
-						*bp++ = (TCHAR) c;
+						bp = store_char(bp, subtype == CX_l, c);
 					NEXT(c);
 				}
 				PREV(c);
@@ -249,7 +261,7 @@ if (!ignore)
 				break;
 			}
 			case CX_bracket: {
-				TCHAR *bp;
+				char *bp;
 				unsigned char tab[32], a, b;
 				char circflag = 0;
 
@@ -279,7 +291,7 @@ if (!ignore)
 				}
 
 if (!ignore)
-					bp = va_arg(args, TCHAR *);
+					bp = va_arg(args, char *);
 				else
 					bp = NULL; /* Just to get the compiler happy */
 
@@ -287,34 +299,34 @@ if (!ignore)
 				while (VAL(c != CX_EOF && c >= 0 && c < 256 &&
 						(tab[c/8] & (1<<(c&7))))) {
 					if (!ignore)
-						*bp++ = (TCHAR) c;
+						bp = store_char(bp, subtype == CX_l, c);
 					NEXT(c);
 				}
 				PREV(c);
 
 				if (!ignore && size) {
-					*bp++ = CX_NUL;
+					store_char(bp, subtype == CX_l, 0);
 					blocks++;
 				}
 				break;
 			}
 			case CX_s: {
-				TCHAR *bp;
+				char *bp;
 
 				if (!ignore)
-				bp = va_arg(args, TCHAR *);
+				bp = va_arg(args, char *);
 				else
 				bp = NULL; /* Just to get the compiler happy */
 
 				while (VAL(c != CX_EOF && !ISSPACE(c))) {
 					if (!ignore)
-						*bp++ = (TCHAR) c;
+						bp = store_char(bp, subtype == CX_l, c);
 					NEXT(c);
 				}
 				PREV(c);
 
 				if (!ignore && size) {
-					*bp++ = CX_NUL;
+					store_char(bp, subtype == CX_l, 0);
 					blocks++;
 				}
 				break;
@@ -372,24 +384,20 @@ if (!ignore)
 			    }
 
 			    /* Integer part.  __LDL_mul_10_add returns 0 when the
-			     * accumulator is saturated; we keep consuming digits
-			     * (so the position of the decimal point stays correct)
-			     * but don't count them for scaling, and set overflow if
-			     * any integer digit was skipped. */
+			     * accumulator is saturated; the digits it drops are
+			     * below its precision but still scale the value by 10,
+			     * which frac_digits counts negatively. */
 			    while (VAL(ISDIGIT(c))) {
 			        if (!__LDL_mul_10_add(&lv, c - CX_0)) {
-			            /* saturated: consume the rest, overflow */
 			            overflow = 1;
-			            while (VAL(ISDIGIT(c)))
-			                NEXT(c);
-			            break;
+			            --frac_digits;
 			        }
 			        has_digit = 1;
 			        NEXT(c);
 			    }
 
 			    /* Hex float path: only when integer part was exactly "0" */
-			    if (!overflow && VAL(c == CX_x) &&
+			    if (has_digit && !overflow && VAL(TOLOWER(c) == CX_x) &&
 			        lv.l.high == 0 && lv.l.middle == 0 && lv.l.low == 0) {
 			        int has_hex = 0;
 
@@ -418,14 +426,7 @@ if (!ignore)
 			         * 96-bit precision and are noise. */
 			        if (VAL(c == __decimalpoint[0])) {
 			            NEXT(c);
-			            if (has_non_zero) {
-			                if (is_L && VAL(ISXDIGIT(c))) {
-			                    int v = hexval(c);
-			                    __LDL_mul_16_add_1st(&lv, v);
-			                    NEXT(c);
-			                    has_digit = 1;
-			                }
-			            } else
+			            if (!has_non_zero)
 			                bin_exp = -1;
 			            while (VAL(ISXDIGIT(c))) {
 			                int v = hexval(c);
@@ -468,7 +469,8 @@ if (!ignore)
 			                NEXT(d);
 			            }
 			            while (VAL(ISDIGIT(d))) {
-			                pexp = pexp * 10 + (d - CX_0);
+			                if (pexp < 100000)
+			                    pexp = pexp * 10 + (d - CX_0);
 			                has_pexp = 1;
 			                NEXT(d);
 			            }
@@ -485,23 +487,6 @@ if (!ignore)
 			        }
 			        lv.l.exp += bin_exp;
 
-			        goto float_done;
-			    }
-
-			    if (overflow) {
-			        /* Clamp to the value that rounds to DBL_MAX, with a sticky bit
-			         * so that any non-zero dropped integer digit pushes us to inf. */
-			    	if (is_L) {
-			    		lv.l.high   = 0xFFFFFFFF;
-			    		lv.l.middle = 0xFFFFFFFF;
-			    		lv.l.low    = 0;
-			    		lv.l.exp    = 16383 + 16383;   /* LDBL_MAX's biased exponent */
-			    	} else {
-			    		lv.l.high   = 0xFFFFFFFF;
-			    		lv.l.middle = 0xFFFFF800;      /* clears guard+sticky for round-to-even */
-			    		lv.l.low    = 0;
-			    		lv.l.exp    = 16383 + 1023;
-			    	}
 			        goto float_done;
 			    }
 
@@ -546,7 +531,9 @@ if (!ignore)
 			        }
 
 			        while (VAL(ISDIGIT(d))) {
-			            ex = ex * 10 + (d - CX_0);
+			            /* far out of range already: keep it from overflowing */
+			            if (ex < 100000)
+			                ex = ex * 10 + (d - CX_0);
 			            has_ex_digit = 1;
 			            NEXT(d);
 			        }
@@ -565,9 +552,16 @@ if (!ignore)
 			    } else {
 			        PREV(c);
 			    }
-			    if (frac_digits > 0)
+			    if (frac_digits != 0)
 			        lv = pow10_ld(lv, -frac_digits); /* apply fraction scale if not done*/
 
+			/* %f stores a float, %lf a double */
+#define STORE_DOUBLE(d) do { \
+	if (subtype == CX_l) \
+		*va_arg(args, double *) = (d); \
+	else \
+		*va_arg(args, float *) = (float) (d); \
+} while (0)
 			float_done:
 			    if (!ignore && has_digit) {
 			        if (special == 1) {
@@ -580,20 +574,20 @@ if (!ignore)
 			                double d = (double)INFINITY;
 			                if (sign < 0)
 			                    d = -d;
-			                *va_arg(args, double *) = d;
+			                STORE_DOUBLE(d);
 			            }
 			        } else if (special == 2) {
 			            if (is_L)
 			                *va_arg(args, long double *) = (long double)NAN;
 			            else
-			                *va_arg(args, double *) = (double)NAN;
+			                STORE_DOUBLE((double)NAN);
 			        } else if (special == 3) {
 			            if (is_L) {
 			                long double ld = sign < 0 ? -0.0L : 0.0L;
 			                *va_arg(args, long double *) = ld;
 			            } else {
 			                double d = sign < 0 ? -0.0 : 0.0;
-			                *va_arg(args, double *) = d;
+			                STORE_DOUBLE(d);
 			            }
 			        } else {
 			            if (is_L) {
@@ -605,7 +599,7 @@ if (!ignore)
 			                double d = __ldl_to_double(&lv);
 			                if (sign < 0)
 			                    d = -d;
-			                *va_arg(args, double *) = d;
+			                STORE_DOUBLE(d);
 			            }
 			        }
 			        blocks++;

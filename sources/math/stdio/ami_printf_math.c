@@ -279,7 +279,9 @@ LDL __LDL_mul(LDL a, LDL b)
 		}
 	}
 
-	r.l.exp     = (unsigned short) (exp_r + 16383);
+	/* not truncated: the callers turn an exponent out of range into
+	 * infinity or zero */
+	r.l.exp     = exp_r + 16383;
 	r.s.word[0] = m4;   /* bits 79..64 */
 	r.s.word[1] = m3;   /* bits 63..48 */
 	r.s.word[2] = m2;   /* bits 47..32 */
@@ -490,6 +492,14 @@ LDL pow10_ld(LDL result, int n)
 
 	if (n == 0)
 		return result;
+
+	/* The tables reach 10^8191.  Past that, the result for any value
+	 * below 2^96, like the ones scanf builds, is out of range of long
+	 * double anyway. */
+	if (n > 8191)
+		n = 8191;
+	else if (n < -8191)
+		n = -8191;
 
 	table = n < 0 ? pow10_neg_table : pow10_pos_table;
 	exp = (unsigned int) (n < 0 ? -n : n);
