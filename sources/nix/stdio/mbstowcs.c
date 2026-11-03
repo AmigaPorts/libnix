@@ -6,9 +6,13 @@
  */
 size_t mbstowcs(wchar_t *wc,const char *s,size_t n)
 { size_t l=0;
-  while(n--&&*s)
-  { *wc++=*s++;
-    l++; }
-  *wc++='\0';
+  if(!wc) /* only count */
+    n=(size_t)-1;
+  for(;l<n;l++)
+  { unsigned char c=s[l];
+    if(wc)
+      wc[l]=c;
+    if(!c)
+      break; }
   return l;
 }

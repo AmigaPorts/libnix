@@ -5,8 +5,11 @@
  * just a "C" locale function 
  */
 int mbtowc(wchar_t *wc,const char *s,size_t n)
-{ if(n&&s)
-  { *wc=*s;
-    return sizeof(wchar_t); }
-  return 0;
+{ if(!s)
+    return 0; /* no shift states */
+  if(!n)
+    return -1;
+  if(wc)
+    *wc=(unsigned char)*s;
+  return *s!='\0';
 }
