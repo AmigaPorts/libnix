@@ -610,13 +610,10 @@ int PRINTF_FN(FILE *stream, const TCHAR *format, va_list args) {
 				/* -------- S2: exponent extraction -------------------- */
 				if (!infnan) {
 					if (!is_ld ? !_d_iszero(d) : !_ld_iszero(lu)) {
-						int bit_exp;
+						/* ld_val is normalized, so its exponent is the
+						 * binary one of subnormals too. */
+						int bit_exp = (int) (ld_val.l.exp - 16383);
 						int normalized_exp;
-						if (is_ld) {
-							bit_exp = lu.b.exp ? (int) lu.b.exp - 16383 : -16382;
-						} else {
-							bit_exp = d.b.exp ? d.b.exp - 1023 : -1022;
-						}
 						{
 							unsigned long long e = (unsigned long long) (bit_exp >= 0 ? bit_exp : -bit_exp);
 							normalized_exp = (int) ((e * LOG10_2_Q32 + (1ULL << 31)) >> 32);

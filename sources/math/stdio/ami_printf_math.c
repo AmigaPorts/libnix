@@ -107,13 +107,16 @@ LDL __LDL_from_long_double(long double ld)
 	}
 
 	if (E == 0) {
-		/* Subnormal long double: normalize mantissa */
-		int exp = -16382;
+		/* Subnormal long double: normalize mantissa.  The 68881's
+		 * exponent field 0 is 2^-16383, not the 2^-16382 of x87, and
+		 * the normalized exponent can be below the bias: LDL's exp is
+		 * a long, so it must not go through an unsigned short. */
+		long exp = -16383;
 		while ((mant & 0x8000000000000000ULL) == 0) {
 			mant <<= 1;
 			exp--;
 		}
-		r.l.exp = (unsigned short) (exp + 16383);
+		r.l.exp = exp + 16383;
 		r.l.high = (unsigned long) (mant >> 32);
 		r.l.middle = (unsigned long) (mant & 0xFFFFFFFFUL);
 		r.l.low = 0UL;
