@@ -41,6 +41,7 @@ TARGET_TESTS = \
 	mathfp \
 	printf \
 	printf_ld \
+	printf_s \
 	romtag \
 	sscanf \
 	stack \
@@ -126,6 +127,10 @@ printf_LIBS = -lm
 printf_ld_SRCS = $(printf_SRCS) ../sources/nix/stdio/vsnprintf.c
 printf_ld_LIBFLAGS = -DFULL_SPECIFIERS
 printf_ld_LIBS = -lm
+
+printf_s_SRCS = $(printf_ld_SRCS) $(addprefix ../sources/nix/stdio/,__vfwprintf_total_size.c vswprintf.c)
+printf_s_LIBFLAGS = -DFULL_SPECIFIERS
+printf_s_LIBS = -lm
 
 # The startup code of -ramiga-lib, linked into a program.
 romtag_SRCS = ../sources/startup/libinit.c
