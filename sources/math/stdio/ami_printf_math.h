@@ -299,10 +299,6 @@ int __LDL_mul_10_add(LDL *x, int digit);
  * return 1 when added, 0 when saturated
  */
 int __LDL_mul_16_add(LDL *x, int digit);
-/*
- * performs only a shift by 3.
- */
-int __LDL_mul_16_add_1st(LDL *x, int digit);
 
 /* Normalize an LDL so the integer bit is at b95.
  *

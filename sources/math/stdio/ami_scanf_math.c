@@ -47,16 +47,15 @@ int __LDL_mul_10_add(LDL *x, int digit)
 	unsigned long mid = x->l.middle;
 	unsigned long lo = x->l.low;
 
-	/* Saturation: x >= 2^96 / 10 would overflow the 96-bit accumulator.
-	 * The exact threshold is 0x19999999_99999999_99999999 (with the
-	 * boundary refined by mid/lo).  Use the simple hi-based check plus
-	 * a corner case; for the boundary refine with mid/lo. */
+	/* Saturation: x * 10 + digit must stay below 2^96.  (2^96 - 1) / 10 is
+	 * 0x19999999_99999999_99999999 with remainder 5, so at that x only
+	 * the digits up to 5 still fit. */
 	if (hi > 0x19999999UL)
-		goto saturate;
+		return 0;
 	if (hi == 0x19999999UL) {
 		unsigned long long midlo = ((unsigned long long) mid << 32) | lo;
-		if (midlo > 0x9999999999999999ULL - (unsigned long long) digit / 10)
-			goto saturate;
+		if (midlo > 0x9999999999999999ULL - (digit > 5))
+			return 0;
 	}
 
 	/* a = 8x  = x << 3 */
@@ -89,13 +88,6 @@ int __LDL_mul_10_add(LDL *x, int digit)
 	x->l.middle = r_mid;
 	x->l.low = r_lo;
 	return 1;
-
-	saturate:
-	/* First dropped digit goes into low's LSB as a sticky flag if
-	 * it's non-zero.  Matches __LDL_mul_16_add's convention. */
-	if (x->l.low == 0 && digit != 0)
-		x->l.low = (unsigned long) digit;
-	return 0;
 }
 
 /* In-place multiply by 16 and add a hex digit:
@@ -132,21 +124,6 @@ int __LDL_mul_16_add(LDL *x, int digit)
 	return 1;
 }
 
-int __LDL_mul_16_add_1st(LDL *x, int digit)
-{
-	unsigned long hi = x->l.high;
-	unsigned long mid = x->l.middle;
-	unsigned long lo = x->l.low;
-
-	if (hi >= 0x20000000UL)
-		return 0;
-
-	x->l.high = (hi << 3) | (mid >> 29);
-	x->l.middle = (mid << 3) | (lo >> 29);
-	x->l.low = (lo << 3) | ((unsigned long) digit & 0xF);
-	return 1;
-}
-
 /* Normalize an LDL built by __LDL_mul_10_add / __LDL_mul_16_add (which
  * leave exp = 0): find the highest set bit b in the 96-bit mantissa,
  * shift left so it lands at b63, and set exp = 16383 + b.  A zero
@@ -176,7 +153,7 @@ void __LDL_normalize(LDL *x)
 		}
 	} else if (mid != 0) {
 		n = __builtin_clz(mid);
-		x->l.high = (mid << n) | (lo >> (32 - n));
+		x->l.high = (mid << n) | (n ? lo >> (32 - n) : 0);
 		x->l.middle = (lo << n);
 		x->l.low = 0;
 	} else {

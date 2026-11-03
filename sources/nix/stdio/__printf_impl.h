@@ -807,13 +807,14 @@ int PRINTF_FN(FILE *stream, const TCHAR *format, va_list args) {
 							        for (int i = 0; i < 16; i++)
 							            buffer[pos++] = hexdigits[(frac >> (60 - 4 * i)) & 0xF];
 							    } else {
+							        unsigned long long mant = lu.b.mant & 0x7FFFFFFFFFFFFFFFULL;
 							        if (lu.b.exp == 0) {
 							            exponent = 0;                       /* zero */
 							        } else {
 							            exponent = (short)(lu.b.exp - 16383);
 							            buffer[2] = CX_1;                   /* normal: leading '1' */
+							            mant <<= 1;
 							        }
-							        unsigned long long mant = lu.b.mant & 0x7FFFFFFFFFFFFFFFULL;
 							        for (int i = 0; i < 16; i++)
 							            buffer[pos++] = hexdigits[(mant >> (60 - 4 * i)) & 0xF];
 							    }
@@ -827,8 +828,6 @@ int PRINTF_FN(FILE *stream, const TCHAR *format, va_list args) {
 								}
 								/* Extract 52-bit mantissa for double */
 								unsigned long long mant = ((unsigned long long)d.b.frac0 << 32) | d.b.frac1;
-								/* Drop implicit integer bit */
-								mant &= 0xFFFFFFFFFFFFFULL;
 								/* Print 13 hex digits (52 bits) */
 								for (int i = 0; i < 13; i++) {
 								    int digit = (mant >> (48 - 4*i)) & 0xF;

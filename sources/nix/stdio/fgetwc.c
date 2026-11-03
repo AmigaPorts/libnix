@@ -3,9 +3,12 @@
 #include <wchar.h>
 #include "stdio.h"
 
-wint_t fgetwc(FILE *fp) {
-	wint_t b;
-	if (fread((char *) &b, sizeof(wint_t), 1, fp) > 0)
-		return 1;
-	return -1;
+wint_t fgetwc(FILE *fp)
+{
+    wchar_t wc;
+
+    if (fread(&wc, sizeof(wchar_t), 1, fp) != 1)
+        return WEOF;
+
+    return wc;
 }

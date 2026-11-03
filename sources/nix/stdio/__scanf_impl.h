@@ -64,6 +64,9 @@
 
 # define CX_EOF         WEOF
 
+#define __decimalpoint __wcdecimalpoint
+static wchar_t * __wcdecimalpoint = L".";
+
 #else /* narrow */
 
 # define TCHAR          char
@@ -278,7 +281,7 @@ if (!ignore)
 					}
 				}
 
-if (!ignore)
+				if (!ignore)
 					bp = va_arg(args, TCHAR *);
 				else
 					bp = NULL; /* Just to get the compiler happy */
@@ -324,13 +327,21 @@ if (!ignore)
 			case CX_f:
 			case CX_g: {
 			    LDL lv = { .l = { 0, 0, 0, 0 } };
-			    int frac_digits = 0;   /* fractional digits accumulated into lv */
-			    int min = 0, mine = 0;
+			    /* dec_exp maintains the invariant: true value = lv * 10^dec_exp.
+			     * Updated locally at each absorption decision:
+			     *   integer digit absorbed:              unchanged
+			     *   integer digit rejected (saturated):  +1  (true value 10x larger)
+			     *   fractional digit absorbed:           -1  (one more decimal place in lv)
+			     *   fractional digit rejected:           unchanged (below 96-bit precision)
+			     *   explicit e/E exponent:               += signed exponent (applied once)
+			     */
+			    int dec_exp = 0;
+			    int leading_digit = 0;
+			    int min = 0;
 			    int sign = 1;
 			    int has_digit = 0;
 			    int is_L = (subtype == CX_L);
 			    int special = 0;   /* 0 = finite, 1 = inf, 2 = nan, 3 = +/-0.0 */
-			    int overflow = 0;
 			    int bin_exp = 0;
 			    int has_non_zero = 0;
 
@@ -372,24 +383,22 @@ if (!ignore)
 			    }
 
 			    /* Integer part.  __LDL_mul_10_add returns 0 when the
-			     * accumulator is saturated; we keep consuming digits
-			     * (so the position of the decimal point stays correct)
-			     * but don't count them for scaling, and set overflow if
-			     * any integer digit was skipped. */
+			     * accumulator is saturated; the digit is then not represented
+			     * in lv, so the true value is 10x larger than lv shows:
+			     * dec_exp += 1.  Keep consuming digits so the decimal point
+			     * position and the explicit exponent stay correct. */
 			    while (VAL(ISDIGIT(c))) {
-			        if (!__LDL_mul_10_add(&lv, c - CX_0)) {
-			            /* saturated: consume the rest, overflow */
-			            overflow = 1;
-			            while (VAL(ISDIGIT(c)))
-			                NEXT(c);
-			            break;
-			        }
+			        int v = c - CX_0;
+			        if (!__LDL_mul_10_add(&lv, v))
+			            ++dec_exp;          /* dropped integer digit: value 10x larger */
 			        has_digit = 1;
+			        if (!leading_digit)
+			            leading_digit = v;
 			        NEXT(c);
 			    }
 
 			    /* Hex float path: only when integer part was exactly "0" */
-			    if (!overflow && VAL(c == CX_x) &&
+			    if (has_digit && VAL(c == CX_x) &&
 			        lv.l.high == 0 && lv.l.middle == 0 && lv.l.low == 0) {
 			        int has_hex = 0;
 
@@ -403,7 +412,7 @@ if (!ignore)
 			        while (VAL(ISXDIGIT(c))) {
 			            int v = hexval(c);
 			            if (!__LDL_mul_16_add(&lv, v))
-							bin_exp += 4;
+			                bin_exp += 4;
 			            has_non_zero |= v;
 			            has_hex = 1;
 			            has_digit = 1;
@@ -418,14 +427,7 @@ if (!ignore)
 			         * 96-bit precision and are noise. */
 			        if (VAL(c == __decimalpoint[0])) {
 			            NEXT(c);
-			            if (has_non_zero) {
-			                if (is_L && VAL(ISXDIGIT(c))) {
-			                    int v = hexval(c);
-			                    __LDL_mul_16_add_1st(&lv, v);
-			                    NEXT(c);
-			                    has_digit = 1;
-			                }
-			            } else
+			            if (!has_non_zero)
 			                bin_exp = -1;
 			            while (VAL(ISXDIGIT(c))) {
 			                int v = hexval(c);
@@ -469,6 +471,8 @@ if (!ignore)
 			            }
 			            while (VAL(ISDIGIT(d))) {
 			                pexp = pexp * 10 + (d - CX_0);
+			                if (pexp > 16383)
+			                    pexp = 16383; /* large enough */
 			                has_pexp = 1;
 			                NEXT(d);
 			            }
@@ -485,35 +489,25 @@ if (!ignore)
 			        }
 			        lv.l.exp += bin_exp;
 
+
 			        goto float_done;
 			    }
 
-			    if (overflow) {
-			        /* Clamp to the value that rounds to DBL_MAX, with a sticky bit
-			         * so that any non-zero dropped integer digit pushes us to inf. */
-			    	if (is_L) {
-			    		lv.l.high   = 0xFFFFFFFF;
-			    		lv.l.middle = 0xFFFFFFFF;
-			    		lv.l.low    = 0;
-			    		lv.l.exp    = 16383 + 16383;   /* LDBL_MAX's biased exponent */
-			    	} else {
-			    		lv.l.high   = 0xFFFFFFFF;
-			    		lv.l.middle = 0xFFFFF800;      /* clears guard+sticky for round-to-even */
-			    		lv.l.low    = 0;
-			    		lv.l.exp    = 16383 + 1023;
-			    	}
-			        goto float_done;
-			    }
-
-			    /* Decimal fractional part. frac_digits counts only the
-			     * accumulated digits: skipped ones are below the 96-bit
-			     * precision, so pow10_ld(lv, -frac_digits) scales the
-			     * truncated mantissa correctly. */
+			    /* Decimal fractional part.
+			     * Each absorbed fractional digit does lv = lv*10 + d, which
+			     * appends one decimal place to lv's integer interpretation;
+			     * dec_exp -= 1 restores it.  Zeros count: appending 0 still
+			     * multiplies lv by 10 and shifts the implied decimal point.
+			     * A digit rejected by __LDL_mul_10_add (lv saturated) is not
+			     * represented in lv, so it must NOT touch dec_exp. */
 			    if (VAL(c == __decimalpoint[0])) {
 			        NEXT(c);
 			        while (VAL(ISDIGIT(c))) {
-			            if (__LDL_mul_10_add(&lv, c - CX_0))
-			                ++frac_digits;
+			            int v = c - CX_0;
+			            if (__LDL_mul_10_add(&lv, v))
+			                --dec_exp;      /* absorbed: one more decimal place in lv */
+			            if (!leading_digit)
+			                leading_digit = v;
 			            has_digit = 1;
 			            NEXT(c);
 			        }
@@ -525,28 +519,32 @@ if (!ignore)
 			        break;
 			    }
 
-			    /* bin_exp = floor(log2(integer part)) = number of bits the
-			     * normalized mantissa is left-shifted by __LDL_normalize.
-			     * Zero if the integer part was empty (fraction-only value). */
+			    /* bin_exp must reflect the FINAL lv (integer + fractional
+			     * digits absorbed), not the integer part only. */
 			    bin_exp = __LDL_bin_exp(&lv);
 
 			    __LDL_normalize(&lv);          /* lv.l.exp = 16383 + b */
 			    lv.l.exp += bin_exp;
 
-			    /* Exponent part */
+			    /* Exponent part.  Accumulated separately and applied to
+			     * dec_exp ONCE, so the decimal-point shift already in
+			     * dec_exp is not multiplied by 10 per exponent digit. */
 			    if (VAL(TOLOWER(c) == CX_e)) {
 			        int d;
-			        int ex = 0;
+			        int e_sign = 1;
 			        int has_ex_digit = 0;
+			        long ex = 0;
 
 			        NEXT(d);
 			        if (VAL(d == CX_minus || d == CX_plus)) {
-			            mine = d;
+			            e_sign = (d == CX_minus) ? -1 : 1;
 			            NEXT(d);
 			        }
 
 			        while (VAL(ISDIGIT(d))) {
 			            ex = ex * 10 + (d - CX_0);
+			            if (ex > 16383)
+			                ex = 16383;     /* clamp magnitude only, before sign */
 			            has_ex_digit = 1;
 			            NEXT(d);
 			        }
@@ -557,16 +555,27 @@ if (!ignore)
 			            has_digit = 0;
 			            size = 0;
 			        } else {
-			            if (mine == CX_minus)
-			                ex = -ex;
-			            lv = pow10_ld(lv, ex - frac_digits);
-			            frac_digits = 0;
+			            dec_exp += (int)(e_sign * ex);
 			        }
 			    } else {
 			        PREV(c);
 			    }
-			    if (frac_digits > 0)
-			        lv = pow10_ld(lv, -frac_digits); /* apply fraction scale if not done*/
+
+			    /* Saturate / underflow checks on the total decimal exponent. */
+			    if (is_L) {
+			        if (dec_exp > 4932)
+			            special = 1;
+			        else if (dec_exp < -4932 - 60)
+			            lv.l.exp = lv.l.high = lv.l.middle = lv.l.low = 0;
+			    } else {
+			        if (dec_exp > 308)
+			            special = 1;
+			        else if (dec_exp < -308 - 44)
+			            lv.l.exp = lv.l.high = lv.l.middle = lv.l.low = 0;
+			    }
+
+			    if (!special && dec_exp && lv.l.high)
+			        lv = pow10_ld(lv, dec_exp); /* apply decimal scale */
 
 			float_done:
 			    if (!ignore && has_digit) {
