@@ -381,7 +381,7 @@ int __LDL_mul_10_extract(LDL *x)
 		}
 	} else {
 		/* exp < 0: value is < 1.  The mantissa has up to 4 bits of
-		 * headroom above hi's bit 31 (from the ×10 shift).  Shift
+		 * headroom above hi's bit 31 (from the x10 shift).  Shift
 		 * right by 4 to renormalize, and bump exp_raw by 4. */
 		lo  = (lo >> 4)  | (mid << 28);
 		mid = (mid >> 4) | (hi << 28);
@@ -410,7 +410,7 @@ int __LDL_mul_10_extract(LDL *x)
 		}
 
 		/* Renormalize: if hi's bit 31 is not set, shift left until it is.
-		 * This happens when exp was < 0 (value < 1) and the ×10 did not
+		 * This happens when exp was < 0 (value < 1) and the x10 did not
 		 * bring the value back into [1, 2).  Without this shift the
 		 * mantissa drifts right across iterations and the digit
 		 * extraction returns 0 for what should be significant digits. */

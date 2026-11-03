@@ -115,7 +115,7 @@ int __LDL_mul_16_add(LDL *x, int digit)
 	unsigned long mid = x->l.middle;
 	unsigned long lo = x->l.low;
 
-	/* Saturation: hi's top nibble non-zero means ×16 overflows 96 bits. */
+	/* Saturation: hi's top nibble non-zero means x16 overflows 96 bits. */
 	if (hi >= 0x10000000UL) {
 		if (x->l.low == 0) {
 			/* Preserve the first dropped nibble at low's top for
