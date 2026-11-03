@@ -51,11 +51,11 @@ int __LDL_mul_10_add(LDL *x, int digit)
 	 * 0x19999999_99999999_99999999 with remainder 5, so at that x only
 	 * the digits up to 5 still fit. */
 	if (hi > 0x19999999UL)
-		goto saturate;
+		return 0;
 	if (hi == 0x19999999UL) {
 		unsigned long long midlo = ((unsigned long long) mid << 32) | lo;
 		if (midlo > 0x9999999999999999ULL - (digit > 5))
-			goto saturate;
+			return 0;
 	}
 
 	/* a = 8x  = x << 3 */
@@ -88,13 +88,6 @@ int __LDL_mul_10_add(LDL *x, int digit)
 	x->l.middle = r_mid;
 	x->l.low = r_lo;
 	return 1;
-
-	saturate:
-	/* First dropped digit goes into low's LSB as a sticky flag if
-	 * it's non-zero.  Matches __LDL_mul_16_add's convention. */
-	if (x->l.low == 0 && digit != 0)
-		x->l.low = (unsigned long) digit;
-	return 0;
 }
 
 /* In-place multiply by 16 and add a hex digit:
@@ -266,33 +259,6 @@ long double __ldl_to_long_double(const LDL *lv)
 	{
 		unsigned long long m64 = ((unsigned long long) hi << 32) | mid;
 
-		if ((long) e + 16383 < 0) {
-			/* Denormal.  On the 68881 the exponent field 0 has the same
-			 * scale as 1, 2^-16383 for the integer bit: with that bit set
-			 * it is LDBL_MIN, and the denormals reach down to 2^-16446.
-			 * Round once, from the whole mantissa; rounding up to the
-			 * integer bit gives LDBL_MIN. */
-			int shift = -e - 16383;
-			unsigned long long m;
-
-			if (shift > 64) {
-				m = 0;
-			} else if (shift == 64) {
-				/* the top bit is the half; ties go to the even 0 */
-				m = (m64 << 1) != 0 || lo != 0;
-			} else {
-				unsigned long long half = 1ULL << (shift - 1);
-				unsigned long long lost = m64 & ((half << 1) - 1);
-
-				m = m64 >> shift;
-				if ((lost & half) && ((lost & (half - 1)) || lo != 0 || (m & 1)))
-					m++;
-			}
-			u.b.exp = 0;
-			u.b.mant = m;
-			return u.ld;
-		}
-
 		/* Round to nearest-even at 64 bits. */
 		{
 			unsigned long guard = (lo >> 31) & 1;
@@ -313,6 +279,41 @@ long double __ldl_to_long_double(const LDL *lv)
 			if (E >= 0x7FFF) {
 				u.b.exp = 0x7FFF;
 				u.b.mant = 0x8000000000000000ULL;
+				return u.ld;
+			}
+
+			if (E <= 0) {
+				int shift = 1 - (int) E;
+				unsigned long long m = m64;
+
+				if (shift >= 64) {
+					/* half = 2^63.  m64 < 2^64.  Round up only if strictly
+					 * greater than half; exact half ties to even -> 0
+					 * (result 0 is even).
+					 */
+					if (shift == 64 && (m >> 63) &&
+							(m & 0x7FFFFFFFFFFFFFFFULL))
+						m = 1;
+					else
+						m = 0;
+				} else {
+					unsigned long long lost = m & ((1ULL << shift) - 1);
+					unsigned long long half = 1ULL << (shift - 1);
+
+					m >>= shift;
+					if ((lost & half) && ((lost & (half - 1)) || (m & 1)))
+						m++;
+				}
+
+				if (m & 0x8000000000000000ULL) {
+					m &= 0x7FFFFFFFFFFFFFFFULL;
+					E = 1;
+				} else {
+					E = 0;
+				}
+
+				u.b.exp = (unsigned) E;
+				u.b.mant = m;
 				return u.ld;
 			}
 
