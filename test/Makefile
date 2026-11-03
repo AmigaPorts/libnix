@@ -45,6 +45,7 @@ TARGET_TESTS = \
 	printf_s \
 	romtag \
 	scanf_int \
+	scanf_round \
 	sscanf \
 	stack \
 	strto \
@@ -155,6 +156,11 @@ vfwprintf_test_LIBS = -lm
 sscanf_SRCS = $(addprefix ../sources/nix/stdio/,sscanf.c vsscanf.c vfscanf.c __srget.c)
 
 scanf_int_SRCS = $(sscanf_SRCS) $(addprefix ../sources/nix/stdio/,swscanf.c vswscanf.c vfwscanf.c fgetwc.c ungetwc.c)
+
+scanf_round_SRCS = $(sscanf_SRCS) ../sources/math/stdlib/strtod.c \
+	../sources/math/stdio/ami_scanf_math.c ../sources/math/stdio/ami_printf_math.c
+scanf_round_LIBFLAGS = -DFULL_SPECIFIERS
+scanf_round_LIBS = -lm
 
 stack_SRCS = ../sources/misc/swapstack.c
 

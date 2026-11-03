@@ -596,7 +596,11 @@ if (!ignore)
 			                    ld = -ld;
 			                *va_arg(args, long double *) = ld;
 			            } else {
-			                double d = __ldl_to_double(&lv);
+			                double d;
+			                /* a float is rounded once, not through double */
+			                if (subtype != CX_l)
+			                    __ldl_round_float(&lv);
+			                d = __ldl_to_double(&lv);
 			                if (sign < 0)
 			                    d = -d;
 			                STORE_DOUBLE(d);
