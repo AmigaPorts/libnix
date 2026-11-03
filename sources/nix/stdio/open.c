@@ -21,7 +21,8 @@ int open(const char *path, int flags, ...) {
 	StdFileDes *sfd;
 
 	if((path=__amigapath(path))==NULL)
-	return -1;
+		return -1;
+
 	if ((sfd = __allocfd())) {
 		long mode;
 
