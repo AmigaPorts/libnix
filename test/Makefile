@@ -32,6 +32,7 @@ TARGET_TESTS = \
 	c99math \
 	fcmp \
 	fma \
+	fnmatch \
 	fread \
 	frexpl \
 	fstat \
@@ -96,6 +97,9 @@ fma_SRCS = ../sources/math/common/s_fma.c ../sources/math/common/sf_fma.c
 fma_LIBFLAGS = -I../sources/math/mathfp
 fma_CFLAGS = -fno-builtin
 fma_LIBS = -lm
+
+fnmatch_SRCS = ../sources/nix/extra/fnmatch.c
+fnmatch_CFLAGS = -D_GNU_SOURCE
 
 fread_SRCS = ../sources/nix/stdio/fread.c ../sources/nix/stdio/__srget.c
 
