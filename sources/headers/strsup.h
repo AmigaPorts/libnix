@@ -87,16 +87,16 @@ __MY_INLINE__ __stdargs char *stpcpy(char *dst,const char *src)
 __MY_INLINE__ __stdargs size_t strlcpy(char *dst, const char *src, size_t dsize)
 {
 	const char * p = src;
-	if (dsize) {
-	  while (dsize--) {
-			if ((*dst++ = *p++) == 0)
-				break;
-	  }
-	  dst[-1] = 0;
-	}
+	size_t len;
 	while (*p)
 		++p;
-	return p - src;
+	len = p - src;
+	if (dsize) {
+		while (--dsize && *src)
+			*dst++ = *src++;
+		*dst = 0;
+	}
+	return len;
 }
 
 __MY_INLINE__ __stdargs void *mempcpy(void *to, const void *from, size_t sz) {

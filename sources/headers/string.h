@@ -55,6 +55,8 @@ __stdargs char *strndup(const char *, size_t);
 __stdargs void strmode(int, char *);
 __stdargs int strncasecmp(const char *, const char *, size_t);
 __stdargs char *strsep(char **, const char *);
+__stdargs size_t strlcat(char *, const char *, size_t);
+__stdargs void *memmem(const void *, size_t, const void *, size_t);
 /* for swab(); the rest of sys/types.h stays out of string.h */
 #ifndef _SSIZE_T_DECLARED
 typedef _ssize_t ssize_t;

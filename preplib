@@ -37,6 +37,12 @@ find nix -name "*.o" \
   -not -name swprintf.o \
   -not -name vfwprintf.o \
   -not -name vswprintf.o \
+  -not -name fwscanf.o \
+  -not -name swscanf.o \
+  -not -name vfwscanf.o \
+  -not -name vswscanf.o \
+  -not -name vwscanf.o \
+  -not -name wscanf.o \
   -not -name tmpfile.o  \
   > ofiles.txt
 find nix20   -name "*.o" \
