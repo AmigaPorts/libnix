@@ -150,21 +150,19 @@ void __LDL_normalize(LDL *x)
 			x->l.low    = (lo  << n);
 		}
 	} else if (mid != 0) {
+		/* The words move up even when n is 0: a top bit already in b31
+		 * of mid still has to land in b31 of high. */
 		n = __builtin_clz(mid);     /* 0..31 */
 		b = 63 - n;
-		if (n > 0) {
-			x->l.high   = (mid << n) | (lo >> (32 - n));
-			x->l.middle = (lo  << n);
-			x->l.low    = 0;
-		}
+		x->l.high   = n ? (mid << n) | (lo >> (32 - n)) : mid;
+		x->l.middle = (lo  << n);
+		x->l.low    = 0;
 	} else {
 		n = __builtin_clz(lo);      /* 0..31 */
 		b = 31 - n;
-		if (n > 0) {
-			x->l.high   = (lo << n);
-			x->l.middle = 0;
-			x->l.low    = 0;
-		}
+		x->l.high   = (lo << n);
+		x->l.middle = 0;
+		x->l.low    = 0;
 	}
 
 	x->l.exp = (unsigned short)(16383 + b);
