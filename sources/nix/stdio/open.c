@@ -23,10 +23,9 @@ extern void __seterrno(void);
 int open(const char *path, int flags, ...) {
 	StdFileDes *sfd;
 
-#ifdef IXPATHS
 	if((path=__amigapath(path))==NULL)
-	return -1;
-#endif
+		return -1;
+
 	if (path && (sfd = __allocfd())) {
 		long mode;
 

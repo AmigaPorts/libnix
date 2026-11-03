@@ -64,10 +64,9 @@ struct history
 static BPTR volume_of(const char *path)
 {
 	const char *apath = path;
-#ifdef IXPATHS
 	if((apath=__amigapath(path))==NULL)
-	return 0;
-#endif
+		return 0;
+
 	BPTR lock, volume = 0;
 
 	if (apath && (lock = Lock((CONST_STRPTR)apath, SHARED_LOCK)) != 0) {

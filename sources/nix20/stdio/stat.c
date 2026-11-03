@@ -29,10 +29,9 @@ int stat(const char *name,struct stat *buf)
   BPTR lock;
   int ret=-1;
 
-#ifdef IXPATHS
 	if((name=__amigapath(name))==NULL)
 		return -1;
-#endif
+
   /* avoid possible dos-requesters ;-( */
 
   oldwin=*wptr; *wptr=(APTR)ret;
