@@ -14,6 +14,7 @@
  */
 
 #include "fdlibm.h"
+#include "math_errno.h"
 
 #ifdef __v810__
 #define const
@@ -38,7 +39,7 @@ Q4  =   4.0082177293e-06, /* 0x36867e54 */
 Q5  =  -2.0109921195e-07; /* 0xb457edbb */
 
 #ifdef __STDC__
-	float expm1f(float x)
+	__MATH_UNCHECKED(float, expm1f)(float x)
 #else
 	float expm1f(x)
 	float x;
@@ -129,6 +130,17 @@ Q5  =  -2.0109921195e-07; /* 0xb457edbb */
 	}
 	return y;
 }
+
+#ifdef __MATH_SETS_ERRNO
+
+float expm1f(float x)
+{
+  if (__math_power_float(x) >= 6 &&
+      (__math_special_float(x) || x > 88.72283f))
+    return __math_expm1_specialf(x);
+  return __expm1f_unchecked(x);
+}
+#endif
 
 #ifdef _DOUBLE_IS_32BITS
 

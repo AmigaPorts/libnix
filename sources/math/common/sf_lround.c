@@ -10,9 +10,10 @@
  */
 
 #include "fdlibm.h"
+#include "math_errno.h"
 
 #ifdef __STDC__
-	long int lroundf(float x)
+	__MATH_UNCHECKED(long int, lroundf)(float x)
 #else
 	long int lroundf(x)
 	float x;
@@ -46,6 +47,15 @@
 
   return sign * result;
 }
+
+#ifdef __MATH_SETS_ERRNO
+
+long int lroundf(float x)
+{
+  __MATH_ROUND_ERRNO(float, f, x, roundf, __MATH_LONG_BITS);
+  return __lroundf_unchecked(x);
+}
+#endif
 
 #ifdef _DOUBLE_IS_32BITS
 

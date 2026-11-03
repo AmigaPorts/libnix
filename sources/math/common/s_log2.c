@@ -66,6 +66,7 @@ C99, POSIX, System V Interface Definition (Issue 6).
  */
 
 #include "fdlibm.h"
+#include "math_errno.h"
 #include <errno.h>
 #include <math.h>
 #undef log2
@@ -79,6 +80,10 @@ C99, POSIX, System V Interface Definition (Issue 6).
 	double x;
 #endif
 {
+#ifdef __MATH_SETS_ERRNO
+  if (__math_not_positive_double(x))
+    return __math_log_special(x);
+#endif
   return (log(x) / M_LN2);
 }
 

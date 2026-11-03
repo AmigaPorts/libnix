@@ -62,11 +62,12 @@ C99, POSIX
 
 #include <limits.h>
 #include "fdlibm.h"
+#include "math_errno.h"
 
 #ifndef _DOUBLE_IS_32BITS
 
 #ifdef __STDC__
-	int ilogb(double x)
+	__MATH_UNCHECKED(int, ilogb)(double x)
 #else
 	int ilogb(x)
 	double x;
@@ -93,5 +94,15 @@ C99, POSIX
 	#endif
 	else return INT_MAX;	/* infinite (or, possibly, NAN) */
 }
+
+#ifdef __MATH_SETS_ERRNO
+
+int ilogb(double x)
+{
+  if (__math_special_double(x) || __math_zero_double(x))
+    errno = EDOM;
+  return __ilogb_unchecked(x);
+}
+#endif
 
 #endif /* _DOUBLE_IS_32BITS */

@@ -39,11 +39,14 @@ TARGET_TESTS = \
 	ftruncate \
 	ftw \
 	inet \
+	math_errno \
 	mathfp \
 	printf \
 	printf_ld \
 	printf_s \
+	rint \
 	romtag \
+	round \
 	scanf_int \
 	scanf_round \
 	sscanf \
@@ -121,6 +124,11 @@ ftw_CFLAGS = -I../sources/headers
 inet_SRCS = ../sources/socket/arpa/inet_aton.c ../sources/socket/arpa/inet_network.c
 inet_LIBFLAGS = -Wall -Werror=char-subscripts
 
+# Against the installed libraries, in both forms: test/math_errno.c, -m68000 and
+# -m68020 -m68881.
+math_errno_CFLAGS = -fno-builtin
+math_errno_LIBS = -lm
+
 mathfp_SRCS = $(addprefix ../sources/math/mathfp/,fmod.c fmodf.c frexp.c ldexp.c fabs.c fabsf.c)
 mathfp_CFLAGS = -fno-builtin
 mathfp_LIBS = -lm
@@ -138,9 +146,17 @@ printf_s_SRCS = $(printf_ld_SRCS) $(addprefix ../sources/nix/stdio/,__vfwprintf_
 printf_s_LIBFLAGS = -DFULL_SPECIFIERS
 printf_s_LIBS = -lm
 
+rint_SRCS = $(addprefix ../sources/math/common/,s_llrint.c s_lrint.c sf_llrint.c sf_lrint.c)
+rint_CFLAGS = -fno-builtin
+rint_LIBS = -lm
+
 # The startup code of -ramiga-lib, linked into a program.
 romtag_SRCS = ../sources/startup/libinit.c
 romtag_CFLAGS = -I../sources/headers
+
+round_SRCS = ../sources/math/common/s_lround.c ../sources/math/common/s_llround.c
+round_CFLAGS = -fno-builtin
+round_LIBS = -lm
 
 # bebbo's self-tests of the narrow and wide printf engines.
 vfprintf_test_SRCS = ../sources/nix/stdio/__vfprintf_total_size.c ../sources/math/stdio/ami_printf_math.c
