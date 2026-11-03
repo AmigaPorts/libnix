@@ -796,9 +796,11 @@ int PRINTF_FN(FILE *stream, const TCHAR *format, va_list args) {
 							const TCHAR *hexdigits = (type == CX_A) ? HEX_UPPER : HEX_LOWER;
 							if (is_ld) {
 							    if (lu.b.exp == 0 && lu.b.mant != 0) {
-							        /* subnormal long double */
+							        /* Exponent field 0.  On the 68881 it has the scale of 1,
+							         * 2^-16383 for the integer bit, which may be set: the
+							         * mantissa is the fraction of 0x0.<mant>p-16382 as it is. */
 							        exponent = -16382;
-							        unsigned long long frac = lu.b.mant << 1;
+							        unsigned long long frac = lu.b.mant;
 							        for (int i = 0; i < 16; i++)
 							            buffer[pos++] = hexdigits[(frac >> (60 - 4 * i)) & 0xF];
 							    } else {
