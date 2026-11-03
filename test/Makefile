@@ -51,6 +51,7 @@ TARGET_TESTS = \
 	sysinfo \
 	vfprintf_test \
 	vfwprintf_test \
+	wmemset \
 	wprintf
 
 # Need what the simulators lack: PIPE: and a shell (popen), Exec tasks
@@ -164,6 +165,8 @@ strto_SRCS = $(addprefix ../sources/nix/stdlib/,strtol.c strtoul.c strtoll.c str
 strto_CFLAGS = -fno-builtin
 
 sysinfo_SRCS = ../sources/nix20/misc/uname.c ../sources/nix/extra/getpid.c ../sources/nix20/stdlib/kill.c ../sources/nix/extra/sysconf.c
+
+wmemset_SRCS = ../sources/nix/string/wmemset.c
 
 wprintf_SRCS = $(addprefix ../sources/nix/stdio/,__vfwprintf_total_size.c vswprintf.c vfwprintf.c wprintf.c) ../sources/math/stdio/ami_printf_math.c
 wprintf_LIBFLAGS = -DFULL_SPECIFIERS
