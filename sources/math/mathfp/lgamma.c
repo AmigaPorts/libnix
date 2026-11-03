@@ -168,6 +168,7 @@ Neither <<gamma>> nor <<gammaf>> is ANSI C.  */
  */
 
 #include "fdlibm.h"
+#include "math_errno.h"
 
 #ifdef __STDC__
 static const double 
@@ -314,8 +315,9 @@ static double zero=  0.00000000000000000000e+00;
     /* purge off +-inf, NaN, +-0, and negative arguments */
 	*signgamp = 1;
 	ix = hx&0x7fffffff;
-	if(ix>=0x7ff00000) return x*x;
-	if((ix|lx)==0) return one/zero;
+	if(ix>=0x7ff00000)
+	    return __MATH_SOFT(x*x, __math_nan_double(x) ? x : __builtin_huge_val());
+	if((ix|lx)==0) return __MATH_SOFT(one/zero, __math_overflow(1.0));
 	if(ix<0x3b900000) {	/* |x|<2**-70, return -log(|x|) */
 	    if(hx<0) {
 	        *signgamp = -1;
@@ -324,9 +326,9 @@ static double zero=  0.00000000000000000000e+00;
 	}
 	if(hx<0) {
 	    if(ix>=0x43300000) 	/* |x|>=2**52, must be -integer */
-		return one/zero;
+		return __MATH_SOFT(one/zero, __math_overflow(1.0));
 	    t = sin_pi(x);
-	    if(t==zero) return one/zero; /* -integer */
+	    if(t==zero) return __MATH_SOFT(one/zero, __math_overflow(1.0)); /* -integer */
 	    nadj = log(pi/fabs(t*x));
 	    if(t<zero) *signgamp = -1;
 	    x = -x;
@@ -391,9 +393,13 @@ static double zero=  0.00000000000000000000e+00;
 	    y = z*z;
 	    w = w0+z*(w1+y*(w2+y*(w3+y*(w4+y*(w5+y*w6)))));
 	    r = (x-half)*(t-one)+w;
-	} else 
+	} else {
     /* 2**58 <= x <= inf */
+#ifdef __MATH_SETS_ERRNO
+	    if(x>2.5599833278516383e+305) return __math_overflow(1.0);
+#endif
 	    r =  x*(log(x)-one);
+	}
 	if(hx<0) r = nadj - r;
 	return r;
 }

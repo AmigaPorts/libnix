@@ -22,6 +22,7 @@
  */
 
 #include "fdlibm.h"
+#include "math_errno.h"
 
 #ifndef _DOUBLE_IS_32BITS
 
@@ -40,10 +41,10 @@ TWO52[2]={
  -4.50359962737049600000e+15, /* 0xC3300000, 0x00000000 */
 };
 
-long long int
 #ifdef __STDC__
-	llrint(double x)
+	__MATH_UNCHECKED(long long int, llrint)(double x)
 #else
+long long int
 	llrint(x)
 	double x;
 #endif
@@ -66,26 +67,17 @@ long long int
   if(j0 < 20)
     {
       /* j0 in [-1023,19] */
-      if(j0 < -1)
-        return 0;
-      else
-        {
-          /* j0 in [0,19] */
-	  /* shift amt in [0,19] */
-          w = TWO52[sx] + x;
-          t = w - TWO52[sx];
-          GET_HIGH_WORD(i0, t);
-          /* Detect the all-zeros representation of plus and
-             minus zero, which fails the calculation below. */
-          if ((i0 & ~((__int32_t)1 << 31)) == 0)
-              return 0;
-          /* After round:  j0 in [0,20] */
-          j0 = ((i0 & 0x7ff00000) >> 20) - 1023;
-          i0 &= 0x000fffff;
-          i0 |= 0x00100000;
-	  /* shift amt in [20,0] */
-          result = i0 >> (20 - j0);
-        }
+      w = TWO52[sx] + x;
+      t = w - TWO52[sx];
+      GET_HIGH_WORD(i0, t);
+      /* Detect the all-zeros representation of plus and
+         minus zero, which fails the calculation below. */
+      if ((i0 & ~((__int32_t)1 << 31)) == 0)
+          return 0;
+      j0 = ((i0 & 0x7ff00000) >> 20) - 1023;
+      i0 &= 0x000fffff;
+      i0 |= 0x00100000;
+      result = (j0 < 0 ? 0 : i0 >> (20 - j0));
     }
   else if (j0 < (int)(8 * sizeof (long long int)) - 1)
     {
@@ -93,9 +85,9 @@ long long int
       if (j0 >= 52)
 	/* 64bit return: j0 in [52,62] */
 	/* 64bit return: left shift amt in [32,42] */
-        result = ((long long int) ((i0 & 0x000fffff) | 0x0010000) << (j0 - 20)) | 
+        result = ((long long int) ((i0 & 0x000fffff) | 0x00100000) << (j0 - 20)) |
 		/* 64bit return: right shift amt in [0,10] */
-                   (i1 << (j0 - 52));
+                   ((long long int) i1 << (j0 - 52));
       else
         {
 	  /* 64bit return: j0 in [20,51] */
@@ -120,5 +112,14 @@ long long int
   
   return sx ? -result : result;
 }
+
+#ifdef __MATH_SETS_ERRNO
+
+long long int llrint(double x)
+{
+  __MATH_ROUND_ERRNO(double, , x, rint, __MATH_LONG_LONG_BITS);
+  return __llrint_unchecked(x);
+}
+#endif
 
 #endif /* _DOUBLE_IS_32BITS */

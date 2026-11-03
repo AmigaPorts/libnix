@@ -7,8 +7,13 @@ FPU_FUNCTION(float, atanf, "fatan")
 #else
 
 #include <proto/mathieeesingtrans.h>
+#include "math_errno.h"
 
 float atanf(float x)
-{ return IEEESPAtan(x); }
+{
+  if (__math_nan_float(x))
+    return x;
+  return IEEESPAtan(x);
+}
 
 #endif

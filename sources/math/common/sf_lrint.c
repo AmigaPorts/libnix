@@ -22,6 +22,7 @@
  */
 
 #include "fdlibm.h"
+#include "math_errno.h"
 
 #ifdef __STDC__
 static const float
@@ -38,7 +39,7 @@ TWO23[2]={
 };
 
 #ifdef __STDC__
-	long int lrintf(float x)
+	__MATH_UNCHECKED(long int, lrintf)(float x)
 #else
 	long int lrintf(x)
 	float x;
@@ -60,9 +61,7 @@ TWO23[2]={
   
   if (j0 < (int)(sizeof (long int) * 8) - 1)
     {
-      if (j0 < -1)
-        return 0;
-      else if (j0 >= 23)
+      if (j0 >= 23)
         result = (long int) ((i0 & 0x7fffff) | 0x800000) << (j0 - 23);
       else
         {
@@ -76,7 +75,7 @@ TWO23[2]={
           j0 = ((i0 >> 23) & 0xff) - 0x7f;
           i0 &= 0x7fffff;
           i0 |= 0x800000;
-          result = i0 >> (23 - j0);
+          result = (j0 < 0 ? 0 : i0 >> (23 - j0));
         }
     }
   else
@@ -85,6 +84,15 @@ TWO23[2]={
     }
   return sx ? -result : result;
 }
+
+#ifdef __MATH_SETS_ERRNO
+
+long int lrintf(float x)
+{
+  __MATH_ROUND_ERRNO(float, f, x, rintf, __MATH_LONG_BITS);
+  return __lrintf_unchecked(x);
+}
+#endif
 
 #ifdef _DOUBLE_IS_32BITS
 

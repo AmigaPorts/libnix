@@ -14,6 +14,7 @@
  */
 
 #include "fdlibm.h"
+#include "math_errno.h"
 
 #ifdef __STDC__
 static const float zero = 0.0;
@@ -23,7 +24,7 @@ static float zero = 0.0;
 
 
 #ifdef __STDC__
-	float remainderf(float x, float p)
+	__MATH_UNCHECKED(float, remainderf)(float x, float p)
 #else
 	float remainderf(x,p)
 	float x,p;
@@ -66,3 +67,14 @@ static float zero = 0.0;
 	SET_FLOAT_WORD(x,hx^sx);
 	return x;
 }
+
+#ifdef __MATH_SETS_ERRNO
+
+float remainderf(float x, float p)
+{
+  if (__math_special_float(x) || __math_special_float(p) ||
+      __math_zero_float(p))
+    return __math_fmod_specialf(x, p);
+  return __remainderf_unchecked(x, p);
+}
+#endif

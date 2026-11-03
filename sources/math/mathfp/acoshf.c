@@ -15,6 +15,7 @@
  */
 
 #include "fdlibm.h"
+#include "math_errno.h"
 
 #ifdef __STDC__
 static const float 
@@ -25,7 +26,7 @@ one	= 1.0,
 ln2	= 6.9314718246e-01;  /* 0x3f317218 */
 
 #ifdef __STDC__
-	float acoshf(float x)
+	__MATH_UNCHECKED(float, acoshf)(float x)
 #else
 	float acoshf(x)
 	float x;
@@ -51,3 +52,13 @@ ln2	= 6.9314718246e-01;  /* 0x3f317218 */
 	    return log1pf(t+sqrtf((float)2.0*t+t*t));
 	}
 }
+
+#ifdef __MATH_SETS_ERRNO
+
+float acoshf(float x)
+{
+  if (__math_special_float(x) || (long)__math_high(x) < 0x3f800000L)
+    return __math_acosh_specialf(x);
+  return __acoshf_unchecked(x);
+}
+#endif

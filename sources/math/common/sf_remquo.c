@@ -14,6 +14,7 @@
 
 #include <math.h>
 #include "fdlibm.h"
+#include "math_errno.h"
 
 /* For quotient, return either all 31 bits that can from calculation (using
  * int32_t), or as many as can fit into an int that is smaller than 32 bits.  */
@@ -33,8 +34,7 @@ static const float Zero[] = {0.0, -0.0,};
  * method.  In practice, this is far more bits than are needed to use
  * remquo in reduction algorithms.
  */
-float
-remquof(float x, float y, int *quo)
+__MATH_UNCHECKED(float, remquof)(float x, float y, int *quo)
 {
 	__int32_t n,hx,hy,hz,ix,iy,sx,i;
 	__uint32_t q,sxy;
@@ -128,3 +128,16 @@ fixup:
 	*quo = (sxy ? -q : q);
 	return x;
 }
+
+#ifdef __MATH_SETS_ERRNO
+
+float remquof(float x, float y, int *quo)
+{
+  if (__math_special_float(x) || __math_special_float(y) ||
+      __math_zero_float(y)) {
+    *quo = 0;
+    return __math_fmod_specialf(x, y);
+  }
+  return __remquof_unchecked(x, y, quo);
+}
+#endif

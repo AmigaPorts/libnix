@@ -8,8 +8,13 @@ float ceilf(float x)
 #else
 
 #include <proto/mathieeesingbas.h>
+#include "math_errno.h"
 
 float ceilf(float x)
-{ return IEEESPCeil(x); }
+{
+  if (__math_special_float(x) || __math_zero_float(x))
+    return x;
+  return IEEESPCeil(x);
+}
 
 #endif

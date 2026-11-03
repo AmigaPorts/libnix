@@ -72,6 +72,7 @@ frexp, ilogb
  */
 
 #include "fdlibm.h"
+#include "math_errno.h"
 
 #ifndef _DOUBLE_IS_32BITS
 
@@ -92,7 +93,7 @@ double x;
 		double  xx;
 		/* arg==0:  return -inf and raise divide-by-zero exception */
 		INSERT_WORDS(xx,hx,lx);	/* +0.0 */
-		return -1./xx;	/* logb(0) = -inf */
+		return __MATH_SOFT(-1./xx, __math_log_special(xx));	/* logb(0) = -inf */
 		}
 	    else			/* subnormal x */
 		if(hx==0) {

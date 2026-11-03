@@ -7,8 +7,13 @@ FPU_FUNCTION(double, cos, "fcos")
 #else
 
 #include <proto/mathieeedoubtrans.h>
+#include "math_errno.h"
 
 double cos(double x)
-{ return IEEEDPCos(x); }
+{
+  if (__math_special_double(x))
+    return __math_domain(x);
+  return IEEEDPCos(x);
+}
 
 #endif

@@ -11,11 +11,11 @@
  */
 
 #include "fdlibm.h"
+#include "math_errno.h"
 
 #ifndef _DOUBLE_IS_32BITS
 
-long long int
-llround(double x)
+__MATH_UNCHECKED(long long int, llround)(double x)
 {
   __int32_t sign, exponent_less_1023;
   /* Most significant word, least significant word. */
@@ -59,7 +59,7 @@ llround(double x)
 	/* 64bit longlong: shift amt in [32,42] */
         result = ((long long int) msw << (exponent_less_1023 - 20))
 		    /* 64bit longlong: shift amt in [0,10] */
-                    | (lsw << (exponent_less_1023 - 52));
+                    | ((long long int) lsw << (exponent_less_1023 - 52));
       else
         {
 	  /* 64bit longlong: exponent_less_1023 in [20,51] */
@@ -80,5 +80,14 @@ llround(double x)
 
   return sign * result;
 }
+
+#ifdef __MATH_SETS_ERRNO
+
+long long int llround(double x)
+{
+  __MATH_ROUND_ERRNO(double, , x, round, __MATH_LONG_LONG_BITS);
+  return __llround_unchecked(x);
+}
+#endif
 
 #endif /* _DOUBLE_IS_32BITS */

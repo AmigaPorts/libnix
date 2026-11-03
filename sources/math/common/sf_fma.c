@@ -29,9 +29,10 @@
  */
 
 #include <math.h>
+#include "math_errno.h"
 #include <stdint.h>
 
-float fmaf(float x, float y, float z)
+__MATH_UNCHECKED(float, fmaf)(float x, float y, float z)
 {
 	double xy = (double)x * y;
 	volatile union {double r; uint64_t i;} u = {xy + z};
@@ -62,3 +63,21 @@ float fmaf(float x, float y, float z)
 	f = u.r;
 	return f;
 }
+
+#ifdef __MATH_SETS_ERRNO
+float fmaf(float x, float y, float z)
+{
+  float result;
+
+  if (__math_special_float(x) || __math_special_float(y) ||
+      __math_special_float(z))
+    return (float)__math_fma_special(x, y, z);
+  result = __fmaf_unchecked(x, y, z);
+  /* The product is exact in double, so its sum with z is 0 only when the two
+     cancel: a 0 from anything else is an underflow.  */
+  if (__math_special_float(result) ||
+      (result == 0 && (double)x * y + z != 0))
+    errno = ERANGE;
+  return result;
+}
+#endif

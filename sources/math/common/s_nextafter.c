@@ -49,6 +49,7 @@ PORTABILITY
  */
 
 #include "fdlibm.h"
+#include "math_errno.h"
 
 #ifndef _DOUBLE_IS_32BITS
 
@@ -69,7 +70,7 @@ PORTABILITY
 
 	if(((ix>=0x7ff00000)&&((ix-0x7ff00000)|lx)!=0) ||   /* x is nan */ 
 	   ((iy>=0x7ff00000)&&((iy-0x7ff00000)|ly)!=0))     /* y is nan */ 
-	   return x+y;				
+	   return __MATH_SOFT(x+y, __math_fmod_special(x,y));				
 	if(x==y) return y;		/* x=y, return y: C99 7.12.11.3 */
 	if((ix|lx)==0) {			/* x == 0 */
 	    INSERT_WORDS(x,hy&0x80000000,1);	/* return +-minsubnormal */
@@ -94,7 +95,7 @@ PORTABILITY
 	    }
 	}
 	hy = hx&0x7ff00000;
-	if(hy>=0x7ff00000) return x+x;	/* overflow  */
+	if(hy>=0x7ff00000) return __MATH_SOFT(x+x, __math_overflow(x));	/* overflow  */
 	if(hy<0x00100000) {		/* underflow */
 	    y = x*x;
 	    if(y!=x) {		/* raise underflow flag */
