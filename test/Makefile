@@ -130,7 +130,7 @@ printf_SRCS = ../sources/nix/stdio/__vfprintf_total_size.c ../sources/nix/stdio/
 printf_LIBFLAGS = -DFULL_SPECIFIERS
 printf_LIBS = -lm
 
-rint_SRCS = ../sources/math/common/s_llrint.c
+rint_SRCS = $(addprefix ../sources/math/common/,s_llrint.c s_lrint.c sf_llrint.c sf_lrint.c)
 rint_CFLAGS = -fno-builtin
 rint_LIBS = -lm
 
