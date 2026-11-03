@@ -40,6 +40,7 @@ TARGET_TESTS = \
 	inet \
 	math_errno \
 	mathfp \
+	multibyte \
 	printf \
 	rint \
 	romtag \
@@ -152,6 +153,8 @@ vfwprintf_test_SRCS = $(addprefix ../sources/nix/stdio/,__vfwprintf_total_size.c
 vfwprintf_test_LIBFLAGS = -DFULL_SPECIFIERS
 vfwprintf_test_CFLAGS = -I../sources/headers -DFULL_SPECIFIERS
 vfwprintf_test_LIBS = -lm
+
+multibyte_SRCS = $(addprefix ../sources/nix/stdio/,mbtowc.c mblen.c mbstowcs.c wctomb.c wcstombs.c)
 
 sscanf_SRCS = $(addprefix ../sources/nix/stdio/,sscanf.c vsscanf.c vfscanf.c __srget.c)
 
