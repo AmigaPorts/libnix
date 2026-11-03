@@ -154,6 +154,12 @@ extern unsigned __ulldivus(unsigned long long *llp, unsigned short n);
 } while(0)
 #define TOUT(c) *outp++ = (c)
 #define EOUT(c) *oute++ = (c)
+/* character i of a string of the other width, as a TCHAR */
+#if PRINTF_WIDE
+#define OTHER_CHAR(p, i) ((TCHAR)(unsigned char)((const char *)(p))[i])
+#else
+#define OTHER_CHAR(p, i) ((TCHAR)(unsigned char)((const wchar_t *)(p))[i])
+#endif
 
 /* ======================================================================
  * SECTION: scratch-buffer sizing
@@ -269,16 +275,12 @@ int PRINTF_FN(FILE *stream, const TCHAR *format, va_list args) {
 #ifdef FULL_SPECIFIERS
 			TCHAR outbuffer[FLOAT_OUTBUF_MIN]; /* Float-path buffered output. */
 			TCHAR *outp = outbuffer;
-#elif PRINTF_WIDE
-			/* The wide %s transcode needs scratch space even in the
-			 * plain build.  Keep it independent of the float path. */
-			TCHAR outbuffer[64];
-#else
-			/* Unused on the narrow plain build; size 1 keeps the
-			 * declaration valid and avoids unused-variable noise. */
-			TCHAR outbuffer[1];
 #endif
 			TCHAR *buffer2 = buffer;
+			/* buffer2 holds the other character width (%ls in the
+			 * narrow printf, %s in the wide one), converted as it is
+			 * printed */
+			char other_width = 0;
 			unsigned long size1 = 0, size2 = 0;
 			const TCHAR *ptr = format + 1;
 			unsigned short i, pad;
@@ -493,22 +495,18 @@ int PRINTF_FN(FILE *stream, const TCHAR *format, va_list args) {
 						buffer2 = (TCHAR *) ws;
 					}
 				} else {
-					/* Non-standard but common: %s in wide printf as char*.
-					 * Transcode into outbuffer. */
+					/* Non-standard but common: %s in wide printf as char*,
+					 * widened as it is printed. */
 					const char *s = va_arg(args, const char *);
 					if (s == NULL) {
 						buffer2 = STR_NULL;
 						size2 = 6;
 					} else {
-						size_t max_len = (sizeof(outbuffer) / sizeof(TCHAR)) - 1;
-						if (preci < max_len) max_len = preci;
 						size2 = 0;
-						while (s[size2] && size2 < max_len) {
-							outbuffer[size2] = (TCHAR)(unsigned char)s[size2];
+						while (size2 < preci && s[size2])
 							size2++;
-						}
-						outbuffer[size2] = PRINTF_L('\0');
-						buffer2 = outbuffer;
+						buffer2 = (TCHAR *) s;
+						other_width = 1;
 					}
 				}
 #else
@@ -522,15 +520,12 @@ int PRINTF_FN(FILE *stream, const TCHAR *format, va_list args) {
 						buffer2 = STR_NULL;
 						size2 = 6;
 					} else {
-						size_t max_len = (sizeof(outbuffer) / sizeof(TCHAR)) - 1;
-						if (preci < max_len) max_len = preci;
+						/* narrowed as it is printed */
 						size2 = 0;
-						while (ws[size2] && size2 < max_len) {
-							outbuffer[size2] = (TCHAR)(unsigned char)ws[size2];
+						while (size2 < preci && ws[size2])
 							size2++;
-						}
-						outbuffer[size2] = PRINTF_L('\0');
-						buffer2 = outbuffer;
+						buffer2 = (TCHAR *) ws;
+						other_width = 1;
 					}
 				} else {
 					const char *s = va_arg(args, const char *);
@@ -1082,7 +1077,7 @@ int PRINTF_FN(FILE *stream, const TCHAR *format, va_list args) {
 			for (i = size2; i < preci; i++) /* extend to precision */
 				OUT(CX_0);
 			for (i = 0; i < size2; i++) /* Print the converted value. */
-				OUT(buffer2[i]);
+				OUT(other_width ? OTHER_CHAR(buffer2, i) : buffer2[i]);
 			if (flags & LALIGNFLAG) /* Pad right */
 				for (i = 0; i < pad; i++)
 					OUT(CX_space);
