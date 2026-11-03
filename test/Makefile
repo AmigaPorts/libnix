@@ -41,6 +41,7 @@ TARGET_TESTS = \
 	math_errno \
 	mathfp \
 	printf \
+	rint \
 	romtag \
 	round \
 	sscanf \
@@ -128,6 +129,10 @@ mathfp_LIBS = -lm
 printf_SRCS = ../sources/nix/stdio/__vfprintf_total_size.c ../sources/nix/stdio/vsprintf.c ../sources/math/stdio/ami_printf_math.c
 printf_LIBFLAGS = -DFULL_SPECIFIERS
 printf_LIBS = -lm
+
+rint_SRCS = ../sources/math/common/s_llrint.c
+rint_CFLAGS = -fno-builtin
+rint_LIBS = -lm
 
 # The startup code of -ramiga-lib, linked into a program.
 romtag_SRCS = ../sources/startup/libinit.c
