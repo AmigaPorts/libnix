@@ -44,6 +44,7 @@ TARGET_TESTS = \
 	printf_ld \
 	printf_s \
 	romtag \
+	scanf_int \
 	sscanf \
 	stack \
 	strto \
@@ -152,6 +153,8 @@ vfwprintf_test_CFLAGS = -I../sources/headers -DFULL_SPECIFIERS
 vfwprintf_test_LIBS = -lm
 
 sscanf_SRCS = $(addprefix ../sources/nix/stdio/,sscanf.c vsscanf.c vfscanf.c __srget.c)
+
+scanf_int_SRCS = $(sscanf_SRCS) $(addprefix ../sources/nix/stdio/,swscanf.c vswscanf.c vfwscanf.c fgetwc.c ungetwc.c)
 
 stack_SRCS = ../sources/misc/swapstack.c
 
