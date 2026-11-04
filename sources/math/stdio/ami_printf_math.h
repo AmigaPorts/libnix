@@ -312,6 +312,10 @@ void __LDL_normalize(LDL *x);
 /* Convert to double. */
 double __ldl_to_double(const LDL *lv);
 
+/* Round a normalized LDL once to the bits a float keeps, subnormals
+ * included, so that converting it to double and then to float is exact. */
+void __ldl_round_float(LDL *lv);
+
 /* Convert to long double. */
 long double __ldl_to_long_double(const LDL *lv);
 

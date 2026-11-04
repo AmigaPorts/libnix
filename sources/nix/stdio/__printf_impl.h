@@ -615,13 +615,10 @@ int PRINTF_FN(FILE *stream, const TCHAR *format, va_list args) {
 				/* -------- S2: exponent extraction -------------------- */
 				if (!infnan) {
 					if (!is_ld ? !_d_iszero(d) : !_ld_iszero(lu)) {
-						int bit_exp;
+						/* ld_val is normalized, so its exponent is the
+						 * binary one of subnormals too. */
+						int bit_exp = (int) (ld_val.l.exp - 16383);
 						int normalized_exp;
-						if (is_ld) {
-							bit_exp = lu.b.exp ? (int) lu.b.exp - 16383 : -16382;
-						} else {
-							bit_exp = d.b.exp ? d.b.exp - 1023 : -1022;
-						}
 						{
 							unsigned long long e = (unsigned long long) (bit_exp >= 0 ? bit_exp : -bit_exp);
 							normalized_exp = (int) ((e * LOG10_2_Q32 + (1ULL << 31)) >> 32);
@@ -1057,16 +1054,15 @@ int PRINTF_FN(FILE *stream, const TCHAR *format, va_list args) {
 				width = preci = 0;
 				break;
 			}
-			if ((flags & HAS_PRECI) && !(flags & ALTERNATEFLAG)) {
-				if (size2 == 1 && !preci && buffer2[0] == CX_0)
-					size2 = 0;
-			}
-			if ((flags & HAS_PRECI) && !preci) {
-			    if (size2 == 1 && buffer2[0] == CX_0 &&
-			        (orig_type == CX_d || orig_type == CX_i ||
-			         orig_type == CX_x || orig_type == CX_X))
-			        size2 = 0;
-			}
+			/* An integer 0 with precision 0 has no digits, but %#o keeps
+			 * its 0. Only the integers: buffer2 may hold a string of the
+			 * other width, and %s leaves preci at 0. */
+			if ((flags & HAS_PRECI) && !preci && size2 == 1 &&
+			    (orig_type == CX_d || orig_type == CX_i || orig_type == CX_u ||
+			     orig_type == CX_x || orig_type == CX_X ||
+			     (orig_type == CX_o && !(flags & ALTERNATEFLAG))) &&
+			    buffer2[0] == CX_0)
+				size2 = 0;
 			pad = size1 + (size2 >= preci ? size2 : preci); /* Calculate the number of characters */
 			pad = pad >= width ? 0 : width - pad; /* and the number of resulting pad bytes */
 			if (flags & ZEROPADFLAG) /* Print the sign and prefix. */

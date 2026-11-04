@@ -109,11 +109,12 @@ int __LDL_mul_16_add(LDL *x, int digit)
 
 	/* Saturation: hi's top nibble non-zero means x16 overflows 96 bits. */
 	if (hi >= 0x10000000UL) {
-		if (x->l.low == 0) {
-			/* Preserve the first dropped nibble at low's top for
-			 * extra round-to-nearest information. */
-			x->l.low = ((unsigned long) digit << 28) | 1;
-		}
+		/* All 96 bits are taken, and a dropped digit lies below them,
+		 * far below the 64 that get rounded: only whether it is non-zero
+		 * matters, as a sticky bit.  Zeros must not set it, or an exact
+		 * tie rounds up. */
+		if (digit)
+			x->l.low |= 1;
 		return 0;
 	}
 
@@ -164,6 +165,49 @@ void __LDL_normalize(LDL *x)
 	}
 
 	x->l.exp = 16383;
+}
+
+void __ldl_round_float(LDL *lv)
+{
+	unsigned long long m = ((unsigned long long) lv->l.high << 32) | lv->l.middle;
+	int e = (int) lv->l.exp - 16383;
+	int drop = 64 - 24;
+
+	if (m == 0)
+		return;
+	if (e < -126)
+		drop += -126 - e; /* a subnormal float keeps fewer bits */
+
+	if (drop > 64) {
+		/* below half the smallest subnormal */
+		m = 0;
+	} else if (drop == 64) {
+		/* the top bit is the half; ties go to the even 0 */
+		if ((m << 1) != 0 || lv->l.low != 0) {
+			m = 1ULL << 63;
+			e++;
+		} else {
+			m = 0;
+		}
+	} else {
+		unsigned long long half = 1ULL << (drop - 1);
+		unsigned long long lost = m & ((half << 1) - 1);
+
+		m -= lost;
+		if ((lost & half) && ((lost & (half - 1)) || lv->l.low != 0 || (m & (half << 1)))) {
+			m += half << 1;
+			if (m == 0) {
+				/* carried out of the top bit */
+				m = 1ULL << 63;
+				e++;
+			}
+		}
+	}
+
+	lv->l.high = (unsigned long) (m >> 32);
+	lv->l.middle = (unsigned long) m;
+	lv->l.low = 0;
+	lv->l.exp = e + 16383;
 }
 
 double __ldl_to_double(const LDL *lv)

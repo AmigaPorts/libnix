@@ -129,6 +129,9 @@ static int fnmatch_internal(const char *pattern, const char *string, const char 
 							continue;
 						}
 					}
+					// nor does an escaped one
+					if (end_check[0] == '\\' && !FLAG_NOESCAPE && end_check[1])
+						end_check++;
 					end_check++;
 				}
 
@@ -162,34 +165,33 @@ static int fnmatch_internal(const char *pattern, const char *string, const char 
 						if (is)
 							match |= is(c);
 					}
-					// Handle range expressions (e.g., a-z)
-					else if (pattern[1] == '-' && pattern[2] != ']') {
-						unsigned char to;
-						pattern += 2;
-						to = *pattern;
-						if (to == '\\' && !FLAG_NOESCAPE)
-							to = *++pattern;
-
-						unsigned char start_p = p;
+					// A single character, or a range of them (e.g., a-z). An
+					// escaped character is itself, at either end of a range too,
+					// as the lookahead above took it.
+					else {
+						unsigned char from = p, to;
+						if (from == '\\' && !FLAG_NOESCAPE && pattern[1])
+							from = *++pattern;
+						to = from;
+						if (pattern[1] == '-' && pattern[2] && pattern[2] != ']') {
+							pattern += 2;
+							to = *pattern;
+							if (to == '\\' && !FLAG_NOESCAPE && pattern[1])
+								to = *++pattern;
+						}
 						if (FLAG_CASEFOLD) {
-							start_p = tolower(start_p);
+							from = tolower(from);
 							to = tolower(to);
 						}
-						if (c >= start_p && c <= to) {
-							match = 1;
-						}
-					}
-					// Handle single character match within brackets
-					else {
-						unsigned char check_p = p;
-						if (FLAG_CASEFOLD)
-							check_p = tolower(check_p);
-						if (check_p == c)
+						if (c >= from && c <= to)
 							match = 1;
 					}
 					p = *++pattern;
-				} while (p != ']');
+				} while (p && p != ']');
 
+				// never past the end of the pattern
+				if (!p)
+					return FNM_NOMATCH;
 				if (match == not)
 					return FNM_NOMATCH;
 				break;

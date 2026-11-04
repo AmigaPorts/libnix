@@ -32,6 +32,7 @@ TARGET_TESTS = \
 	c99math \
 	fcmp \
 	fma \
+	fnmatch \
 	fread \
 	frexpl \
 	fstat \
@@ -40,16 +41,23 @@ TARGET_TESTS = \
 	inet \
 	math_errno \
 	mathfp \
+	memset \
+	multibyte \
 	printf \
+	printf_ld \
+	printf_s \
 	rint \
 	romtag \
 	round \
+	scanf_int \
+	scanf_round \
 	sscanf \
 	stack \
 	strto \
 	sysinfo \
 	vfprintf_test \
 	vfwprintf_test \
+	wmemset \
 	wprintf
 
 # Need what the simulators lack: PIPE: and a shell (popen), Exec tasks
@@ -98,6 +106,9 @@ fma_LIBFLAGS = -I../sources/math/mathfp
 fma_CFLAGS = -fno-builtin
 fma_LIBS = -lm
 
+fnmatch_SRCS = ../sources/nix/extra/fnmatch.c
+fnmatch_CFLAGS = -D_GNU_SOURCE
+
 fread_SRCS = ../sources/nix/stdio/fread.c ../sources/nix/stdio/__srget.c
 
 frexpl_SRCS = ../sources/math/extra/frexpl.c
@@ -125,10 +136,21 @@ mathfp_SRCS = $(addprefix ../sources/math/mathfp/,fmod.c fmodf.c frexp.c ldexp.c
 mathfp_CFLAGS = -fno-builtin
 mathfp_LIBS = -lm
 
+memset_SRCS = ../sources/nix/string/memset.c
+memset_CFLAGS = -fno-builtin
+
 # libm builds the printf family with float formatting.
 printf_SRCS = ../sources/nix/stdio/__vfprintf_total_size.c ../sources/nix/stdio/vsprintf.c ../sources/math/stdio/ami_printf_math.c
 printf_LIBFLAGS = -DFULL_SPECIFIERS
 printf_LIBS = -lm
+
+printf_ld_SRCS = $(printf_SRCS) ../sources/nix/stdio/vsnprintf.c
+printf_ld_LIBFLAGS = -DFULL_SPECIFIERS
+printf_ld_LIBS = -lm
+
+printf_s_SRCS = $(printf_ld_SRCS) $(addprefix ../sources/nix/stdio/,__vfwprintf_total_size.c vswprintf.c)
+printf_s_LIBFLAGS = -DFULL_SPECIFIERS
+printf_s_LIBS = -lm
 
 rint_SRCS = $(addprefix ../sources/math/common/,s_llrint.c s_lrint.c sf_llrint.c sf_lrint.c)
 rint_CFLAGS = -fno-builtin
@@ -153,7 +175,16 @@ vfwprintf_test_LIBFLAGS = -DFULL_SPECIFIERS
 vfwprintf_test_CFLAGS = -I../sources/headers -DFULL_SPECIFIERS
 vfwprintf_test_LIBS = -lm
 
+multibyte_SRCS = $(addprefix ../sources/nix/stdio/,mbtowc.c mblen.c mbstowcs.c wctomb.c wcstombs.c)
+
 sscanf_SRCS = $(addprefix ../sources/nix/stdio/,sscanf.c vsscanf.c vfscanf.c __srget.c)
+
+scanf_int_SRCS = $(sscanf_SRCS) $(addprefix ../sources/nix/stdio/,swscanf.c vswscanf.c vfwscanf.c fgetwc.c ungetwc.c)
+
+scanf_round_SRCS = $(sscanf_SRCS) ../sources/math/stdlib/strtod.c \
+	../sources/math/stdio/ami_scanf_math.c ../sources/math/stdio/ami_printf_math.c
+scanf_round_LIBFLAGS = -DFULL_SPECIFIERS
+scanf_round_LIBS = -lm
 
 stack_SRCS = ../sources/misc/swapstack.c
 
@@ -161,6 +192,8 @@ strto_SRCS = $(addprefix ../sources/nix/stdlib/,strtol.c strtoul.c strtoll.c str
 strto_CFLAGS = -fno-builtin
 
 sysinfo_SRCS = ../sources/nix20/misc/uname.c ../sources/nix/extra/getpid.c ../sources/nix20/stdlib/kill.c ../sources/nix/extra/sysconf.c
+
+wmemset_SRCS = ../sources/nix/string/wmemset.c
 
 wprintf_SRCS = $(addprefix ../sources/nix/stdio/,__vfwprintf_total_size.c vswprintf.c vfwprintf.c wprintf.c) ../sources/math/stdio/ami_printf_math.c
 wprintf_LIBFLAGS = -DFULL_SPECIFIERS

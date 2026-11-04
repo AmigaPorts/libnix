@@ -611,7 +611,11 @@ if (!ignore)
 			                    ld = -ld;
 			                *va_arg(args, long double *) = ld;
 			            } else {
-			                double d = __ldl_to_double(&lv);
+			                double d;
+			                /* a float is rounded once, not through double */
+			                if (subtype != CX_l)
+			                    __ldl_round_float(&lv);
+			                d = __ldl_to_double(&lv);
 			                if (sign < 0)
 			                    d = -d;
 			                *va_arg(args, double *) = d;
@@ -650,38 +654,28 @@ if (!ignore)
 					NEXT(c);
 				}
 
-				if (type == CX_i) {
-					if (VAL(c == CX_0)) {
-						int d;
-						NEXT(d);
-						if (VAL(TOLOWER(d) == CX_x)) {
-							int e;
-							NEXT(e);
-							if (size >= width || VAL(ISXDIGIT(c)))
-								type = CX_x;
-							PREV(e);
-						} else
-							type = CX_o;
-						PREV(d);
-					} else if (VAL(!ISDIGIT(c) && ISXDIGIT(c)))
-						type = CX_x;
-				}
-
-				if (type == CX_x && VAL(c == CX_0)) {
+				/* %i takes its base from the prefix, and %x skips a 0x.
+				 * Only one character is ever pushed back, which is all
+				 * that ungetwc() keeps. */
+				if ((type == CX_i || type == CX_x) && VAL(c == CX_0)) {
 					int d;
 					NEXT(d);
 					if (VAL(TOLOWER(d) == CX_x)) {
 						int e;
 						NEXT(e);
-						if (VAL(ISXDIGIT(e))) {
-							c = e;
-						} else {
+						if (!VAL(ISXDIGIT(e))) {
+							/* "0x" and no hex digit: a matching failure */
 							PREV(e);
 							size = 0;
 							break;
 						}
-					} else
+						type = CX_x;
+						c = e;
+					} else {
+						if (type == CX_i)
+							type = CX_o;
 						PREV(d);
+					}
 				}
 
 				base = (type == CX_x || type == CX_X) ? 16 : (type == CX_o ? 8 : 10);
