@@ -230,31 +230,10 @@ int VSCANF_NAME(FILE *stream, const TCHAR *format, va_list args) {
 			} /* The first non-whitespace character is already read */
 
 			switch (type) {
-			case CX_c: {
-				TCHAR *bp;
-
-				if (width == ULONG_MAX) /* Default */
-					width = 1;
-
-if (!ignore)
-					bp = va_arg(args, TCHAR *);
-				else
-					bp = NULL; /* Just to get the compiler happy */
-
-												NEXT(c); /* 'c' did not skip whitespace */
-				while (VAL(c != CX_EOF)) {
-					if (!ignore)
-						*bp++ = (TCHAR) c;
-					NEXT(c);
-				}
-				PREV(c);
-
-				if (!ignore && size == width)
-					blocks++;
-				break;
-			}
 			case CX_bracket: {
-				TCHAR *bp;
+				wchar_t *wp = NULL;
+				char * cp = NULL;
+				int read = 0;
 				unsigned char tab[32], a, b;
 				char circflag = 0;
 
@@ -283,43 +262,75 @@ if (!ignore)
 					}
 				}
 
-				if (!ignore)
-					bp = va_arg(args, TCHAR *);
-				else
-					bp = NULL; /* Just to get the compiler happy */
-
-												NEXT(c);
-				while (VAL(c != CX_EOF && c >= 0 && c < 256 &&
-						(tab[c/8] & (1<<(c&7))))) {
+				NEXT(c);
+				if (subtype == CX_l) {
 					if (!ignore)
-						*bp++ = (TCHAR) c;
-					NEXT(c);
+						wp = va_arg(args, wchar_t *);
+					while (read++ < width && VAL(c != CX_EOF && c >= 0 && c < 256 &&
+							(tab[c/8] & (1<<(c&7))))) {
+						if (!ignore)
+							*wp++ = (wchar_t) c;
+						NEXT(c);
+					}
+				} else {
+					if (!ignore)
+						cp = va_arg(args, char *);
+					while (read++ < width && VAL(c != CX_EOF && c >= 0 && c < 256 &&
+							(tab[c/8] & (1<<(c&7))))) {
+						if (!ignore)
+							*cp++ = (char) c;
+						NEXT(c);
+					}
 				}
+
 				PREV(c);
 
 				if (!ignore && size) {
-					*bp++ = CX_NUL;
+					if (subtype == CX_l)
+						*wp++ = 0;
+					else
+						*cp++ = 0;
 					blocks++;
 				}
 				break;
 			}
+			case CX_c:
 			case CX_s: {
-				TCHAR *bp;
+				wchar_t *wp = NULL;
+				char * cp = NULL;
+				int read = 0;
 
-				if (!ignore)
-				bp = va_arg(args, TCHAR *);
-				else
-				bp = NULL; /* Just to get the compiler happy */
-
-				while (VAL(c != CX_EOF && !ISSPACE(c))) {
+				if (type == CX_c) {
+					NEXT(c); /* 'c' did not skip whitespace */
+					if (width == ULONG_MAX) /* Default */
+						width = 1;
+				}
+				if (subtype == CX_l) {
 					if (!ignore)
-						*bp++ = (TCHAR) c;
-					NEXT(c);
+						wp = va_arg(args, wchar_t *);
+					while (read++ < width && VAL(c != CX_EOF && !ISSPACE(c))) {
+						if (!ignore)
+							*wp++ = (wchar_t) c;
+						NEXT(c);
+					}
+				} else {
+					if (!ignore)
+						cp = va_arg(args, char *);
+					while (read++ < width && VAL(c != CX_EOF && !ISSPACE(c))) {
+						if (!ignore)
+							*cp++ = (char) c;
+						NEXT(c);
+					}
 				}
 				PREV(c);
 
 				if (!ignore && size) {
-					*bp++ = CX_NUL;
+					if (type == CX_s) {
+						if (subtype == CX_l)
+							*wp++ = 0;
+						else
+							*cp++ = 0;
+					}
 					blocks++;
 				}
 				break;
