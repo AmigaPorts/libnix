@@ -14,7 +14,12 @@ float __math_hyperbolicf(float x, float sign)
   /* The last float whose cosh() is in range.  */
   if (x > 89.41598510742188f)
     return __math_overflowf(sign);
-  t = IEEESPExp(0.5f * x);
-  t = (0.5f * t) * t;
+  if (x <= 88.72283f)
+    t = 0.5f * IEEESPExp(x);
+  else
+    {
+      t = IEEESPExp(0.5f * x);
+      t = (0.5f * t) * t;
+    }
   return __math_negative(sign) ? -t : t;
 }
