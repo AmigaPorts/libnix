@@ -1,32 +1,38 @@
-#!/bin/bash 
+#!/bin/bash
+
 out=$1
 dir=$out-support
 
 shift
 
-if [[ "$1" == "" ]] || [[  "$out" == "" ]]; then
+if [[ "$1" == "" ]] || [[ "$out" == "" ]]; then
   echo "USAGE mkstub <libname> <def file> <object files...>"
   echo "USAGE mkstub <libname> <object files...>"
   exit 1
 fi
 
-if [[ "${1%%.def}" != "$1" ]]; then
+deffile=""
+
+if [[ "$1" == *.def ]]; then
   if [ -f "$1" ]; then
-  echo "Using DEF file $1"
-  deffile=$1
-  shift
+    echo "Using DEF file $1"
+    deffile=$1
+    shift
   else
-	echo "$1 not found"
-	exit 1
+    echo "$1 not found"
+    exit 1
   fi
 fi
 
 echo creating support files in $dir
 
-rm -rf $dir
-mkdir -p $dir
+rm -rf "$dir"
+mkdir -p "$dir"
 
-echo >$dir/init-stub-${out}.c "// STUB to load and init the so file
+export_c="$dir/export-$out.c"
+
+cat > "$dir/init-stub-$out.c" <<EOF
+// STUB to load and init the so file
 #include <proto/dos.h>
 #include <proto/exec.h>
 #include <stabs.h>
@@ -35,26 +41,26 @@ echo >$dir/init-stub-${out}.c "// STUB to load and init the so file
 void * ${out}Base = 0;
 
 // linked first stub
-__attribute__((section(\".dlist_so_${out}\")))
+__attribute__((section(".dlist_so_${out}")))
 long __so_${out}_start[1] = {0};
 
 // init all references by name
 void __so_${out}_open() {
-  ${out}Base = OldOpenLibrary(\"$out.library\");
+  ${out}Base = OldOpenLibrary("$out.library");
   if (!${out}Base) {
-	FPuts(Output(), \"failed to load $out.library\\n\");
+    FPuts(Output(), "failed to load $out.library\\n");
     exit(10);
   }
-  register long * a0 asm(\"a0\") = &__so_${out}_start[1];
-  register void * a6 asm(\"a6\") = ${out}Base;
+  register long * a0 asm("a0") = &__so_${out}_start[1];
+  register void * a6 asm("a6") = ${out}Base;
   char const * s;
-  asm volatile(\"jsr (-30,a6); move.l d0,%0\": \"=r\"(s): \"r\"(a0), \"r\"(a6));
+  asm volatile("jsr (-30,a6); move.l d0,%0": "=r"(s): "r"(a0), "r"(a6));
   if (s) {
-  	BPTR out = Output();
-  	FPuts(out, \"can't resolve \");
-  	FPuts(out, s);
-  	FPuts(out, \"\\n\");
-	exit(10);
+    BPTR out = Output();
+    FPuts(out, "can't resolve ");
+    FPuts(out, s);
+    FPuts(out, "\\n");
+    exit(10);
   }
 }
 
@@ -63,128 +69,288 @@ void __so_${out}_close() {
     CloseLibrary(${out}Base);
 }
 
-ADD2INIT(__so_${out}_open,  -78); // priority one less than __initlibraries
+ADD2INIT(__so_${out}_open, -78);
 ADD2EXIT(__so_${out}_close, -78);
-"
+EOF
 
-echo >$dir/export-$out.c "
-__attribute__((section(\".data.export~\")))
+cat > "$export_c" <<EOF
+__attribute__((section(".data.export~")))
 short __export_stubs_end = -1;
-__attribute__((section(\".data.export@\")))
+__attribute__((section(".data.export@")))
 short __export_stubs_start = -1;
+EOF
 
-"
 
-# get last word = var name of exported functions. Windows-hosted binutils use
-# CRLF, and existing definition files may contain it too; never carry the CR
-# into generated C identifiers or string literals.
-(if [[ "${1%%.def}" != "$deffile" ]]; then cat "$deffile"; else m68k-amigaos-objdump -t "$@" | grep "0000 01 "; fi) | tr -d '\r' | while IFS= read -r line; do
+# Generate an exported function wrapper.
+# mode: text or safe
+# n: symbol name without the leading assembler underscore
+# count: number of 4-byte stack parameters (safe only)
 
-n=$(echo $line | awk '{ print $NF }' | grep -v __initlibraries | grep -v __initcpp )
-n=${n:1}
+emit_function_export()
+{
+  local n=$1
+  local mode=$2
+  local count=${3:-0}
+  local i
+  local offset
+  local bytes
 
-if [[ "${n}" == "" ]]; then
-  continue;
+  echo "create $mode export function for ${n}"
+
+  {
+    printf '\nasm("" \n'
+    printf '".section .data.export_%s \\n"\n' "$n"
+    printf '"___export_%s_a4: \\n"\n' "$n"
+    printf '"\t.long 0 \\n"\n'
+    printf '"___export_%s: \\n"\n' "$n"
+    printf '"\tmove.l a4,-(sp) \\n"\n'
+    printf '"\tmove.l -8(pc),a4 \\n"\n'
+
+    if [[ "$mode" == "safe" ]]; then
+
+      # Copy parameters from the original stack frame.
+      # Copy them in reverse order to preserve argument order.
+      #
+      # The source offset remains constant:
+      #   saved A4 + return address + all original arguments
+      #
+      # After each push, both the source and destination SP
+      # move by 4 bytes.
+
+      offset=$((4 * (count + 1)))
+
+      for ((i = 0; i < count; i++)); do
+        printf '"\tmove.l %d(sp),-(sp) \\n"\n' "$offset"
+      done
+
+      printf '"\tjsr    _%s \\n"\n' "$n"
+
+      if (( count > 0 )); then
+        bytes=$((count * 4))
+        printf '"\tlea    %d(sp),sp \\n"\n' "$bytes"
+      fi
+
+      printf '"\tmove.l (sp)+,a4 \\n"\n'
+      printf '"\trts \\n");\n'
+
+    else
+
+      # Traditional non-reentrant A4 wrapper.
+      printf '"\tmove.l (sp)+,(___save_a4:W,a4) \\n"\n'
+      printf '"\tmove.l (sp)+,(___save_sp:W,a4) \\n"\n'
+      printf '"\tjsr    _%s \\n"\n' "$n"
+      printf '"\tmove.l (___save_sp:W,a4),-(sp) \\n"\n'
+      printf '"\tmove.l (___save_a4:W,a4),a4 \\n"\n'
+      printf '"\trts \\n");\n'
+
+    fi
+
+    cat <<EOF
+
+extern void * __export_${n};
+__attribute__((section(".dlist_so_export_${n}")))
+void * __export_entry_${n}[2] = {
+  (void *)"${n}",
+  (void *)&__export_${n}
+};
+EOF
+
+  } >> "$export_c"
+}
+
+
+# Generate the assembler stub used to resolve the library symbol.
+
+emit_function_stub()
+{
+  local n=$1
+
+  echo "creating $dir/stub-${n}.s"
+
+  cat > "$dir/stub-${n}.s" <<EOF
+| stub for ${n}
+.data
+_${n}: .globl _${n}
+        .short 0x4ef9 | jmp
+___ptr_${n}:
+        .long _${out}Base
+
+.text
+__name_${n}:
+        .asciz "${n}"
+
+.section .dlist_so_${out}z_${n}
+        .long __name_${n}
+        .long ___ptr_${n}
+EOF
+}
+
+
+# Generate a normal exported variable.
+
+emit_variable_export()
+{
+  local n=$1
+
+  echo "create export variable for ${n}"
+
+  cat >> "$export_c" <<EOF
+
+extern void * ${n}__data;
+__attribute__((section(".dlist_so_export_${n}")))
+void * __export_entry_${n}[2] = {
+  (void *)"${n}",
+  (void *)&${n}__data
+};
+EOF
+
+  echo "creating $dir/stub-${n}.s"
+
+  cat > "$dir/stub-${n}.s" <<EOF
+| stub for ${n}
+.data
+_${n}: .globl _${n}
+___ptr_${n}:
+        .long _${out}Base
+
+.text
+__name_${n}:
+        .asciz "${n}"
+
+.section .dlist_so_${out}z_${n}
+        .long __name_${n}
+        .long ___ptr_${n}
+EOF
+}
+
+
+# Read symbols either from the DEF file or from objdump.
+#
+# .safe is intentionally supported only in DEF files.
+# objdump cannot reliably determine the number of stack parameters.
+
+if [[ -n "$deffile" ]]; then
+  input_cmd=(cat "$deffile")
+else
+  input_cmd=(m68k-amigaos-objdump -t "$@")
 fi
+
+"${input_cmd[@]}" |
+  { if [[ -z "$deffile" ]]; then grep "0000 01 "; else cat; fi; } |
+  tr -d '\r' |
+while IFS= read -r line; do
+
+  # Ignore empty lines and comments.
+  [[ "$line" =~ ^[[:space:]]*$ ]] && continue
+  [[ "$line" =~ ^[[:space:]]*# ]] && continue
+
+  # ------------------------------------------------------------
+  # SAFE function: .safe __foo,N
+  # ------------------------------------------------------------
+
+  if [[ -n "$deffile" && "$line" =~ ^[[:space:]]*\.safe[[:space:]]+([^,[:space:]]+),[[:space:]]*([0-9]+)[[:space:]]*$ ]]; then
+
+    raw=${BASH_REMATCH[1]}
+    count=${BASH_REMATCH[2]}
+
+    if [[ "$raw" != _* ]] || [[ "${raw:1}" == "" ]]; then
+      echo "Invalid SAFE symbol: $line" >&2
+      exit 1
+    fi
+
+    n=${raw:1}
+
+    emit_function_export "$n" safe "$count"
+    emit_function_stub "$n"
+
+    continue
+  fi
+
+  # Reject malformed SAFE declarations rather than silently
+  # treating them as normal symbols.
+
+  if [[ -n "$deffile" && "$line" =~ ^[[:space:]]*\.safe([[:space:]]|$) ]]; then
+    echo "Invalid SAFE declaration: $line" >&2
+    exit 1
+  fi
+
+  # ------------------------------------------------------------
+  # Existing symbol detection
+  # ------------------------------------------------------------
+
+  symbol=$(echo "$line" | awk '{ print $NF }')
+
+  case "$symbol" in
+    __initlibraries|__initcpp)
+      continue
+      ;;
+  esac
+
+  [[ -z "$symbol" ]] && continue
+
+  # Remove leading assembler underscore.
+  n=${symbol:1}
+
+  [[ -z "$n" ]] && continue
 
   text=${line##*.text}
   direct=${line##*.direct}
-# text segment -> function with stub
-  if [[ "$text" != "$line" ]] || [[ "$direct" != "$line" ]]  ; then
 
-    if [[ "$text" != "$line" ]] ; then
-  	
-  	echo "create export function for ${n}" 
-	echo >>$dir/export-$out.c "
+  # ------------------------------------------------------------
+  # Function exports
+  # ------------------------------------------------------------
 
-	asm(\"\"
-	\".section .data.export_${n} \n\"
-\"___export_${n}_a4: \n\"
-\"	.long 0 | <-- contains the a4 value to use \n\"
-\"___export_${n}: \n\"
-\"	move.l a4,-(sp) \n\"
-\"	move.l -8(pc),a4 | <-- read the correct a4 value \n\"
-\"	move.l (sp)+,(___save_a4:W,a4) \n\"
-\"	move.l (sp)+,(___save_sp:W,a4) \n\"
-\"	jsr    _${n} \n\"
-\"	move.l (___save_sp:W,a4),-(sp) \n\"
-\"	move.l (___save_a4:W,a4),a4 \n\"
-\"	rts \n\");
+  if [[ "$text" != "$line" || "$direct" != "$line" ]]; then
 
-extern void * __export_${n};
-__attribute__((section(\".dlist_so_export_${n}\")))
-void * __export_entry_${n}[2] = { (void *)\"${n}\", (void *)&__export_${n} };
-"
+    if [[ "$text" != "$line" ]]; then
 
-  	else
-  		
-	echo >>$dir/export-$out.c "
+      # Existing non-reentrant A4 wrapper.
+      emit_function_export "$n" text
+
+    else
+
+      # Direct function export without A4 wrapper.
+      echo "create direct export function for ${n}"
+
+      cat >> "$export_c" <<EOF
+
 extern void *${n};
-__attribute__((section(\".dlist_so_export_${n}\")))
-void * __export_entry_${n}[2] = { (void *)\"${n}\", (void *)&${n} };
-"
-  		
-  	fi
+__attribute__((section(".dlist_so_export_${n}")))
+void * __export_entry_${n}[2] = {
+  (void *)"${n}",
+  (void *)&${n}
+};
+EOF
 
-  	
-  echo creating $dir/stub-${n}.s  	
-echo >$dir/stub-${n}.s  "| stub for ${n}
-	.data
-_${n}: .globl _${n}	
-	.short 0x4ef9	| jmp
-___ptr_${n}:	
-	.long	_${out}Base
+    fi
 
-	.text
-__name_${n}:
-	.asciz \"${n}\"
+    emit_function_stub "$n"
 
-	.section .dlist_so_${out}z_${n}
-	.long __name_${n}
-	.long ___ptr_${n}  
-"
-else
-	
-# only normal variables  
+  else
 
-  	echo "create export variable for ${n}" 
-echo >>$dir/export-$out.c "
+    # ----------------------------------------------------------
+    # Normal variable exports
+    # ----------------------------------------------------------
 
-extern void * ${n}__data;
-__attribute__((section(\".dlist_so_export_${n}\")))
-void * __export_entry_${n}[2] = { (void *)\"${n}\", (void *)&${n}__data };
-"
+    emit_variable_export "$n"
 
-  echo creating $dir/stub-${n}.s  	
-echo >$dir/stub-${n}.s  "| stub for ${n}
-	.data
-_${n}: .globl _${n}	
-___ptr_${n}:	
-	.long	_${out}Base
-
-	.text
-__name_${n}:
-	.asciz \"${n}\"
-
-	.section .dlist_so_${out}z_${n}
-	.long __name_${n}
-	.long ___ptr_${n}  
-"
-fi
+  fi
 
 done
 
 
-pushd $dir >/dev/null
+pushd "$dir" >/dev/null
+
 echo compiling stubs
 
 echo m68k-amigaos-gcc ${LIB_MODE} -Os -fomit-frame-pointer *stub*.s *stub*.c -c
 m68k-amigaos-gcc ${LIB_MODE} -Os -fomit-frame-pointer *stub*.s *stub*.c -c
 
-echo create link lib $out.a
-rm -f ../$out.a
-echo m68k-amigaos-ar rcs ../$out.a *stub*.o
-m68k-amigaos-ar rcs ../$out.a *stub*.o
+echo create link lib "$out.a"
+rm -f "../$out.a"
+
+echo m68k-amigaos-ar rcs ../"$out.a" *stub*.o
+m68k-amigaos-ar rcs "../$out.a" *stub*.o
 
 echo m68k-amigaos-gcc -fno-builtin -resident -Os -fomit-frame-pointer export*.c -c
 m68k-amigaos-gcc -fno-builtin -resident -Os -fomit-frame-pointer export*.c -c
@@ -192,6 +358,6 @@ m68k-amigaos-gcc -fno-builtin -resident -Os -fomit-frame-pointer export*.c -c
 popd >/dev/null
 
 if [[ "$*" != "" ]]; then
-	echo	m68k-amigaos-gcc -shared -noixemul $* $dir/export-$out.o -o ${out}.library 
-	m68k-amigaos-gcc -shared -noixemul $* $dir/export-$out.o -o ${out}.library
+  echo m68k-amigaos-gcc -shared -noixemul "$@" "$dir/export-$out.o" -o "${out}.library"
+  m68k-amigaos-gcc -shared -noixemul "$@" "$dir/export-$out.o" -o "${out}.library"
 fi
