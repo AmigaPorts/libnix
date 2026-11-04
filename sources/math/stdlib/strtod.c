@@ -1,29 +1,12 @@
-#include "stdio.h"
-
-long double strtold(const char *nptr, char **endptr) {
-	long double a = 0.0L;
-	int n = 0;
-	sscanf(nptr, "%Lf%ln", &a, &n);
-	if (endptr)
-		*endptr = (char*) nptr + n;
-	return a;
-}
+#include <stdio.h>
 
 double strtod(const char *nptr, char **endptr) {
 	double a = 0.0L;
-	int n = 0;
+	long n = 0;
 	sscanf(nptr, "%lf%ln", &a, &n);
+
 	if (endptr)
 		*endptr = (char*) nptr + n;
+
 	return a;
 }
-
-float strtof(const char *nptr, char **endptr) {
-	float a = 0.0f;
-	int n = 0;
-	sscanf(nptr, "%f%ln", &a, &n);
-	if (endptr)
-		*endptr = (char*) nptr + n;
-	return a;
-}
-
