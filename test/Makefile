@@ -41,6 +41,7 @@ TARGET_TESTS = \
 	inet \
 	math_errno \
 	mathfp \
+	multibyte \
 	printf \
 	printf_ld \
 	printf_s \
@@ -55,6 +56,7 @@ TARGET_TESTS = \
 	sysinfo \
 	vfprintf_test \
 	vfwprintf_test \
+	wmemset \
 	wprintf
 
 # Need what the simulators lack: PIPE: and a shell (popen), Exec tasks
@@ -169,6 +171,8 @@ vfwprintf_test_LIBFLAGS = -DFULL_SPECIFIERS
 vfwprintf_test_CFLAGS = -I../sources/headers -DFULL_SPECIFIERS
 vfwprintf_test_LIBS = -lm
 
+multibyte_SRCS = $(addprefix ../sources/nix/stdio/,mbtowc.c mblen.c mbstowcs.c wctomb.c wcstombs.c)
+
 sscanf_SRCS = $(addprefix ../sources/nix/stdio/,sscanf.c vsscanf.c vfscanf.c __srget.c)
 
 scanf_int_SRCS = $(sscanf_SRCS) $(addprefix ../sources/nix/stdio/,swscanf.c vswscanf.c vfwscanf.c fgetwc.c ungetwc.c)
@@ -184,6 +188,8 @@ strto_SRCS = $(addprefix ../sources/nix/stdlib/,strtol.c strtoul.c strtoll.c str
 strto_CFLAGS = -fno-builtin
 
 sysinfo_SRCS = ../sources/nix20/misc/uname.c ../sources/nix/extra/getpid.c ../sources/nix20/stdlib/kill.c ../sources/nix/extra/sysconf.c
+
+wmemset_SRCS = ../sources/nix/string/wmemset.c
 
 wprintf_SRCS = $(addprefix ../sources/nix/stdio/,__vfwprintf_total_size.c vswprintf.c vfwprintf.c wprintf.c) ../sources/math/stdio/ami_printf_math.c
 wprintf_LIBFLAGS = -DFULL_SPECIFIERS

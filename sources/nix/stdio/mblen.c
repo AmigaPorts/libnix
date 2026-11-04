@@ -5,8 +5,9 @@
  * just a "C" locale function 
  */
 int mblen(const char *s,size_t n)
-{ size_t l=0;
-  while(n--&&*s++)
-    l++;
-  return sizeof(wchar_t)*(l+1); /* 1 for the NUL character */
+{ if(!s)
+    return 0; /* no shift states */
+  if(!n)
+    return -1;
+  return *s!='\0';
 }
