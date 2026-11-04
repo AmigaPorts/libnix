@@ -41,6 +41,7 @@ TARGET_TESTS = \
 	inet \
 	math_errno \
 	mathfp \
+	memset \
 	multibyte \
 	printf \
 	printf_ld \
@@ -134,6 +135,9 @@ math_errno_LIBS = -lm
 mathfp_SRCS = $(addprefix ../sources/math/mathfp/,fmod.c fmodf.c frexp.c ldexp.c fabs.c fabsf.c)
 mathfp_CFLAGS = -fno-builtin
 mathfp_LIBS = -lm
+
+memset_SRCS = ../sources/nix/string/memset.c
+memset_CFLAGS = -fno-builtin
 
 # libm builds the printf family with float formatting.
 printf_SRCS = ../sources/nix/stdio/__vfprintf_total_size.c ../sources/nix/stdio/vsprintf.c ../sources/math/stdio/ami_printf_math.c
