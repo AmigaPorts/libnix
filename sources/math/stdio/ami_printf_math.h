@@ -121,6 +121,10 @@ typedef union _internal {
 		long exp;
 		unsigned short word[6];
 	} s;
+	struct {
+		long exp;
+		unsigned long dword[3];
+	} i;
 } LDL;
 
 /* ======================================================================

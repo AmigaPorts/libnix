@@ -132,166 +132,222 @@ LDL __LDL_from_long_double(long double ld)
 	return r;
 }
 
+#if defined(__mc68020__) || defined(__mc68030__) || defined(__mc68040__)
+/**
+ * 32-bit limb multiplication with 64-bit accumulation.
+ * Designed for architectures with fast 32x32->64bit hardware multipliers.
+ */
+static inline void mult32_64(unsigned int *to, unsigned int *a, unsigned int *b, unsigned short len) {
+    unsigned int *a_ptr = a + len;
+    unsigned int *b_ptr = b + len;
+    unsigned int *to_ptr = to + (2 * len);
+
+    unsigned int *dst;
+    unsigned int *src_b;
+    unsigned long long carry;
+
+    // --- First Row (i = 0): Initialize the destination array from the back ---
+    unsigned long long val_a = *(--a_ptr);
+    src_b = b_ptr;
+    carry = 0;
+    dst = to_ptr;
+    for (int j = 0; j < len; j++) {
+        unsigned long long sum = val_a * (*(--src_b)) + carry;
+        *(--dst) = (unsigned int)(sum & 0xFFFFFFFFu);
+        carry = sum >> 32;
+    }
+    *(--dst) = (unsigned int)carry;
+
+    // Zero out the remaining leading limbs up to the beginning of the 'to' array
+    while (dst > to) {
+        *(--dst) = 0;
+    }
+
+    // --- Subsequent Rows: Accumulate values row by row (moving backwards) ---
+    for (int i = 1; i < len; i++) {
+        val_a = *(--a_ptr);
+        src_b = b_ptr;
+        dst = to_ptr - i;
+        carry = 0;
+
+        for (int j = 0; j < len; j++) {
+            unsigned long long sum = val_a * (*(--src_b)) + *(--dst) + carry;
+            *dst = (unsigned int)(sum & 0xFFFFFFFFu);
+            carry = sum >> 32;
+        }
+
+        *(--dst) = (unsigned int)carry;
+    }
+}
+#else
+/* Helper function compiled alongside or defined above */
+static inline void mult16_32(unsigned short *to, unsigned short *a, unsigned short *b, unsigned short len) {
+    unsigned short *a_ptr = a + len;
+    unsigned short *b_ptr = b + len;
+    unsigned short *to_ptr = to + (2 * len);
+
+    unsigned short *dst;
+    unsigned short *src_b;
+    unsigned int carry;
+
+    // --- First Row (i = 0): Initialize the destination array from the back ---
+    unsigned int val_a = *(--a_ptr);
+    src_b = b_ptr;
+    carry = 0;
+    dst = to_ptr;
+    for (int j = 0; j < len; j++) {
+        unsigned int sum = val_a * (*(--src_b)) + carry;
+        *(--dst) = (unsigned short)(sum & 0xFFFFu);
+        carry = sum >> 16;
+    }
+    *(--dst) = (unsigned short)carry;
+
+    // Zero out the remaining leading limbs up to the beginning of the 'to' array
+    while (dst > to) {
+        *(--dst) = 0;
+    }
+
+    // --- Subsequent Rows: Accumulate values row by row (moving backwards) ---
+    for (int i = 1; i < len; i++) {
+        val_a = *(--a_ptr);
+        src_b = b_ptr;
+        dst = to_ptr - i;
+        carry = 0;
+
+        for (int j = 0; j < len; j++) {
+            unsigned int sum = val_a * (*(--src_b)) + *(--dst) + carry;
+            *dst = (unsigned short)(sum & 0xFFFFu);
+            carry = sum >> 16;
+        }
+
+        *(--dst) = (unsigned short)carry;
+    }
+}
+#endif
+
 /*
- * 80-bit mantissa multiplication using 16x16 -> 32 bit partial products.
+ * 80-bit mantissa multiplication via conditional limb-size processing.
  *
- * Inputs are 96-bit LDL values, but only the top 80 bits (5 x 16-bit limbs,
- * s.word[0..4]) participate.  The result is 80 bits, written back to
- * s.word[0..4]; s.word[5] (the lowest 16 bits of the 96-bit storage) is
- * zeroed so that no stale value leaks into a later multiply.
+ * For Motorola 68k/ColdFire targets with a 32x32->64 hardware multiplier,
+ * this function treats the mantissa as 3 x 32-bit limbs (a.i.dword[0..2]) and
+ * invokes a 3x3 loop. For older or alternative architectures, it falls back
+ * to 5 x 16-bit limbs (a.s.word[0..4]) using a 5x5 loop.
  *
- * Normalized inputs have the integer bit (s.word[0] bit 15) set, so the
- * product lies in [2^158, 2^160); the normalization step below shifts once
- * to bring the integer bit back to bit 79 (s.word[0] bit 15).
+ * Thanks to the shared 'res' union and Big-Endian architecture (m68k), the
+ * resulting 6 x 32-bit limbs or 10 x 16-bit limbs seamlessly overlay, allowing
+ * identical unpacking into the r0..r9 registers for normalization and rounding.
  */
 LDL __LDL_mul(LDL a, LDL b)
 {
-	int exp_a, exp_b, exp_r;
-	unsigned short a0, a1, a2, a3, a4, b0, b1, b2, b3, b4;
-	unsigned int p00, p01, p02, p03, p04,
-	             p10, p11, p12, p13, p14,
-	             p20, p21, p22, p23, p24,
-	             p30, p31, p32, p33, p34,
-	             p40, p41, p42, p43, p44;
-	unsigned int s, c;
-	unsigned int r0, r1, r2, r3, r4, r5, r6, r7, r8, r9;  /* 160-bit product */
-	unsigned short m0, m1, m2, m3, m4;                      /* 80-bit result */
-	unsigned int guard = 0, sticky = 0;
-	LDL r;
+    int exp_a, exp_b, exp_r;
+    unsigned int r0, r1, r2, r3, r4, r5, r6, r7, r8, r9;  /* 160-bit product */
+    unsigned short m0, m1, m2, m3, m4;                      /* 80-bit result */
+    unsigned int guard = 0, sticky = 0;
 
-	/* Zero: for normalized inputs the high word is nonzero. */
-	if (a.l.high == 0 && a.l.middle == 0 && a.l.low == 0)
-		return a;
-	if (b.l.high == 0 && b.l.middle == 0 && b.l.low == 0)
-		return b;
+    /*
+     * Using a union allows both 16-bit and 32-bit multipliers to share the same
+     * buffer. On Big-Endian architectures (like m68k), a 32-bit write seamlessly
+     * aligns with two consecutive 16-bit words (high bits first, low bits second).
+     */
+    union {
+        unsigned short words[12];
+        unsigned int longs[6];
+    } res;
 
-	exp_a = a.l.exp - 16383;
-	exp_b = b.l.exp - 16383;
-	exp_r = exp_a + exp_b;
+    LDL r;
 
-	/* 80-bit mantissa as 5 limbs.  a4 holds the integer bit (bit 79). */
-	a0 = a.s.word[4];
-	a1 = a.s.word[3];
-	a2 = a.s.word[2];
-	a3 = a.s.word[1];
-	a4 = a.s.word[0];
-	b0 = b.s.word[4];
-	b1 = b.s.word[3];
-	b2 = b.s.word[2];
-	b3 = b.s.word[1];
-	b4 = b.s.word[0];
+    /* Zero: for normalized inputs the high word is nonzero. */
+    if (a.l.high == 0 && a.l.middle == 0 && a.l.low == 0)
+        return a;
+    if (b.l.high == 0 && b.l.middle == 0 && b.l.low == 0)
+        return b;
 
-	/* 5x5 = 25 partial products (16x16 -> 32).  p_ij has weight 2^(16(i+j)). */
-	p00 = (unsigned long) a0 * b0;
-	p01 = (unsigned long) a0 * b1;
-	p10 = (unsigned long) a1 * b0;
-	p02 = (unsigned long) a0 * b2;
-	p11 = (unsigned long) a1 * b1;
-	p20 = (unsigned long) a2 * b0;
-	p03 = (unsigned long) a0 * b3;
-	p12 = (unsigned long) a1 * b2;
-	p21 = (unsigned long) a2 * b1;
-	p30 = (unsigned long) a3 * b0;
-	p04 = (unsigned long) a0 * b4;
-	p13 = (unsigned long) a1 * b3;
-	p22 = (unsigned long) a2 * b2;
-	p31 = (unsigned long) a3 * b1;
-	p40 = (unsigned long) a4 * b0;
-	p14 = (unsigned long) a1 * b4;
-	p23 = (unsigned long) a2 * b3;
-	p32 = (unsigned long) a3 * b2;
-	p41 = (unsigned long) a4 * b1;
-	p24 = (unsigned long) a2 * b4;
-	p33 = (unsigned long) a3 * b3;
-	p42 = (unsigned long) a4 * b2;
-	p34 = (unsigned long) a3 * b4;
-	p43 = (unsigned long) a4 * b3;
-	p44 = (unsigned long) a4 * b4;
+    exp_a = a.l.exp - 16383;
+    exp_b = b.l.exp - 16383;
+    exp_r = exp_a + exp_b;
 
-	/* Column-wise accumulation into r0..r9, each a 16-bit limb. */
-	c = 0;
+#if defined(__mc68020__) || defined(__mc68030__) || defined(__mc68040__)
+    /* Clear the padding limb for the same result with a 32-bit multiplication.*/
+    a.s.word[5] = 0;
+    b.s.word[5] = 0;
+    /*
+     * Targets with 32x32 -> 64 bit multiplier support (68020+, ColdFire v2-v5).
+     * Perform the 3x3 limb loop multiplication (96-bit x 96-bit layout).
+     * Generates 6 x 32-bit limbs in res.longs.
+     */
+    mult32_64(res.longs, (unsigned int *)a.i.dword, (unsigned int *)b.i.dword, 3);
+#else
+    /*
+     * Fallback for 16-bit multipliers (68000, 68010, or generic architectures).
+     * Perform the 5x5 limb loop multiplication (80-bit x 80-bit layout).
+     * Generates 10 x 16-bit limbs in res.words.
+     */
+    mult16_32(res.words, a.s.word, b.s.word, 5);
+#endif
 
-	s  = c + (p00 & 0xFFFFu);
-	r0 = s & 0xFFFFu;  c = s >> 16;
+    /*
+     * Map the resulting array back to the r0..r9 registers.
+     * On Big-Endian architectures, the layout matches perfectly for both versions:
+     * res.words[0] holds the absolute most significant 16 bits of the product (r9),
+     * and res.words[9] holds the absolute least significant 16 bits (r0).
+     */
+    r9 = res.words[0];
+    r8 = res.words[1];
+    r7 = res.words[2];
+    r6 = res.words[3];
+    r5 = res.words[4];
+    r4 = res.words[5];
+    r3 = res.words[6];
+    r2 = res.words[7];
+    r1 = res.words[8];
+    r0 = res.words[9];
 
-	s  = c + (p01 & 0xFFFFu) + (p10 & 0xFFFFu) + (p00 >> 16);
-	r1 = s & 0xFFFFu;  c = s >> 16;
+    /* Normalize: bring the integer bit back to bit 79 (s.word[0] bit 15). */
+    if (r9 & 0x8000u) {
+        m4 = (unsigned short) r9;
+        m3 = (unsigned short) r8;
+        m2 = (unsigned short) r7;
+        m1 = (unsigned short) r6;
+        m0 = (unsigned short) r5;
+        guard  = (unsigned int) (r4 >> 15);
+        sticky = ((r4 & 0x7FFFu) | r3 | r2 | r1 | r0) != 0;
+        exp_r++;
+    } else {
+        m4 = (unsigned short) ((r9 << 1) | (r8 >> 15));
+        m3 = (unsigned short) ((r8 << 1) | (r7 >> 15));
+        m2 = (unsigned short) ((r7 << 1) | (r6 >> 15));
+        m1 = (unsigned short) ((r6 << 1) | (r5 >> 15));
+        m0 = (unsigned short) ((r5 << 1) | (r4 >> 15));
+        guard  = (unsigned int) ((r4 << 1) >> 15);
+        sticky = (((r4 << 1) & 0x7FFFu) | r3 | r2 | r1 | r0) != 0;
+    }
 
-	s  = c + (p02 & 0xFFFFu) + (p11 & 0xFFFFu) + (p20 & 0xFFFFu)
-	   + (p01 >> 16) + (p10 >> 16);
-	r2 = s & 0xFFFFu;  c = s >> 16;
+    /* Round to nearest even. */
+    if (guard && (sticky || (m0 & 1u))) {
+        if (++m0 == 0) {
+            if (++m1 == 0) {
+                if (++m2 == 0) {
+                    if (++m3 == 0) {
+                        if (++m4 == 0) {
+                            m4 = 0x8000u;   /* 2^80 -> renormalize */
+                            exp_r++;
+                        }
+                    }
+                }
+            }
+        }
+    }
 
-	s  = c + (p03 & 0xFFFFu) + (p12 & 0xFFFFu) + (p21 & 0xFFFFu) + (p30 & 0xFFFFu)
-	   + (p02 >> 16) + (p11 >> 16) + (p20 >> 16);
-	r3 = s & 0xFFFFu;  c = s >> 16;
+    /* Return fields wrapping up the exponent and mantissa */
+    r.l.exp     = exp_r + 16383;
+    r.s.word[0] = m4;   /* bits 79..64 */
+    r.s.word[1] = m3;   /* bits 63..48 */
+    r.s.word[2] = m2;   /* bits 47..32 */
+    r.s.word[3] = m1;   /* bits 31..16 */
+    r.s.word[4] = m0;   /* bits 15..0  */
+    r.s.word[5] = 0;    /* bits 95..80 */
 
-	s  = c + (p04 & 0xFFFFu) + (p13 & 0xFFFFu) + (p22 & 0xFFFFu) + (p31 & 0xFFFFu) + (p40 & 0xFFFFu)
-	   + (p03 >> 16) + (p12 >> 16) + (p21 >> 16) + (p30 >> 16);
-	r4 = s & 0xFFFFu;  c = s >> 16;
-
-	s  = c + (p14 & 0xFFFFu) + (p23 & 0xFFFFu) + (p32 & 0xFFFFu) + (p41 & 0xFFFFu)
-	   + (p04 >> 16) + (p13 >> 16) + (p22 >> 16) + (p31 >> 16) + (p40 >> 16);
-	r5 = s & 0xFFFFu;  c = s >> 16;
-
-	s  = c + (p24 & 0xFFFFu) + (p33 & 0xFFFFu) + (p42 & 0xFFFFu)
-	   + (p14 >> 16) + (p23 >> 16) + (p32 >> 16) + (p41 >> 16);
-	r6 = s & 0xFFFFu;  c = s >> 16;
-
-	s  = c + (p34 & 0xFFFFu) + (p43 & 0xFFFFu)
-	   + (p24 >> 16) + (p33 >> 16) + (p42 >> 16);
-	r7 = s & 0xFFFFu;  c = s >> 16;
-
-	s  = c + (p44 & 0xFFFFu) + (p34 >> 16) + (p43 >> 16);
-	r8 = s & 0xFFFFu;  c = s >> 16;
-
-	r9 = c + (p44 >> 16);   /* < 2^16, product < 2^160 */
-
-	/* Normalize: bring the integer bit back to bit 79 (s.word[0] bit 15). */
-	if (r9 & 0x8000u) {
-		m4 = (unsigned short) r9;
-		m3 = (unsigned short) r8;
-		m2 = (unsigned short) r7;
-		m1 = (unsigned short) r6;
-		m0 = (unsigned short) r5;
-		guard  = (unsigned int) (r4 >> 15);
-		sticky = ((r4 & 0x7FFFu) | r3 | r2 | r1 | r0) != 0;
-		exp_r++;
-	} else {
-		m4 = (unsigned short) ((r9 << 1) | (r8 >> 15));
-		m3 = (unsigned short) ((r8 << 1) | (r7 >> 15));
-		m2 = (unsigned short) ((r7 << 1) | (r6 >> 15));
-		m1 = (unsigned short) ((r6 << 1) | (r5 >> 15));
-		m0 = (unsigned short) ((r5 << 1) | (r4 >> 15));
-		guard  = (unsigned int) ((r4 << 1) >> 15);
-		sticky = (((r4 << 1) & 0x7FFFu) | r3 | r2 | r1 | r0) != 0;
-	}
-	/* Round to nearest even. */
-	if (guard && (sticky || (m0 & 1u))) {
-		if (++m0 == 0) {
-			if (++m1 == 0) {
-				if (++m2 == 0) {
-					if (++m3 == 0) {
-						if (++m4 == 0) {
-							m4 = 0x8000u;   /* 2^80 -> renormalize */
-							exp_r++;
-						}
-					}
-				}
-			}
-		}
-	}
-
-	/* not truncated: the callers turn an exponent out of range into
-	 * infinity or zero */
-	r.l.exp     = exp_r + 16383;
-	r.s.word[0] = m4;   /* bits 79..64 */
-	r.s.word[1] = m3;   /* bits 63..48 */
-	r.s.word[2] = m2;   /* bits 47..32 */
-	r.s.word[3] = m1;   /* bits 31..16 */
-	r.s.word[4] = m0;   /* bits 15..0  */
-	r.s.word[5] = 0;    /* bits 95..80: not computed by the 80-bit multiply */
-
-	return r;
+    return r;
 }
 
 void __LDL_mul_10(LDL * x)
