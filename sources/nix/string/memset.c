@@ -35,7 +35,7 @@ void *memset(void *s, int _c, size_t n) {
 				"1:\tmovem.l %2/d5/d6/d7/a1/a2/a3/a6,-(%0)\n\t"
 				"subq.l #1,%1\n\t"
 				"jne 1b"
-				: "+a" (p), "+d" (m)
+				: "+a" (p), "+&d" (m)
 				: "d" (c)
 				: "d5", "d6", "d7", "a1", "a2", "a3", "a6", "memory");
 			n &= (8 * sizeof(long) - 1);
