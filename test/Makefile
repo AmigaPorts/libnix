@@ -190,7 +190,7 @@ scanf_fmt_SRCS = $(sscanf_SRCS) $(addprefix ../sources/nix/stdio/,swscanf.c vsws
 
 scanf_int_SRCS = $(sscanf_SRCS) $(addprefix ../sources/nix/stdio/,swscanf.c vswscanf.c vfwscanf.c fgetwc.c ungetwc.c)
 
-scanf_round_SRCS = $(sscanf_SRCS) ../sources/math/stdlib/strtod.c \
+scanf_round_SRCS = $(sscanf_SRCS) $(addprefix ../sources/math/stdlib/,strtod.c strtof.c strtold.c) \
 	../sources/math/stdio/ami_scanf_math.c ../sources/math/stdio/ami_printf_math.c
 scanf_round_LIBFLAGS = -DFULL_SPECIFIERS
 scanf_round_LIBS = -lm
