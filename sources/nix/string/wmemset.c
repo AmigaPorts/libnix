@@ -21,7 +21,7 @@ wchar_t *wmemset(wchar_t *s, wchar_t c, size_t n) {
 			"1:\tmovem.l %2/d5/d6/d7/a1/a2/a3/a6,-(%0)\n\t"
 			"subq.l #1,%1\n\t"
 			"jne 1b"
-			: "+a" (v), "+d" (m)
+			: "+a" (v), "+&d" (m)
 			: "d" (c)
 			: "d5", "d6", "d7", "a1", "a2", "a3", "a6", "memory");
 		n &= 7;
