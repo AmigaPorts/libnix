@@ -32,6 +32,7 @@ TARGET_TESTS = \
 	c99math \
 	fcmp \
 	fma \
+	fnmatch \
 	fread \
 	frexpl \
 	fstat \
@@ -42,9 +43,13 @@ TARGET_TESTS = \
 	mathfp \
 	multibyte \
 	printf \
+	printf_ld \
+	printf_s \
 	rint \
 	romtag \
 	round \
+	scanf_int \
+	scanf_round \
 	sscanf \
 	stack \
 	strto \
@@ -100,6 +105,9 @@ fma_LIBFLAGS = -I../sources/math/mathfp
 fma_CFLAGS = -fno-builtin
 fma_LIBS = -lm
 
+fnmatch_SRCS = ../sources/nix/extra/fnmatch.c
+fnmatch_CFLAGS = -D_GNU_SOURCE
+
 fread_SRCS = ../sources/nix/stdio/fread.c ../sources/nix/stdio/__srget.c
 
 frexpl_SRCS = ../sources/math/extra/frexpl.c
@@ -132,6 +140,14 @@ printf_SRCS = ../sources/nix/stdio/__vfprintf_total_size.c ../sources/nix/stdio/
 printf_LIBFLAGS = -DFULL_SPECIFIERS
 printf_LIBS = -lm
 
+printf_ld_SRCS = $(printf_SRCS) ../sources/nix/stdio/vsnprintf.c
+printf_ld_LIBFLAGS = -DFULL_SPECIFIERS
+printf_ld_LIBS = -lm
+
+printf_s_SRCS = $(printf_ld_SRCS) $(addprefix ../sources/nix/stdio/,__vfwprintf_total_size.c vswprintf.c)
+printf_s_LIBFLAGS = -DFULL_SPECIFIERS
+printf_s_LIBS = -lm
+
 rint_SRCS = $(addprefix ../sources/math/common/,s_llrint.c s_lrint.c sf_llrint.c sf_lrint.c)
 rint_CFLAGS = -fno-builtin
 rint_LIBS = -lm
@@ -158,6 +174,13 @@ vfwprintf_test_LIBS = -lm
 multibyte_SRCS = $(addprefix ../sources/nix/stdio/,mbtowc.c mblen.c mbstowcs.c wctomb.c wcstombs.c)
 
 sscanf_SRCS = $(addprefix ../sources/nix/stdio/,sscanf.c vsscanf.c vfscanf.c __srget.c)
+
+scanf_int_SRCS = $(sscanf_SRCS) $(addprefix ../sources/nix/stdio/,swscanf.c vswscanf.c vfwscanf.c fgetwc.c ungetwc.c)
+
+scanf_round_SRCS = $(sscanf_SRCS) ../sources/math/stdlib/strtod.c \
+	../sources/math/stdio/ami_scanf_math.c ../sources/math/stdio/ami_printf_math.c
+scanf_round_LIBFLAGS = -DFULL_SPECIFIERS
+scanf_round_LIBS = -lm
 
 stack_SRCS = ../sources/misc/swapstack.c
 

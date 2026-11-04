@@ -21,10 +21,11 @@
  * ========================================================================== */
 #include <stdlib.h>
 #include <stdarg.h>
+#include <stdio.h>
 #include <wchar.h>
 #include <string.h>
 
-#include "ami_printf_math.h"
+#include "../sources/math/stdio/ami_printf_math.h"
 
 /* Test counters for the wide framework execution */
 static int tests_run = 0;

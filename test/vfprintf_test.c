@@ -25,7 +25,7 @@
 #include <string.h>
 #include <errno.h>
 
-#include "ami_printf_math.h"
+#include "../sources/math/stdio/ami_printf_math.h"
 
 /* The snprintf() truncation tests truncate on purpose. */
 #pragma GCC diagnostic ignored "-Wformat-truncation"

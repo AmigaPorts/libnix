@@ -107,13 +107,16 @@ LDL __LDL_from_long_double(long double ld)
 	}
 
 	if (E == 0) {
-		/* Subnormal long double: normalize mantissa */
-		int exp = -16382;
+		/* Subnormal long double: normalize mantissa.  The 68881's
+		 * exponent field 0 is 2^-16383, not the 2^-16382 of x87, and
+		 * the normalized exponent can be below the bias: LDL's exp is
+		 * a long, so it must not go through an unsigned short. */
+		long exp = -16383;
 		while ((mant & 0x8000000000000000ULL) == 0) {
 			mant <<= 1;
 			exp--;
 		}
-		r.l.exp = (unsigned short) (exp + 16383);
+		r.l.exp = exp + 16383;
 		r.l.high = (unsigned long) (mant >> 32);
 		r.l.middle = (unsigned long) (mant & 0xFFFFFFFFUL);
 		r.l.low = 0UL;
@@ -279,7 +282,9 @@ LDL __LDL_mul(LDL a, LDL b)
 		}
 	}
 
-	r.l.exp     = (unsigned short) (exp_r + 16383);
+	/* not truncated: the callers turn an exponent out of range into
+	 * infinity or zero */
+	r.l.exp     = exp_r + 16383;
 	r.s.word[0] = m4;   /* bits 79..64 */
 	r.s.word[1] = m3;   /* bits 63..48 */
 	r.s.word[2] = m2;   /* bits 47..32 */
@@ -381,7 +386,7 @@ int __LDL_mul_10_extract(LDL *x)
 		}
 	} else {
 		/* exp < 0: value is < 1.  The mantissa has up to 4 bits of
-		 * headroom above hi's bit 31 (from the ×10 shift).  Shift
+		 * headroom above hi's bit 31 (from the x10 shift).  Shift
 		 * right by 4 to renormalize, and bump exp_raw by 4. */
 		lo  = (lo >> 4)  | (mid << 28);
 		mid = (mid >> 4) | (hi << 28);
@@ -410,7 +415,7 @@ int __LDL_mul_10_extract(LDL *x)
 		}
 
 		/* Renormalize: if hi's bit 31 is not set, shift left until it is.
-		 * This happens when exp was < 0 (value < 1) and the ×10 did not
+		 * This happens when exp was < 0 (value < 1) and the x10 did not
 		 * bring the value back into [1, 2).  Without this shift the
 		 * mantissa drifts right across iterations and the digit
 		 * extraction returns 0 for what should be significant digits. */
@@ -490,6 +495,14 @@ LDL pow10_ld(LDL result, int n)
 
 	if (n == 0)
 		return result;
+
+	/* The tables reach 10^8191.  Past that, the result for any value
+	 * below 2^96, like the ones scanf builds, is out of range of long
+	 * double anyway. */
+	if (n > 8191)
+		n = 8191;
+	else if (n < -8191)
+		n = -8191;
 
 	table = n < 0 ? pow10_neg_table : pow10_pos_table;
 	exp = (unsigned int) (n < 0 ? -n : n);

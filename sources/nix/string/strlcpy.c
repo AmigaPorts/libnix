@@ -3,17 +3,23 @@
 #include <string.h>
 
 size_t strlcpy(char *dst, const char *src, size_t dsize) {
-    const char * p = src;
-    if (dsize) {
-      while (dsize--) {
-        if ((*dst++ = *p++) == 0)
-            break;
-      } 
-      dst[-1] = 0;
-    }
+	const char *p = src;
 
-    while (*p)
-        ++p;
+	while (*p) {
+		++p;
+	}
+	size_t srclen = p - src;
 
-    return p - src;
+	if (dsize != 0) {
+		while (--dsize != 0) {
+			if ((*dst++ = *src++) == '\0') {
+				break;
+			}
+		}
+		if (dsize == 0) {
+			*dst = '\0';
+		}
+	}
+
+	return srclen;
 }

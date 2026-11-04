@@ -5,7 +5,7 @@
 
 wint_t fgetwc(FILE *fp) {
 	wint_t b;
-	if (fread((char *) &b, 1, sizeof(wint_t), fp))
+	if (fread((char *) &b, sizeof(wint_t), 1, fp) > 0)
 		return b;
-	return -1;
+	return WEOF;
 }

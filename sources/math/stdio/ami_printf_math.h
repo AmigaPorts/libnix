@@ -65,10 +65,10 @@ extern "C" {
 union _d_bits {
 	double d;
 	struct {
-		unsigned sign  : 1;
-		unsigned exp   : 11;  /* biased by 1023          */
-		unsigned frac0 : 20;  /* fraction bits 51..32    */
-		unsigned frac1 : 32;  /* fraction bits 31..0     */
+		unsigned sign :1;
+		unsigned exp :11; /* biased by 1023          */
+		unsigned frac0 :20; /* fraction bits 51..32    */
+		unsigned frac1 :32; /* fraction bits 31..0     */
 	} b;
 	unsigned u;
 };
@@ -91,18 +91,18 @@ union _d_bits {
 union _ld_bits {
 	long double ld;
 	struct {
-		unsigned sign : 1;
-		unsigned exp  : 15;
-		unsigned pad  : 16;   /* never interpret me */
-		unsigned long long mant : 64;
+		unsigned sign :1;
+		unsigned exp :15;
+		unsigned pad :16; /* never interpret me */
+		unsigned long long mant :64;
 	} b;
 };
 
 /*
- * Internal working format.  Signless, exponent in word 0, 96-bit mantissa
+ * Internal working format.  Signless, exponent in 32bit 0, 96-bit mantissa
  * in the three 32-bit words that follow:
  *
- *   l.exp    : 16-bit biased exponent (bias 16383)
+ *   l.exp    : biased exponent (bias 16383)
  *   l.high   : mantissa bits 95..64, integer bit explicit in b31
  *   l.middle : mantissa bits 63..32
  *   l.low    : mantissa bits 31..0
@@ -112,13 +112,13 @@ union _ld_bits {
  */
 typedef union _internal {
 	struct {
-		unsigned short exp;
-		unsigned long high;   /* bits 95..64 */
+		long exp;
+		unsigned long high; /* bits 95..64 */
 		unsigned long middle; /* bits 63..32 */
-		unsigned long low;    /* bits 31..0  */
+		unsigned long low; /* bits 31..0  */
 	} l;
 	struct {
-		unsigned short exp;
+		long exp;
 		unsigned short word[6];
 	} s;
 } LDL;
@@ -190,10 +190,10 @@ static inline int _ld_iszero(union _ld_bits u) {
  * Small enough to be inlined at every call site (S2 loops, S4 rounding).
  * ==================================================================== */
 static inline int __LDL_cmp_const(const LDL *a,
-                                  unsigned short bexp,
-                                  unsigned long  bhigh,
-                                  unsigned long  bmid,
-                                  unsigned long  blow)
+		unsigned short bexp,
+		unsigned long bhigh,
+		unsigned long bmid,
+		unsigned long blow)
 {
 	if (a->l.exp != bexp)
 		return (a->l.exp < bexp) ? -1 : 1;
@@ -266,7 +266,7 @@ LDL __LDL_mul(LDL a, LDL b);
 
 /* Fast multiply by 10 using the identity 10 = 8 + 2 = (1 + 1/4) * 8,
  * i.e. shifts and adds on the 96-bit mantissa, then bias the exponent by 3. */
-void __LDL_mul_10(LDL * x);
+void __LDL_mul_10(LDL *x);
 
 /* In-place multiply by 10 plus extraction of the leading base-10 digit.
  * Returns the digit [0..9]; x is updated to the fractional remainder,
@@ -282,8 +282,9 @@ LDL pow10_ld(LDL result, int n);
  * i.e. shifts and adds on the 96-bit mantissa, then bias the exponent by 3.
  * then the digit is added, 0 <= digit <= 9
  * The mantissa is not normalized, it's a 96 bit integer.
- * */
-void __LDL_mul_10_add(LDL *x, int digit);
+ * return 1 when added, 0 when saturated
+ */
+int __LDL_mul_10_add(LDL *x, int digit);
 
 /* In-place multiply by 16 and add a hex digit:
  *     *x = *x * 16 + digit,  0 <= digit <= 15
@@ -295,8 +296,9 @@ void __LDL_mul_10_add(LDL *x, int digit);
  * x * 16 is a pure left shift by 4, so there's no (x + x/4)-style
  * approximation and no truncation: the only loss is the carry out of
  * bit 95, which is the caller's saturation concern.
+ * return 1 when added, 0 when saturated
  */
-void __LDL_mul_16_add(LDL *x, int digit);
+int __LDL_mul_16_add(LDL *x, int digit);
 
 /* Normalize an LDL so the integer bit is at b95.
  *
@@ -309,6 +311,10 @@ void __LDL_normalize(LDL *x);
 
 /* Convert to double. */
 double __ldl_to_double(const LDL *lv);
+
+/* Round a normalized LDL once to the bits a float keeps, subnormals
+ * included, so that converting it to double and then to float is exact. */
+void __ldl_round_float(LDL *lv);
 
 /* Convert to long double. */
 long double __ldl_to_long_double(const LDL *lv);
