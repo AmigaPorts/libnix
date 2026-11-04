@@ -64,8 +64,10 @@
 
 # define CX_EOF         WEOF
 
+#ifdef FULL_SPECIFIERS
 #define __decimalpoint __wcdecimalpoint
 static wchar_t * __wcdecimalpoint = L".";
+#endif
 
 #else /* narrow */
 
