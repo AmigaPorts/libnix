@@ -8,6 +8,8 @@
 #ifndef __SCANF_IMPL_H
 #define __SCANF_IMPL_H
 
+#include "errno.h"
+
 #ifdef WIDE
 
 # include "wchar.h"
@@ -462,10 +464,9 @@ int VSCANF_NAME(FILE *stream, const TCHAR *format, va_list args) {
 			        }
 
 			        if (!has_hex) {
-			            /* "0x" with no hex digits: matching failure. */
+			            /* "0x" with no hex digits: yield 0, leave x. */
 			            PREV(c);
-			            has_digit = 0;
-			            size = 0;
+			            PREV(CX_x);
 			            goto float_done;
 			        }
 
@@ -545,11 +546,13 @@ int VSCANF_NAME(FILE *stream, const TCHAR *format, va_list args) {
 			    if (VAL(TOLOWER(c) == CX_e)) {
 			        int d;
 			        int e_sign = 1;
+			        int sign_char = 0;
 			        int has_ex_digit = 0;
 			        long ex = 0;
 
 			        NEXT(d);
 			        if (VAL(d == CX_minus || d == CX_plus)) {
+			        	sign_char = d;
 			            e_sign = (d == CX_minus) ? -1 : 1;
 			            NEXT(d);
 			        }
@@ -564,27 +567,37 @@ int VSCANF_NAME(FILE *stream, const TCHAR *format, va_list args) {
 
 			        PREV(d);
 			        if (!has_ex_digit) {
-			            /* "10e" or "10e+": matching failure. */
-			            has_digit = 0;
-			            size = 0;
-			        } else {
-			            dec_exp += (int)(e_sign * ex);
+			            /* "10e" or "10e+": keep stuff before. */
+			        	if (sign_char)
+			        		PREV(sign_char);
+			            PREV(CX_e);
+
+			        	goto float_done;
 			        }
+					dec_exp += (int)(e_sign * ex);
 			    } else {
 			        PREV(c);
 			    }
 
 			    /* Saturate / underflow checks on the total decimal exponent. */
 			    if (is_L) {
-			        if (dec_exp > 4932)
+			        if (dec_exp > 4932) {
 			            special = 1;
-			        else if (dec_exp < -4932 - 60)
+			            errno = ERANGE;
+			        }
+			        else if (dec_exp < -4932 - 60) {
 			            lv.l.exp = lv.l.high = lv.l.middle = lv.l.low = 0;
+			            errno = ERANGE;
+			        }
 			    } else {
-			        if (dec_exp > 308)
+			        if (dec_exp > 308) {
 			            special = 1;
-			        else if (dec_exp < -308 - 44)
+			            errno = ERANGE;
+			        }
+			        else if (dec_exp < -308 - 44) {
 			            lv.l.exp = lv.l.high = lv.l.middle = lv.l.low = 0;
+			            errno = ERANGE;
+			        }
 			    }
 
 			    if (!special && dec_exp && lv.l.high)
@@ -645,8 +658,8 @@ int VSCANF_NAME(FILE *stream, const TCHAR *format, va_list args) {
 					PREV(c);
 				break;
 			case CX_n:
-								if (!ignore)
-				*va_arg(args, int *) = incount;
+				if (!ignore)
+					*va_arg(args, int *) = incount;
 				size = 1;
 				break;
 			default: {
@@ -711,13 +724,13 @@ int VSCANF_NAME(FILE *stream, const TCHAR *format, va_list args) {
 					switch (subtype) {
 					case CX_l:
 						case CX_L:
-												*va_arg(args, unsigned long *) = v;
+							*va_arg(args, unsigned long *) = v;
 						break;
 					case CX_i:
-												*va_arg(args, unsigned int *) = v;
+							*va_arg(args, unsigned int *) = v;
 						break;
 					case CX_h:
-												*va_arg(args, unsigned short *) = v;
+							*va_arg(args, unsigned short *) = v;
 						break;
 					}
 				else {
@@ -729,13 +742,13 @@ int VSCANF_NAME(FILE *stream, const TCHAR *format, va_list args) {
 					switch (subtype) {
 					case CX_l:
 						case CX_L:
-												*va_arg(args, signed long *) = v2;
+							*va_arg(args, signed long *) = v2;
 						break;
 					case CX_i:
-												*va_arg(args, signed int *) = v2;
+							*va_arg(args, signed int *) = v2;
 						break;
 					case CX_h:
-												*va_arg(args, signed short *) = v2;
+							*va_arg(args, signed short *) = v2;
 						break;
 					}
 				}
