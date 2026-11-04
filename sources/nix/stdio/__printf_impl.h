@@ -154,6 +154,12 @@ extern unsigned __ulldivus(unsigned long long *llp, unsigned short n);
 } while(0)
 #define TOUT(c) *outp++ = (c)
 #define EOUT(c) *oute++ = (c)
+/* character i of a string of the other width, as a TCHAR */
+#if PRINTF_WIDE
+#define OTHER_CHAR(p, i) ((TCHAR)(unsigned char)((const char *)(p))[i])
+#else
+#define OTHER_CHAR(p, i) ((TCHAR)(unsigned char)((const wchar_t *)(p))[i])
+#endif
 
 /* ======================================================================
  * SECTION: scratch-buffer sizing
@@ -279,6 +285,7 @@ int PRINTF_FN(FILE *stream, const TCHAR *format, va_list args) {
 			TCHAR outbuffer[1];
 #endif
 			TCHAR *buffer2 = buffer;
+			char other_width = 0;
 			unsigned long size1 = 0, size2 = 0;
 			const TCHAR *ptr = format + 1;
 			unsigned short i, pad;
@@ -800,6 +807,7 @@ int PRINTF_FN(FILE *stream, const TCHAR *format, va_list args) {
 							    if (lu.b.exp == 0 && lu.b.mant != 0) {
 							        /* subnormal long double */
 							        exponent = -16382;
+							        /* drop the leading present bit, it's already printed. */
 							        unsigned long long frac = lu.b.mant << 1;
 							        for (int i = 0; i < 16; i++)
 							            buffer[pos++] = hexdigits[(frac >> (60 - 4 * i)) & 0xF];
@@ -950,7 +958,7 @@ int PRINTF_FN(FILE *stream, const TCHAR *format, va_list args) {
 							    xout = 1;
 							}
 							/* Thousands */
-							if (exponent > 999) {
+							if (xout || exponent > 999) {
 								int z = exponent / 1000;
 								TOUT(CX_0 + z);
 								exponent -= z * 1000;
@@ -1077,7 +1085,7 @@ int PRINTF_FN(FILE *stream, const TCHAR *format, va_list args) {
 			for (i = size2; i < preci; i++) /* extend to precision */
 				OUT(CX_0);
 			for (i = 0; i < size2; i++) /* Print the converted value. */
-				OUT(buffer2[i]);
+				OUT(other_width ? OTHER_CHAR(buffer2, i) : buffer2[i]);
 			if (flags & LALIGNFLAG) /* Pad right */
 				for (i = 0; i < pad; i++)
 					OUT(CX_space);
