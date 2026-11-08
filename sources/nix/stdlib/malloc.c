@@ -9,6 +9,7 @@
 #include <exec/memory.h>
 #include <proto/exec.h>
 #include <proto/dos.h>
+#include "spinlock.h"
 #include "stabs.h"
 
 //#define TRACK_AND_CHECK
@@ -138,7 +139,7 @@ void free(void * _p) {
 extern ULONG *__MEMORY_STEP;
 
 struct MinList __memorylist; /* memorylist (empty): free needs also access */
-struct SignalSemaphore  *__memsema;
+spinlock_t __memLock;
 void *malloc(size_t size)
 {
   struct MinNode *node;
@@ -149,13 +150,13 @@ void *malloc(size_t size)
 	  return 0;
 
   size = (size + 3) & ~3;
-
-  ObtainSemaphore(__memsema);
-  node=__memorylist.mlh_Head;
   size+=sizeof(ULONG);
+
+  __spinLock(&__memLock);
+  node=__memorylist.mlh_Head;
   while(node->mln_Succ) /* yet some memory in my list ? */
   {
-    if((a=Allocate((struct MemHeader *)node,size))!=NULL)
+    if((a=(ULONG*)Allocate((struct MemHeader *)node,size))!=NULL)
     { 
       *a++=size;
 	  goto end;
@@ -175,14 +176,14 @@ void *malloc(size_t size)
     b->mh_Free=b->mh_First->mc_Bytes=size2-sizeof(struct MemHeader);
     b->mh_Upper=(char *)b+size2;
     AddHead((struct List *)&__memorylist,&b->mh_Node);
-    a=Allocate(b,size); /* It has to work this time */
+    a=(ULONG*)Allocate(b,size); /* It has to work this time */
 	if (a != NULL) {
 		*a++=size;
 	}
   }
 
  end:
-  ReleaseSemaphore(__memsema);
+ __spinUnlock(&__memLock);
 
 //	printf("malloc    %08lx: %ld\n", a, size); fflush(stdout);
 
@@ -197,7 +198,7 @@ void free(void *ptr) {
 		return;
 	}
 
-	ObtainSemaphore(__memsema);
+	__spinLock(&__memLock);
 //  printf("free      %08x: %8d\n", ptr, ((ULONG *)ptr)[-1]); fflush(stdout);
 
 	a = (struct MemHeader *) __memorylist.mlh_Head;
@@ -221,7 +222,7 @@ void free(void *ptr) {
 //		  printf("FreeMem(%08lx, %ld)\n", a, (char *)a->mh_Upper-(char *)a);
 		FreeMem(a, (char * )a->mh_Upper - (char * )a);
 	}
-	ReleaseSemaphore(__memsema);
+	 __spinUnlock(&__memLock);
 }
 
 
@@ -233,8 +234,6 @@ void free(void *ptr) {
 void __initmalloc(void)
 {
   NEWLIST(&__memorylist);
-  __memsema = AllocMem(sizeof(struct SignalSemaphore), MEMF_PUBLIC | MEMF_CLEAR);
-  InitSemaphore(__memsema);
 }
 
 void __exitmalloc(void)
@@ -243,7 +242,6 @@ void __exitmalloc(void)
 //	  printf("FreeMem(%08lx, %ld)\n", a, (char *)a->mh_Upper-(char *)a);
     FreeMem(a,(char *)a->mh_Upper-(char *)a); /* free all memory */
   }
-  FreeMem(__memsema, sizeof(struct SignalSemaphore));
 }
 
 ADD2EXIT(__exitmalloc,-50);
