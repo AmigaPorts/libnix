@@ -669,7 +669,8 @@ if (!ignore)
 					type = CX_x;
 				}
 
-				if (VAL((c == CX_minus && type != CX_u) || c == CX_plus)) {
+				/* %u takes a sign too, as strtoul() does */
+				if (VAL(c == CX_minus || c == CX_plus)) {
 					min = c;
 					NEXT(c);
 				}
