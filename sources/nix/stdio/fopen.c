@@ -11,24 +11,33 @@
 
 #include "__filenode.h"
 extern struct MinList ___filelist;
+extern rspinlock_t __stdLock;
 
-FILE *fopen(const char *filename,const char *mode)
-{ struct filenode *node = (struct filenode *)calloc(1,sizeof(*node));
-  if(node!=NULL)
-  { if((node->theFILE._bf._base=(unsigned char *)malloc(*__BUFSIZE))!=NULL)
-    { node->theFILE._bf._size=*__BUFSIZE;
-      node->theFILE._flags|=__SMBF|__SLBF; /* Buffer is malloc'ed */
-      node->theFILE.file = -1;
-      if(freopen(filename,mode,&node->theFILE)!=NULL)
-      { AddHead((struct List *)&___filelist,(struct Node *)&node->node);
-        return &node->theFILE; }
-      free(node->theFILE._bf._base);
-    }
-    else
-      errno=ENOMEM;
-    free(node);
-  }
-  else
-    errno=ENOMEM;
-  return NULL;
+FILE* fopen(const char *filename, const char *mode)
+{
+	struct filenode *node = (struct filenode*) calloc(1, sizeof(*node));
+
+	if (node != NULL)
+	{
+		if ((node->theFILE._bf._base = (unsigned char*) malloc(*__BUFSIZE)) != NULL)
+		{
+			node->theFILE._bf._size = *__BUFSIZE;
+			node->theFILE._flags |= __SMBF | __SLBF; /* Buffer is malloc'ed */
+			node->theFILE.file = -1;
+			if (freopen(filename, mode, &node->theFILE) != NULL)
+			{
+				__recursiveSpinLock(&__stdLock);
+				AddHead((struct List*) &___filelist, (struct Node*) &node->node);
+				__recursiveSpinUnlock(&__stdLock);
+				return &node->theFILE;
+			}
+			free(node->theFILE._bf._base);
+		}
+		else
+			errno = ENOMEM;
+		free(node);
+	}
+	else
+		errno = ENOMEM;
+	return NULL;
 }
