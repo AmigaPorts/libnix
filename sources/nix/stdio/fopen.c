@@ -20,7 +20,9 @@ FILE *fopen(const char *filename,const char *mode)
       node->theFILE._flags|=__SMBF|__SLBF; /* Buffer is malloc'ed */
       node->theFILE.file = -1;
       if(freopen(filename,mode,&node->theFILE)!=NULL)
-      { AddHead((struct List *)&___filelist,(struct Node *)&node->node);
+      { __GLOBAL_STDIO_LOCK;
+        AddHead((struct List *)&___filelist,(struct Node *)&node->node);
+        __GLOBAL_STDIO_UNLOCK;
         return &node->theFILE; }
       free(node->theFILE._bf._base);
     }
