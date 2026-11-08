@@ -53,6 +53,7 @@ TARGET_TESTS = \
 	scanf_round \
 	sscanf \
 	stack \
+	strcmp \
 	strto \
 	sysinfo \
 	vfprintf_test \
@@ -187,6 +188,9 @@ scanf_round_LIBFLAGS = -DFULL_SPECIFIERS
 scanf_round_LIBS = -lm
 
 stack_SRCS = ../sources/misc/swapstack.c
+
+strcmp_SRCS = ../sources/nix/string/strcmp.c
+strcmp_CFLAGS = -fno-builtin
 
 strto_SRCS = $(addprefix ../sources/nix/stdlib/,strtol.c strtoul.c strtoll.c strtoull.c wcstol.c)
 strto_CFLAGS = -fno-builtin
