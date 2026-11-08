@@ -277,8 +277,8 @@ int fclose(FILE *stream) {
 
 	node = (struct filenode *) ((struct MinNode *) stream - 1);
 	Remove((struct Node * )&node->node);
-	free(node);
 	__STDIO_UNLOCK(stream);
+	free(node);
 	return retval;
 }
 
