@@ -6,7 +6,7 @@ int __fflush(FILE *stream);
 extern rspinlock_t __stdLock;
 
 int ungetc(int c, FILE *stream) {
-	__recursiveSpinLock(&__stdLock);
+	__STDIO_LOCK(stream);
 	int r = EOF;
 	do { // while(0)
 		if (c == EOF)
@@ -41,6 +41,6 @@ int ungetc(int c, FILE *stream) {
 		stream->_r++;
 		r = *--stream->_p = c;
 	} while (0);
-	__recursiveSpinUnlock(&__stdLock);
+	__STDIO_UNLOCK(stream);
 	return r;
 }

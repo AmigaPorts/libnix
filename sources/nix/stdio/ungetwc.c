@@ -10,7 +10,7 @@ wint_t ungetwc(wint_t c, FILE *stream) {
 	wint_t cc;
 	wint_t r = (wint_t) EOF;
 
-	__recursiveSpinLock(&__stdLock);
+	__STDIO_LOCK(stream);
 	do { // while (0);
 		if (c == (wint_t) EOF)
 			break;
@@ -50,6 +50,6 @@ wint_t ungetwc(wint_t c, FILE *stream) {
 		r = c;
 	}
 	while (0);
-	__recursiveSpinUnlock(&__stdLock);
+	__STDIO_UNLOCK(stream);
 	return r;
 }
