@@ -1041,8 +1041,15 @@ int PRINTF_FN(FILE *stream, const TCHAR *format, va_list args) {
 				size2 = 1;
 				preci = 0;
 				break;
-			case CX_n:
-				*va_arg(args, int*) = outcount;
+			case CX_n: /* at the size of the length modifier */
+				if (subtype == CX_i)
+					*va_arg(args, char*) = outcount;
+				else if (subtype == CX_h)
+					*va_arg(args, short*) = outcount;
+				else if (subtype == CX_m || subtype == CX_j)
+					*va_arg(args, long long*) = outcount;
+				else
+					*va_arg(args, long*) = outcount;
 				width = preci = 0;
 				break;
 			default:

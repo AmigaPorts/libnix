@@ -44,6 +44,7 @@ TARGET_TESTS = \
 	memset \
 	multibyte \
 	printf \
+	printf_fmt \
 	printf_ld \
 	printf_s \
 	rint \
@@ -149,6 +150,10 @@ printf_LIBS = -lm
 printf_ld_SRCS = $(printf_SRCS) ../sources/nix/stdio/vsnprintf.c
 printf_ld_LIBFLAGS = -DFULL_SPECIFIERS
 printf_ld_LIBS = -lm
+
+printf_fmt_SRCS = $(printf_ld_SRCS) $(addprefix ../sources/nix/stdio/,__vfwprintf_total_size.c vswprintf.c)
+printf_fmt_LIBFLAGS = -DFULL_SPECIFIERS
+printf_fmt_LIBS = -lm
 
 printf_s_SRCS = $(printf_ld_SRCS) $(addprefix ../sources/nix/stdio/,__vfwprintf_total_size.c vswprintf.c)
 printf_s_LIBFLAGS = -DFULL_SPECIFIERS
