@@ -16,6 +16,7 @@
 # include "wctype.h"
 
 # define TCHAR          wchar_t
+# define UTCHAR          wchar_t
 # define GETC(s)        getwc(s)
 # define UNGETC(c,s)    ungetwc((c), (s))
 # define ISDIGIT(c)     iswdigit(c)
@@ -45,6 +46,7 @@
 # define CX_l           L'l'
 # define CX_L           L'L'
 # define CX_m           L'm'
+# define CX_M           L'M'
 # define CX_n           L'n'
 # define CX_o           L'o'
 # define CX_p           L'p'
@@ -74,13 +76,14 @@ static wchar_t * __wcdecimalpoint = L".";
 #else /* narrow */
 
 # define TCHAR          char
+# define UTCHAR         unsigned char
 # define GETC(s)        getc(s)
 # define UNGETC(c,s)    ungetc((c), (s))
-# define ISDIGIT(c)     isdigit(c)
-# define ISXDIGIT(c)    isxdigit(c)
-# define ISSPACE(c)     isspace(c)
-# define TOLOWER(c)     tolower(c)
-# define TOUPPER(c)     toupper(c)
+# define ISDIGIT(c)     isdigit((unsigned char)(c))
+# define ISXDIGIT(c)    isxdigit((unsigned char)(c))
+# define ISSPACE(c)     isspace((unsigned char)(c))
+# define TOLOWER(c)     tolower((unsigned char)(c))
+# define TOUPPER(c)     toupper((unsigned char)(c))
 
 # define CX_0           '0'
 # define CX_1           '1'
@@ -103,6 +106,7 @@ static wchar_t * __wcdecimalpoint = L".";
 # define CX_l           'l'
 # define CX_L           'L'
 # define CX_m           'm'
+# define CX_M           'M'
 # define CX_n           'n'
 # define CX_o           'o'
 # define CX_p           'p'
@@ -206,18 +210,23 @@ int VSCANF_NAME(FILE *stream, const TCHAR *format, va_list args) {
 			const TCHAR *ptr = format + 1;
 			size_t i;
 
+			if (*ptr == CX_star) {
+			    ignore = 1;
+			    ++ptr;
+			}
+
 			if (ISDIGIT(*ptr)) {
 				width = 0;
 				while (ISDIGIT(*ptr))
 					width = width * 10 + (*ptr++ - CX_0);
 			}
 
-			while (*ptr == CX_h || *ptr == CX_l || *ptr == CX_L || *ptr == CX_star) {
-				if (*ptr == CX_star)
-					ignore = 1;
-				else
-					subtype = *ptr;
-				ptr++;
+			while (*ptr == CX_h || *ptr == CX_l || *ptr == CX_L) {
+				subtype = *ptr++;
+			    if (*ptr == subtype && subtype != CX_L) {
+			        ++ptr;
+			        subtype = (subtype == CX_h) ? CX_c : CX_m;
+			    }
 			}
 
 			type = *ptr++;
@@ -236,22 +245,22 @@ int VSCANF_NAME(FILE *stream, const TCHAR *format, va_list args) {
 				wchar_t *wp = NULL;
 				char * cp = NULL;
 				int read = 0;
-				unsigned char tab[32], a, b;
+				UTCHAR tab[33], a, b;
 				char circflag = 0;
 
 				if (*ptr == CX_caret) {
 					circflag = 1;
 					ptr++;
 				}
-				for (i = 0; i < sizeof(tab); i++)
+				for (i = 0; i < sizeof(tab)/sizeof(tab[0]); i++)
 					tab[i] = circflag ? 255 : 0;
 				for (;;) {
 					if (!*ptr)
 						break;
-					a = b = (unsigned char) *ptr++;
+					a = b = (UTCHAR) *ptr++;
 					if (*ptr == CX_minus && ptr[1] && ptr[1] != CX_rbracket) {
 						ptr++;
-						b = (unsigned char) *ptr++;
+						b = (UTCHAR) *ptr++;
 					}
 					for (i = a; i <= b; i++)
 						if (circflag)
@@ -310,7 +319,8 @@ int VSCANF_NAME(FILE *stream, const TCHAR *format, va_list args) {
 				if (subtype == CX_l) {
 					if (!ignore)
 						wp = va_arg(args, wchar_t *);
-					while (read++ < width && VAL(c != CX_EOF && !ISSPACE(c))) {
+					while (read++ < width &&
+					       VAL(c != CX_EOF && (type == CX_c || !ISSPACE(c)))) {
 						if (!ignore)
 							*wp++ = (wchar_t) c;
 						NEXT(c);
@@ -318,7 +328,8 @@ int VSCANF_NAME(FILE *stream, const TCHAR *format, va_list args) {
 				} else {
 					if (!ignore)
 						cp = va_arg(args, char *);
-					while (read++ < width && VAL(c != CX_EOF && !ISSPACE(c))) {
+					while (read++ < width &&
+					       VAL(c != CX_EOF && (type == CX_c || !ISSPACE(c)))) {
 						if (!ignore)
 							*cp++ = (char) c;
 						NEXT(c);
@@ -338,9 +349,14 @@ int VSCANF_NAME(FILE *stream, const TCHAR *format, va_list args) {
 				break;
 			}
 #ifdef FULL_SPECIFIERS
+			case CX_a:
+			case CX_A:
 			case CX_e:
+			case CX_E:
 			case CX_f:
-			case CX_g: {
+			case CX_F:
+			case CX_g:
+			case CX_G: {
 			    LDL lv = { .l = { 0, 0, 0, 0 } };
 			    /* dec_exp maintains the invariant: true value = lv * 10^dec_exp.
 			     * Updated locally at each absorption decision:
@@ -351,7 +367,6 @@ int VSCANF_NAME(FILE *stream, const TCHAR *format, va_list args) {
 			     *   explicit e/E exponent:               += signed exponent (applied once)
 			     */
 			    int dec_exp = 0;
-			    int leading_digit = 0;
 			    int min = 0;
 			    int sign = 1;
 			    int has_digit = 0;
@@ -359,6 +374,7 @@ int VSCANF_NAME(FILE *stream, const TCHAR *format, va_list args) {
 			    int special = 0;   /* 0 = finite, 1 = inf, 2 = nan, 3 = +/-0.0 */
 			    int bin_exp = 0;
 			    int has_non_zero = 0;
+			    unsigned int sticky = 0;
 
 			    if (VAL(c == CX_minus || c == CX_plus)) {
 			        min = c;
@@ -407,8 +423,6 @@ int VSCANF_NAME(FILE *stream, const TCHAR *format, va_list args) {
 			        if (!__LDL_mul_10_add(&lv, v))
 			            ++dec_exp;          /* dropped integer digit: value 10x larger */
 			        has_digit = 1;
-			        if (!leading_digit)
-			            leading_digit = v;
 			        NEXT(c);
 			    }
 
@@ -485,8 +499,8 @@ int VSCANF_NAME(FILE *stream, const TCHAR *format, va_list args) {
 			            }
 			            while (VAL(ISDIGIT(d))) {
 			                pexp = pexp * 10 + (d - CX_0);
-			                if (pexp > 16383)
-			                    pexp = 16383; /* large enough */
+			                if (pexp > 32768)
+			                    pexp = 32768; /* large enough */
 			                has_pexp = 1;
 			                NEXT(d);
 			            }
@@ -518,10 +532,10 @@ int VSCANF_NAME(FILE *stream, const TCHAR *format, va_list args) {
 			        NEXT(c);
 			        while (VAL(ISDIGIT(c))) {
 			            int v = c - CX_0;
-			            if (__LDL_mul_10_add(&lv, v))
+			            if (__LDL_mul_10_add(&lv, v)) {
 			                --dec_exp;      /* absorbed: one more decimal place in lv */
-			            if (!leading_digit)
-			                leading_digit = v;
+			                sticky |= v;
+			            }
 			            has_digit = 1;
 			            NEXT(c);
 			        }
@@ -559,8 +573,8 @@ int VSCANF_NAME(FILE *stream, const TCHAR *format, va_list args) {
 
 			        while (VAL(ISDIGIT(d))) {
 			            ex = ex * 10 + (d - CX_0);
-			            if (ex > 16383)
-			                ex = 16383;     /* clamp magnitude only, before sign */
+			            if (ex > 32768)
+			                ex = 32768;     /* clamp magnitude only, before sign */
 			            has_ex_digit = 1;
 			            NEXT(d);
 			        }
@@ -578,30 +592,29 @@ int VSCANF_NAME(FILE *stream, const TCHAR *format, va_list args) {
 			    } else {
 			        PREV(c);
 			    }
+			    if (dec_exp && lv.l.high)
+			        lv = pow10_ld(lv, dec_exp); /* apply decimal scale */
 
-			    /* Saturate / underflow checks on the total decimal exponent. */
+			    /* Saturate / underflow checks on the total binary exponent. */
 			    if (is_L) {
-			        if (dec_exp > 4932) {
+			        if (lv.l.exp > 16383 + 16383) {
 			            special = 1;
 			            errno = ERANGE;
 			        }
-			        else if (dec_exp < -4932 - 60) {
+			        else if (lv.l.exp < 16383 - 16445) {
 			            lv.l.exp = lv.l.high = lv.l.middle = lv.l.low = 0;
 			            errno = ERANGE;
 			        }
 			    } else {
-			        if (dec_exp > 308) {
+			    	if (lv.l.exp > 16383 + 1023) {
 			            special = 1;
 			            errno = ERANGE;
 			        }
-			        else if (dec_exp < -308 - 44) {
+			        else if (lv.l.exp < 16383 - 1076) {
 			            lv.l.exp = lv.l.high = lv.l.middle = lv.l.low = 0;
 			            errno = ERANGE;
 			        }
 			    }
-
-			    if (!special && dec_exp && lv.l.high)
-			        lv = pow10_ld(lv, dec_exp); /* apply decimal scale */
 
 			float_done:
 			    if (!ignore && has_digit) {
@@ -622,29 +635,25 @@ int VSCANF_NAME(FILE *stream, const TCHAR *format, va_list args) {
 			                *va_arg(args, long double *) = (long double)NAN;
 			            else
 			                *va_arg(args, double *) = (double)NAN;
-			        } else if (special == 3) {
-			            if (is_L) {
-			                long double ld = sign < 0 ? -0.0L : 0.0L;
-			                *va_arg(args, long double *) = ld;
-			            } else {
-			                double d = sign < 0 ? -0.0 : 0.0;
-			                *va_arg(args, double *) = d;
-			            }
 			        } else {
 			            if (is_L) {
-			                long double ld = __ldl_to_long_double(&lv);
+			                long double ld = __LDL_to_long_double(&lv, sticky);
 			                if (sign < 0)
 			                    ld = -ld;
 			                *va_arg(args, long double *) = ld;
 			            } else {
-			                double d;
 			                /* a float is rounded once, not through double */
-			                if (subtype != CX_l)
-			                    __ldl_round_float(&lv);
-			                d = __ldl_to_double(&lv);
-			                if (sign < 0)
-			                    d = -d;
-			                *va_arg(args, double *) = d;
+			                if (subtype == CX_l) {
+								double d = __LDL_to_double(&lv, sticky);
+								if (sign < 0)
+									d = -d;
+								*va_arg(args, double *) = d;
+			                } else {
+			                	float f = __LDL_to_float(&lv, sticky);
+			                	if (sign < 0)
+									f = -f;
+			                	*va_arg(args, float *) = f;
+			                }
 			            }
 			        }
 			        blocks++;
@@ -663,7 +672,7 @@ int VSCANF_NAME(FILE *stream, const TCHAR *format, va_list args) {
 				size = 1;
 				break;
 			default: {
-				unsigned long v = 0;
+				unsigned long long v = 0;
 				int base;
 				int min = 0;
 
@@ -675,7 +684,7 @@ int VSCANF_NAME(FILE *stream, const TCHAR *format, va_list args) {
 					type = CX_x;
 				}
 
-				if (VAL((c == CX_minus && type != CX_u) || c == CX_plus)) {
+				if (VAL(c == CX_minus || c == CX_plus)) {
 					min = c;
 					NEXT(c);
 				}
@@ -722,19 +731,26 @@ int VSCANF_NAME(FILE *stream, const TCHAR *format, va_list args) {
 
 				if (type == CX_u)
 					switch (subtype) {
+					case CX_m:
+					case CX_M:
+					    *va_arg(args, unsigned long long *) = v;
+					    break;
 					case CX_l:
-						case CX_L:
-							*va_arg(args, unsigned long *) = v;
-						break;
-					case CX_i:
-							*va_arg(args, unsigned int *) = v;
-						break;
+					case CX_L:
+					    *va_arg(args, unsigned long *) = v;
+					    break;
+					case CX_c:
+					    *va_arg(args, unsigned char *) = v;
+					    break;
 					case CX_h:
-							*va_arg(args, unsigned short *) = v;
-						break;
+					    *va_arg(args, unsigned short *) = v;
+					    break;
+					default: /* no length modifier: int */
+					    *va_arg(args, unsigned int *) = v;
+					    break;
 					}
 				else {
-					signed long v2;
+					unsigned long v2;
 					if (min == CX_minus)
 						v2 = -v;
 					else
@@ -742,13 +758,13 @@ int VSCANF_NAME(FILE *stream, const TCHAR *format, va_list args) {
 					switch (subtype) {
 					case CX_l:
 						case CX_L:
-							*va_arg(args, signed long *) = v2;
+							*va_arg(args, unsigned long *) = v2;
 						break;
 					case CX_i:
-							*va_arg(args, signed int *) = v2;
+							*va_arg(args, unsigned int *) = v2;
 						break;
 					case CX_h:
-							*va_arg(args, signed short *) = v2;
+							*va_arg(args, unsigned short *) = v2;
 						break;
 					}
 				}

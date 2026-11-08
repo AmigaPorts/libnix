@@ -24,9 +24,14 @@
  *      (union _ld_bits, used by the classifiers)
  *
  *    Internal working format, sign stripped, 96-bit mantissa:
- *      word  0    : 16-bit biased exponent (bias 16383)
- *      words 1-3  : 96-bit mantissa, integer bit explicit in b95
+ *      l.exp    : signed 32-bit exponent, normally biased by 16383
+ *      l.high   : mantissa bits 95..64, integer bit explicit in b31
+ *      l.middle : mantissa bits 63..32
+ *      l.low    : mantissa bits 31..0
  *      (LDL, used by all arithmetic and digit extraction)
+ *
+ *    The exponent is signed because normalizing native subnormals can
+ *    produce values below zero.
  *
  * --------------------------------------------------------------------------
  *  Copyright and license
@@ -77,7 +82,7 @@ union _d_bits {
  * Native m68k extended precision ("long double"), 12 bytes (2 + 2 + 8):
  *
  *   bytes 0-1  : s eeeeeeeeeeeeeee      sign:1, exp:15 (bias 16383)
- *   bytes 2-3  : <pad>                  hardware never reads these bits
+ *   bytes 2-3  : <pad>                  ignored by the FPU
  *   bytes 4-11 : 64-bit mantissa, integer bit explicit in b63
  *
  * Special patterns:
@@ -99,16 +104,16 @@ union _ld_bits {
 };
 
 /*
- * Internal working format.  Signless, exponent in 32bit 0, 96-bit mantissa
- * in the three 32-bit words that follow:
+ * Internal working format. Signless, with a signed 32-bit exponent
+ * followed by a 96-bit mantissa in three 32-bit words:
  *
- *   l.exp    : biased exponent (bias 16383)
+ *   l.exp    : exponent (bias 16383 for normal values)
  *   l.high   : mantissa bits 95..64, integer bit explicit in b31
  *   l.middle : mantissa bits 63..32
  *   l.low    : mantissa bits 31..0
  *
- * The `s` view exposes the same storage as six 16-bit words, for the
- * multiply routines that emit 16-bit limbs.
+ * The `s` view exposes the mantissa as six 16-bit words, for the
+ * multiply routines that operate on 16-bit limbs.
  */
 typedef union _internal {
 	struct {
@@ -217,10 +222,11 @@ static inline int __LDL_cmp_10(const LDL *a) {
 	return __LDL_cmp_const(a, 0x4002, 0xA0000000UL, 0x00000000UL, 0x00000000UL);
 }
 
-/* Compare against 5.0, with a sub-LSB epsilon that absorbs the truncation
- * drift accumulated by the multiply/scaling steps.  The threshold is
- * 0x9FFFFFFF_FFFF0000_00000000 instead of the exact 0xA0000000_00000000_00000000,
- * so exact half-way ties still round up.
+/* Compare against a slightly reduced threshold for 5.0.
+ *
+ * The threshold is 0x9FFFFFFF_FFFFFF00_00000000 instead of the
+ * exact 0xA0000000_00000000_00000000. The small epsilon compensates
+ * for truncation drift accumulated during multiplication and scaling.
  */
 static inline int __LDL_cmp_5(const LDL *a) {
 	return __LDL_cmp_const(a, 0x4001, 0x9fffffffUL, 0xffffff00UL, 0x00000000UL);
@@ -239,11 +245,9 @@ static inline int __LDL_cmp_1(const LDL *a) {
 /* ======================================================================
  * SECTION 4: out-of-line numeric core (defined in ami_printf_math.c)
  *
- * These are deliberately NOT inline: each body is tens of instructions and
- * several are called from loops.  A single external copy keeps the two
- * printf engines (narrow and wide) from duplicating ~300 instructions each
- * in their .text.  The call/return overhead is a few percent of the body
- * cost, which is invisible next to the 96-bit arithmetic being performed.
+ * These routines are kept out of line so the narrow and wide printf
+ * engines share a single implementation instead of duplicating the
+ * arithmetic code in their respective text sections.
  * ==================================================================== */
 
 /* Unpack a binary64 into the local 96-bit LDL view.  Handles denormals by
@@ -258,14 +262,22 @@ LDL __LDL_from_double(double d);
  * the 96-bit LDL are always zero after the shift. */
 LDL __LDL_from_long_double(long double ld);
 
-/* Full 96x96 -> 192-bit mantissa multiply, normalize to integer-bit-at-95,
- * add unbiased exponents, round to nearest-even at the 96-bit boundary.
- * Inputs are assumed normal and signless; zero is handled; no subnormal or
- * overflow generation.
+/*
+ * Multiply two 96-bit mantissas, normalize the result to an
+ * integer bit at position 95, and combine the exponents.
  *
- * Cannot use the FPU: the FPU only does 80-bit extended, and the point of
- * the 96-bit working format is to keep enough precision for the extraction
- * chain not to drift by a few ULPs at the last digit. */
+ * The multiplication precision is target-dependent:
+ *   - 68000: 80-bit result (5 x 16-bit limbs)
+ *   - 68020 and later: 96-bit result (6 x 16-bit limbs)
+ *
+ * The 68000 can also use the 96-bit implementation by setting N to 6,
+ * at the cost of 11 additional MULU.W instructions per multiplication.
+ *
+ * Inputs are assumed normal and signless; zero is handled. No subnormal
+ * or overflow generation is performed.
+ *
+ * Integer arithmetic is used throughout; no FPU operations are needed.
+ */
 LDL __LDL_mul(LDL a, LDL b);
 
 /* Fast multiply by 10 using the identity 10 = 8 + 2 = (1 + 1/4) * 8,
@@ -282,25 +294,29 @@ int __LDL_mul_10_extract(LDL *x);
  * Positive n uses the 10^(+2^bit) table; negative n the 10^(-2^bit) one. */
 LDL pow10_ld(LDL result, int n);
 
-/* Fast multiply by 10 using the identity 10 = 8 + 2 = (1 + 1/4) * 8,
- * i.e. shifts and adds on the 96-bit mantissa, then bias the exponent by 3.
- * then the digit is added, 0 <= digit <= 9
- * The mantissa is not normalized, it's a 96 bit integer.
- * return 1 when added, 0 when saturated
+/*
+ * Treat the mantissa as a plain 96-bit unsigned integer and perform:
+ *
+ *     *x = *x * 10 + digit,  0 <= digit <= 9
+ *
+ * The exponent is not modified. The result is not normalized; the
+ * caller can normalize it afterwards using __LDL_normalize().
+ *
+ * Returns 1 if the digit was added successfully, 0 if the operation
+ * would overflow the 96-bit mantissa.
  */
 int __LDL_mul_10_add(LDL *x, int digit);
 
-/* In-place multiply by 16 and add a hex digit:
+/*
+ * Treat the mantissa as a plain 96-bit unsigned integer and perform:
+ *
  *     *x = *x * 16 + digit,  0 <= digit <= 15
  *
- * Like __LDL_mul_10_add: the mantissa is treated as a plain 96-bit
- * unsigned integer, the exponent is not touched (stays 0 from the
- * caller's initializer), and __LDL_normalize sets it at the end.
+ * The exponent is not modified and the result is not normalized.
+ * Multiplication by 16 is a pure left shift by four bits.
  *
- * x * 16 is a pure left shift by 4, so there's no (x + x/4)-style
- * approximation and no truncation: the only loss is the carry out of
- * bit 95, which is the caller's saturation concern.
- * return 1 when added, 0 when saturated
+ * Returns 1 if the digit was added successfully, 0 if the operation
+ * would overflow the 96-bit mantissa.
  */
 int __LDL_mul_16_add(LDL *x, int digit);
 
@@ -313,15 +329,14 @@ int __LDL_mul_16_add(LDL *x, int digit);
  */
 void __LDL_normalize(LDL *x);
 
-/* Convert to double. */
-double __ldl_to_double(const LDL *lv);
+/* Convert to float. sticky != 0 if there are more fractional digits != 0 */
+float __LDL_to_float(const LDL *lv, unsigned int sticky);
 
-/* Round a normalized LDL once to the bits a float keeps, subnormals
- * included, so that converting it to double and then to float is exact. */
-void __ldl_round_float(LDL *lv);
+/* Convert to double. sticky != 0 if there are more fractional digits != 0 */
+double __LDL_to_double(const LDL *lv, unsigned int sticky);
 
-/* Convert to long double. */
-long double __ldl_to_long_double(const LDL *lv);
+/* Convert to long double. sticky != 0 if there are more fractional digits != 0 */
+long double __LDL_to_long_double(const LDL *lv, unsigned int sticky);
 
 /* ======================================================================
  * SECTION 5: shared constants and tuning knobs

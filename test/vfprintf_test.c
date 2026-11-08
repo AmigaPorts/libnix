@@ -508,6 +508,11 @@ int main(int argc, char **argv) {
 		TESTFMT("a 0.1|0x1.999999999999ap-4|", "%a", 0.1);
 		/* with precision */
 		TESTFMT("a 1.0 prec2|0x1.00p+0|", "%.2a", 1.0);
+		TESTFMT("a 1.0 prec2|0x1.02p+0|", "%.2a", 1.006);
+		TESTFMT("a round down|0x1.00p+0|", "%.2a", 1.001);
+		TESTFMT("a round up|0x1.02p+0|", "%.2a", 1.009);
+		TESTFMT("a round carry|0x1.00p+1|", "%.2a", 1.999);
+		TESTFMT("a no precision|0x1.0189374bc6a7fp+0|", "%a", 1.006);
 		TESTFMT("a 3.14 prec|0x1.91eb851eb851fp+1|", "%.13a", 3.14);
 		TESTFMT("A 1.75|0X1.CP+0|", "%A", 1.75);
 		TESTFMT("A 0.1|0X1.999999999999AP-4|", "%A", 0.1);

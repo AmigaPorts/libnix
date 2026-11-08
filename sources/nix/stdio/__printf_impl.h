@@ -46,6 +46,7 @@
   #include <wchar.h>
   #include <wctype.h>
   #define TCHAR           wchar_t
+  #define UTCHAR          wchar_t
   #define PRINTF_FN       __vfwprintf_total_size
   #define PRINTF_ISDIGIT  iswdigit
   #define PRINTF_STRLEN   wcslen
@@ -59,6 +60,7 @@
 #else
   #include <string.h>
   #define TCHAR           char
+  #define UTCHAR          unsigned char
   #define PRINTF_FN       __vfprintf_total_size
   #define PRINTF_ISDIGIT  isdigit
   #define PRINTF_STRLEN   strlen
@@ -264,8 +266,8 @@ int PRINTF_FN(FILE *stream, const TCHAR *format, va_list args) {
 		 * A '%' conversion begins here.
 		 * ========================================================== */
 		{
-			short width = 0;
-			unsigned short preci = 0x7fff; /* Sentinel value: no precision was specified. */
+			int width = 0;
+			int preci = -1; /* Sentinel value: no precision was specified. */
 			short flags = 0;
 			TCHAR type;
 			TCHAR orig_type;
@@ -288,7 +290,7 @@ int PRINTF_FN(FILE *stream, const TCHAR *format, va_list args) {
 			char other_width = 0;
 			unsigned long size1 = 0, size2 = 0;
 			const TCHAR *ptr = format + 1;
-			unsigned short i, pad;
+			int i, pad;
 			/* ---- 1. flags -------------------------------------------
 			 * Scan flagc[] repeatedly until a full pass finds no match
 			 * (loop condition becomes false when i reaches the size).
@@ -308,11 +310,11 @@ int PRINTF_FN(FILE *stream, const TCHAR *format, va_list args) {
 				a = va_arg(args, signed int);
 				if (a < 0) { /* negative => left align   */
 					flags |= LALIGNFLAG;
-					width = -a;
+					width = (a == INT_MIN) ? INT_MAX : -a;
 				} else
 					width = a;
 			} else {
-				while (PRINTF_ISDIGIT(*ptr))
+				while (PRINTF_ISDIGIT((UTCHAR)*ptr))
 					width = width * 10 + (*ptr++ - CX_0);
 			}
 			/* ---- 3. precision: '.' digits or '.*' -------------------- */
@@ -330,8 +332,13 @@ int PRINTF_FN(FILE *stream, const TCHAR *format, va_list args) {
 						flags &= ~HAS_PRECI;
 				} else {
 					preci = 0;
-					while (*ptr >= CX_0 && *ptr <= CX_9)
-						preci = preci * 10 + (*ptr++ - CX_0);
+					while (PRINTF_ISDIGIT((UTCHAR)*ptr)) {
+					    int digit = *ptr++ - CX_0;
+					    if (preci > (INT_MAX - digit) / 10)
+					        preci = INT_MAX;
+					    else if (preci != INT_MAX)
+					        preci = preci * 10 + digit;
+					}
 				}
 			}
 			/* ---- 4. length modifier ----------------------------------
@@ -417,10 +424,10 @@ int PRINTF_FN(FILE *stream, const TCHAR *format, va_list args) {
 							 * - If precision is specified and value is 0: don't add prefix
 							 * - Otherwise add '0' prefix
 							 */
-							if (preci == 0x7fff && v != 0) {
+							if (preci == -1 && v != 0) {
 								if (size1 < sizeof(buffer1) / sizeof(buffer1[0]))
 									buffer1[size1++] = CX_0;
-							} else if (preci != 0x7fff && v != 0) {
+							} else if (preci != -1 && v != 0) {
 								/* Precision specified and value non-zero: add prefix if needed */
 								if (size1 < sizeof(buffer1) / sizeof(buffer1[0])) {
 									buffer1[size1++] = CX_0;
@@ -433,7 +440,7 @@ int PRINTF_FN(FILE *stream, const TCHAR *format, va_list args) {
 							if (size1 + 2 <= sizeof(buffer1) / sizeof(buffer1[0])) {
 								buffer1[size1++] = CX_0;
 								buffer1[size1++] = type;
-								if (preci != 0x7fff)
+								if (preci > 0)
 									preci -= 2;
 							}
 						}
@@ -451,7 +458,7 @@ int PRINTF_FN(FILE *stream, const TCHAR *format, va_list args) {
 				} while (v);
 				/* Explicit precision = minimum digit count and it turns
 				 * off '0' padding.                                     */
-				if (preci == 0x7fff)
+				if (preci < 0)
 					preci = 0;
 				else
 					flags &= ~ZEROPADFLAG;
@@ -564,7 +571,7 @@ int PRINTF_FN(FILE *stream, const TCHAR *format, va_list args) {
 				 *   S2  seed decimal exponent from the exponent field,
 				 *       refine to [1,10) by scaling
 				 *   S3  g/G style arbitration (fixed vs scientific)
-				 *   S4  digit extraction + round-half-up
+				 *   S4  digit extraction + round-to-nearest, ties-to-even
 				 *   S5  trailing-zero trimming, width bookkeeping
 				 *   S6  padded emission (piece-list interleave)
 				 *======================================================== */
@@ -620,7 +627,7 @@ int PRINTF_FN(FILE *stream, const TCHAR *format, va_list args) {
 					}
 				}
 				/* -------- S2: exponent extraction -------------------- */
-				if (!infnan) {
+				if (!infnan && (type != CX_a && type != CX_A)) {
 					if (!is_ld ? !_d_iszero(d) : !_ld_iszero(lu)) {
 						/* ld_val is normalized, so its exponent is the
 						 * binary one of subnormals too. */
@@ -678,19 +685,22 @@ int PRINTF_FN(FILE *stream, const TCHAR *format, va_list args) {
 					int pad_at = (width > 0 && !(flags & LALIGNFLAG) &&
 					              pad == CX_0 && sign != 0) ? 1 : 0;
 					pieces[npieces++] = (struct piece){ .startPos = pad_at, .count = 0, .c = pad };
-					if (preci == 0x7fff) {
+					if (preci == -1) {
 						if (type == CX_f || type == CX_F || type == CX_e || type == CX_E || type == CX_g || type == CX_G) {
 							/* ISO C standard requires a default precision of 6 for floating-point formats */
 							preci = 6;
 						} else if (type == CX_a || type == CX_A) {
-							/* -1 signals the hex formatter to output enough digits for an exact value */
-							preci = -1;
+							if (!(flags & HAS_PRECI))
+							    preci = is_ld ? 16 : 13;
 						} else {
 							preci = 1;
 						}
 					}
 					if (!infnan) {
-						int original_preci = (preci == 0) ? 1 : preci;
+						if ((type == CX_g || type == CX_G) && preci == 0)
+						    preci = 1;
+
+						int original_preci = preci;
 						if (type != CX_a && type != CX_A) {
 							if (type == CX_g || type == CX_G) {
 								isg = 1;
@@ -701,20 +711,10 @@ int PRINTF_FN(FILE *stream, const TCHAR *format, va_list args) {
 										/* With #, preci specifies the number of digits after the decimal point. */
 										preci = original_preci;
 									}
-									if (exponent >= 0) {
-										if ((flags & ALTERNATEFLAG) && preci == exponent + 1) {
-											++preci;
-										}
-										digits_to_compute = preci; /* Use preci directly. */
-									} else {
-										/* For a negative exponent, the value is less than 1. */
-										if (flags & ALTERNATEFLAG) {
-											/* With #, preci specifies the number of digits after the decimal point. */
-											digits_to_compute = 1 + preci + 1; /* One leading zero, preci fractional digits, and one guard digit. */
-										} else {
-											digits_to_compute = preci;
-										}
+									if (exponent >= 0 && (flags & ALTERNATEFLAG) && preci == exponent + 1) {
+										++preci;
 									}
+									digits_to_compute = preci;
 								} else {
 									type -= 2; /* 'e' or 'E'. */
 									digits_to_compute = preci;
@@ -776,9 +776,6 @@ int PRINTF_FN(FILE *stream, const TCHAR *format, va_list args) {
 									    	type = (type & 0x20) ? CX_e : CX_E;
 									        leading = 1;
 									        preci = original_preci - 1;
-									    } else if (exponent > 0) {
-									        ++leading;
-									        ++digits_to_compute;
 									    }
 									} else if (exponent + preci < 0 && buffer[tpos] == CX_5 && (type == CX_f || type == CX_F)) {
 										startPos = 0;
@@ -794,56 +791,90 @@ int PRINTF_FN(FILE *stream, const TCHAR *format, va_list args) {
 								leading = 1;
 							}
 						} else {
+							uint32_t hi = ld_val.l.high;
+							uint32_t mid = ld_val.l.middle;
+							uint32_t lo = ld_val.l.low;
+
 							/* 'a' 'A' format - pure bit operations */
 							if (!(flags & HAS_PRECI))
-								killZero = 1;
+							    killZero = 1;
+
 							buffer[0] = CX_0;
 							buffer[1] = type + (CX_X - CX_A);
-							buffer[2] = CX_0;
+							if (hi | mid | lo) {
+								buffer[2] = CX_1;
+								exponent = (int)ld_val.l.exp - 16383;
+							} else {
+								buffer[2] = CX_0;
+								exponent = 0;
+							}
+
 							startPos = 0;
 							pos = 3;
+
 							const TCHAR *hexdigits = (type == CX_A) ? HEX_UPPER : HEX_LOWER;
-							if (is_ld) {
-							    if (lu.b.exp == 0 && lu.b.mant != 0) {
-							        /* subnormal long double */
-							        exponent = -16382;
-							        /* drop the leading present bit, it's already printed. */
-							        unsigned long long frac = lu.b.mant << 1;
-							        for (int i = 0; i < 16; i++)
-							            buffer[pos++] = hexdigits[(frac >> (60 - 4 * i)) & 0xF];
-							    } else {
-							        unsigned long long mant = lu.b.mant & 0x7FFFFFFFFFFFFFFFULL;
-							        if (lu.b.exp == 0) {
-							            exponent = 0;                       /* zero */
-							        } else {
-							            exponent = (short)(lu.b.exp - 16383);
-							            buffer[2] = CX_1;                   /* normal: leading '1' */
-							            mant <<= 1;
+
+							/* Remove the explicit integer bit and align the fraction. */
+							hi = (hi << 1) | (mid >> 31);
+							mid = (mid << 1) | (lo >> 31);
+							lo <<= 1;
+
+							for (int i = 0; i < 8; i++) {
+							    buffer[pos++] = hexdigits[hi >> 28];
+							    hi <<= 4;
+							}
+
+							for (int i = 0; i < 8; i++) {
+							    buffer[pos++] = hexdigits[mid >> 28];
+							    mid <<= 4;
+							}
+							/* also round hex numbers */
+							if (flags & HAS_PRECI) {
+							    int cut = 3 + preci;
+							    if (preci < pos - 3) {
+							        int digit = buffer[cut];
+							        int round = digit >= CX_A ? (digit & 0xDF) - CX_A + 10
+							                                  : digit - CX_0;
+							        int sticky = 0;
+
+							        for (int i = cut + 1; i < pos; i++)
+							            sticky |= buffer[i] != CX_0;
+
+							        int last = cut - 1;
+							        int value = buffer[last] >= CX_A
+							                  ? (buffer[last] & 0xDF) - CX_A + 10
+							                  : buffer[last] - CX_0;
+
+							        if (round > 8 || (round == 8 && (sticky || (value & 1)))) {
+							            while (last >= 3) {
+							                if (value != 15) {
+							                    value++;
+							                    buffer[last] = hexdigits[value];
+							                    break;
+							                }
+
+							                buffer[last--] = hexdigits[0];
+							                if (last >= 3)
+							                    value = buffer[last] >= CX_A
+							                          ? (buffer[last] & 0xDF) - CX_A + 10
+							                          : buffer[last] - CX_0;
+							            }
+
+							            if (last < 3) {
+							                /* Mantissa overflow: 0x1.F... -> 0x1.0p+(e+1). */
+							                buffer[2] = CX_1;
+							                exponent++;
+							            }
 							        }
-							        for (int i = 0; i < 16; i++)
-							            buffer[pos++] = hexdigits[(mant >> (60 - 4 * i)) & 0xF];
+
+							        pos = cut;
 							    }
-							} else {
-								if (!d.b.exp) {
-									/* subnormal or zero: leading digit stays '0' */
-									exponent = (d.b.frac0 == 0 && d.b.frac1 == 0) ? 0 : -1022;
-								} else {
-									exponent = d.b.exp - 1023;
-									buffer[2] = CX_1;
-								}
-								/* Extract 52-bit mantissa for double */
-								unsigned long long mant = ((unsigned long long)d.b.frac0 << 32) | d.b.frac1;
-								/* Print 13 hex digits (52 bits) */
-								for (int i = 0; i < 13; i++) {
-								    int digit = (mant >> (48 - 4*i)) & 0xF;
-								    buffer[pos++] = hexdigits[digit];
-								}
 							}
 							type += CX_P - CX_A;
 							leading = 3;
 						}
 					}
-					if (preci > 0x3fff)
+					if (preci < 0)
 						preci = 1;
 					/* -------- S6: Output generation -------- */
 					/*
@@ -867,7 +898,7 @@ int PRINTF_FN(FILE *stream, const TCHAR *format, va_list args) {
 						if (width > 0 && !(flags & LALIGNFLAG))
 							pieces[0].c = CX_space;
 					} else {
-						unsigned short frac = preci;
+						int frac = preci;
 
 						/* 2. Integer part. */
 						if (exponent < 0 && (type == CX_f || type == CX_F)) {
@@ -881,7 +912,7 @@ int PRINTF_FN(FILE *stream, const TCHAR *format, va_list args) {
 							while (startPos < pos && leading-- > 0) {
 								if (isg && !(flags & ALTERNATEFLAG)) {
 									--preci;
-									if (preci > 0x3fff)
+									if (preci < 0)
 										preci = 0;
 								}
 								++startPos;
@@ -904,7 +935,7 @@ int PRINTF_FN(FILE *stream, const TCHAR *format, va_list args) {
 								stop--;
 							}
 							preci = stop - startPos + 1;   /* Number of significant digits. */
-							if (preci > 0x3fff)
+							if (preci < 0)
 								preci = 0;
 							pos = stop + 1;
 						}
@@ -1051,7 +1082,15 @@ int PRINTF_FN(FILE *stream, const TCHAR *format, va_list args) {
 				preci = 0;
 				break;
 			case CX_n:
-				*va_arg(args, int*) = outcount;
+				if (subtype == CX_i) {
+					*va_arg(args, signed char*) = outcount;
+				} else if (subtype == CX_h) {
+					*va_arg(args, short*) = outcount;
+				} else if (subtype == CX_m) {
+					*va_arg(args, long long*) = outcount;
+				} else { // all other are 4 bytes
+					*va_arg(args, long*) = outcount;
+				}
 				width = preci = 0;
 				break;
 			default:
