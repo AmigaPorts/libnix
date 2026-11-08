@@ -49,6 +49,7 @@ TARGET_TESTS = \
 	rint \
 	romtag \
 	round \
+	scanf_fmt \
 	scanf_int \
 	scanf_round \
 	sscanf \
@@ -179,6 +180,8 @@ vfwprintf_test_LIBS = -lm
 multibyte_SRCS = $(addprefix ../sources/nix/stdio/,mbtowc.c mblen.c mbstowcs.c wctomb.c wcstombs.c)
 
 sscanf_SRCS = $(addprefix ../sources/nix/stdio/,sscanf.c vsscanf.c vfscanf.c __srget.c)
+
+scanf_fmt_SRCS = $(sscanf_SRCS) $(addprefix ../sources/nix/stdio/,swscanf.c vswscanf.c vfwscanf.c fgetwc.c ungetwc.c)
 
 scanf_int_SRCS = $(sscanf_SRCS) $(addprefix ../sources/nix/stdio/,swscanf.c vswscanf.c vfwscanf.c fgetwc.c ungetwc.c)
 

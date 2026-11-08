@@ -211,19 +211,20 @@ int VSCANF_NAME(FILE *stream, const TCHAR *format, va_list args) {
 			const TCHAR *ptr = format + 1;
 			size_t i;
 
+			/* %[*][width][length]conversion */
+			if (*ptr == CX_star) {
+				ignore = 1;
+				ptr++;
+			}
+
 			if (ISDIGIT(*ptr)) {
 				width = 0;
 				while (ISDIGIT(*ptr))
 					width = width * 10 + (*ptr++ - CX_0);
 			}
 
-			while (*ptr == CX_h || *ptr == CX_l || *ptr == CX_L || *ptr == CX_star) {
-				if (*ptr == CX_star)
-					ignore = 1;
-				else
-					subtype = *ptr;
-				ptr++;
-			}
+			while (*ptr == CX_h || *ptr == CX_l || *ptr == CX_L)
+				subtype = *ptr++;
 
 			type = *ptr++;
 
