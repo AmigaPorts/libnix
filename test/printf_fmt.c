@@ -1,7 +1,8 @@
 /* printf's conversion specifications, narrow and wide, with the results
-   glibc gives: %n stores the size of its length modifier, no more, and the
-   precision of %#x counts the digits, not the 0x.  Prints what fails; the
-   exit code is the number of failures.  */
+   glibc gives: %n stores the size of its length modifier, no more, the
+   precision of %#x counts the digits, not the 0x, and widths and
+   precisions go past a short's range.  Prints what fails; the exit code is
+   the number of failures.  */
 
 #include <stdio.h>
 #include <string.h>
@@ -83,5 +84,15 @@ int main(void)
   printed("[%#08.3x]", 1, "[   0x001]");
   printed("[%#.5o]", 1, "[00001]");
   printed("[%#10.4X]", 255, "[    0X00FF]");
+
+  /* widths and precisions past a short's range, by the length */
+  check(snprintf(NULL, 0, "%40000d", 1) == 40000, "%40000d", "length");
+  check(snprintf(NULL, 0, "%-70000d", 1) == 70000, "%-70000d", "length");
+  check(snprintf(NULL, 0, "%*d", 70000, 1) == 70000, "%*d 70000", "length");
+  check(snprintf(NULL, 0, "%*d", -70000, 1) == 70000, "%*d -70000", "length");
+  check(snprintf(NULL, 0, "%.40000d", 1) == 40000, "%.40000d", "length");
+  check(snprintf(NULL, 0, "%.*d", 70000, 1) == 70000, "%.*d 70000", "length");
+  check(snprintf(NULL, 0, "%.20000f", 1.0) == 20002, "%.20000f", "length");
+  check(snprintf(NULL, 0, "%.40000e", 1.0) == 40006, "%.40000e", "length");
   return failures;
 }

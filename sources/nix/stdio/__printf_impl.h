@@ -193,6 +193,10 @@ extern unsigned __ulldivus(unsigned long long *llp, unsigned short n);
 #  define FLOAT_OUTBUF_MIN 1
 #endif
 
+/* The largest width and precision: 1 GB of output, and small enough that
+ * sums of them and of the digit counts don't overflow an int.            */
+#define PRINTF_MAX 0x3fffffff
+
 /* ======================================================================
  * SECTION: flags, piece list, digit tables
  * ==================================================================== */
@@ -264,8 +268,8 @@ int PRINTF_FN(FILE *stream, const TCHAR *format, va_list args) {
 		 * A '%' conversion begins here.
 		 * ========================================================== */
 		{
-			short width = 0;
-			unsigned short preci = 0x7fff; /* Sentinel value: no precision was specified. */
+			int width = 0;
+			int preci = -1; /* Sentinel value: no precision was specified. */
 			short flags = 0;
 			TCHAR type;
 			TCHAR orig_type;
@@ -283,7 +287,7 @@ int PRINTF_FN(FILE *stream, const TCHAR *format, va_list args) {
 			char other_width = 0;
 			unsigned long size1 = 0, size2 = 0;
 			const TCHAR *ptr = format + 1;
-			unsigned short i, pad;
+			int i, pad;
 			/* ---- 1. flags -------------------------------------------
 			 * Scan flagc[] repeatedly until a full pass finds no match
 			 * (loop condition becomes false when i reaches the size).
@@ -296,19 +300,23 @@ int PRINTF_FN(FILE *stream, const TCHAR *format, va_list args) {
 						break;
 					}
 			} while (i < sizeof(flagc) / sizeof(flagc[0]));
-			/* ---- 2. field width: literal digits or '*' --------------- */
+			/* ---- 2. field width: literal digits or '*' ---------------
+			 * Width and precision saturate at PRINTF_MAX, so the sums
+			 * made of them can't overflow an int.                       */
 			if (*ptr == CX_star) {
 				signed int a;
 				ptr++;
 				a = va_arg(args, signed int);
 				if (a < 0) { /* negative => left align   */
 					flags |= LALIGNFLAG;
-					width = -a;
+					width = a < -PRINTF_MAX ? PRINTF_MAX : -a;
 				} else
-					width = a;
+					width = a > PRINTF_MAX ? PRINTF_MAX : a;
 			} else {
-				while (PRINTF_ISDIGIT(*ptr))
-					width = width * 10 + (*ptr++ - CX_0);
+				while (PRINTF_ISDIGIT(*ptr)) {
+					int d = *ptr++ - CX_0;
+					width = width > (PRINTF_MAX - d) / 10 ? PRINTF_MAX : width * 10 + d;
+				}
 			}
 			/* ---- 3. precision: '.' digits or '.*' -------------------- */
 			if (*ptr == CX_dot) {
@@ -320,13 +328,15 @@ int PRINTF_FN(FILE *stream, const TCHAR *format, va_list args) {
 					ptr++;
 					a = va_arg(args, signed int);
 					if (a >= 0) /* negative means "unset"   */
-						preci = a;
+						preci = a > PRINTF_MAX ? PRINTF_MAX : a;
 					else
 						flags &= ~HAS_PRECI;
 				} else {
 					preci = 0;
-					while (*ptr >= CX_0 && *ptr <= CX_9)
-						preci = preci * 10 + (*ptr++ - CX_0);
+					while (*ptr >= CX_0 && *ptr <= CX_9) {
+						int d = *ptr++ - CX_0;
+						preci = preci > (PRINTF_MAX - d) / 10 ? PRINTF_MAX : preci * 10 + d;
+					}
 				}
 			}
 			/* ---- 4. length modifier ----------------------------------
@@ -412,10 +422,10 @@ int PRINTF_FN(FILE *stream, const TCHAR *format, va_list args) {
 							 * - If precision is specified and value is 0: don't add prefix
 							 * - Otherwise add '0' prefix
 							 */
-							if (preci == 0x7fff && v != 0) {
+							if (preci < 0 && v != 0) {
 								if (size1 < sizeof(buffer1) / sizeof(buffer1[0]))
 									buffer1[size1++] = CX_0;
-							} else if (preci != 0x7fff && v != 0) {
+							} else if (preci >= 0 && v != 0) {
 								/* Precision specified and value non-zero: add prefix if needed */
 								if (size1 < sizeof(buffer1) / sizeof(buffer1[0])) {
 									buffer1[size1++] = CX_0;
@@ -445,7 +455,7 @@ int PRINTF_FN(FILE *stream, const TCHAR *format, va_list args) {
 				} while (v);
 				/* Explicit precision = minimum digit count and it turns
 				 * off '0' padding.                                     */
-				if (preci == 0x7fff)
+				if (preci < 0)
 					preci = 0;
 				else
 					flags &= ~ZEROPADFLAG;
@@ -665,7 +675,7 @@ int PRINTF_FN(FILE *stream, const TCHAR *format, va_list args) {
 					int pad_at = (width > 0 && !(flags & LALIGNFLAG) &&
 					              pad == CX_0 && sign != 0) ? 1 : 0;
 					pieces[npieces++] = (struct piece){ .startPos = pad_at, .count = 0, .c = pad };
-					if (preci == 0x7fff) {
+					if (preci < 0) {
 						if (type == CX_f || type == CX_F || type == CX_e || type == CX_E || type == CX_g || type == CX_G) {
 							/* ISO C standard requires a default precision of 6 for floating-point formats */
 							preci = 6;
@@ -833,7 +843,7 @@ int PRINTF_FN(FILE *stream, const TCHAR *format, va_list args) {
 							leading = 3;
 						}
 					}
-					if (preci > 0x3fff)
+					if (preci < 0)
 						preci = 1;
 					/* -------- S6: Output generation -------- */
 					/*
@@ -857,7 +867,7 @@ int PRINTF_FN(FILE *stream, const TCHAR *format, va_list args) {
 						if (width > 0 && !(flags & LALIGNFLAG))
 							pieces[0].c = CX_space;
 					} else {
-						unsigned short frac = preci;
+						int frac = preci;
 
 						/* 2. Integer part. */
 						if (exponent < 0 && (type == CX_f || type == CX_F)) {
@@ -871,7 +881,7 @@ int PRINTF_FN(FILE *stream, const TCHAR *format, va_list args) {
 							while (startPos < pos && leading-- > 0) {
 								if (isg && !(flags & ALTERNATEFLAG)) {
 									--preci;
-									if (preci > 0x3fff)
+									if (preci < 0)
 										preci = 0;
 								}
 								++startPos;
@@ -894,7 +904,7 @@ int PRINTF_FN(FILE *stream, const TCHAR *format, va_list args) {
 								stop--;
 							}
 							preci = stop - startPos + 1;   /* Number of significant digits. */
-							if (preci > 0x3fff)
+							if (preci < 0)
 								preci = 0;
 							pos = stop + 1;
 						}
