@@ -76,20 +76,11 @@ struct __sFILE {
 	int tmpinc; /* Stored incount if ungetc pending, otherwise undefined */
 	long tmpdir; /* lock to directory if temporary file */
 	char *name; /* filename if temporary file */
-#ifdef __posix_threads__
 	rspinlock_t __spinlock;
-#endif
 };
 
-#if defined(__posix_threads__)
-#define __STDIO_LOCK(l) __recursiveSpinLock(l->__spinlock)
-#define __STDIO_UNLOCK(l) __recursiveSpinUnlock(l->__spinlock)
-#else
-#define __spinLock(a)
-#define __spinUnlock(a)
-#define __STDIO_LOCK(l)
-#define __STDIO_UNLOCK(l)
-#endif
+#define __STDIO_LOCK(l) __recursiveSpinLock(&l->__spinlock)
+#define __STDIO_UNLOCK(l) __recursiveSpinUnlock(&l->__spinlock)
 
 #if !defined(__FILE_defined)
 typedef struct __sFILE __FILE;

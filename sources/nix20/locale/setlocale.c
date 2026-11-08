@@ -3,15 +3,13 @@
 #include <string.h>
 #include <stdlib.h>
 #include <dos/dos.h>
-#ifdef __posix_threads__
-#include <exec/semaphores.h>
-#endif
 #ifndef __KICK13__
 #include <libraries/locale.h>
 #include <proto/locale.h>
 #endif
 #include <proto/exec.h>
 #include "stabs.h"
+#include "spinlock.h"
 
 extern struct LocaleBase *LocaleBase;
 //extern char __localename[];
@@ -38,10 +36,7 @@ int __locale_mb_cur_max(void) {
 
 /* Keep returned names and opened locales alive while callers use them.
    Thread-enabled builds serialize individual setlocale() calls.  */
-#ifdef __posix_threads__
-static struct SignalSemaphore __localesema;
-static volatile int __localesema_ready;
-#endif
+rspinlock_t __localesema;
 
 struct __localename {
 	struct __localename *next;
@@ -59,24 +54,12 @@ static struct __localeopen *__localesopen; /* every locale opened */
 static struct Locale *__ctypelocale; /* the locale ctype[] was made from */
 #endif
 
-static void __localelock(void) {
-#ifdef __posix_threads__
-	if (!__localesema_ready) {
-		Forbid();
-		if (!__localesema_ready) {
-			InitSemaphore(&__localesema);
-			__localesema_ready = 1;
-		}
-		Permit();
-	}
-	ObtainSemaphore(&__localesema);
-#endif
+static inline void __localelock(void) {
+	__recursiveSpinLock(&__localesema);
 }
 
-static void __localeunlock(void) {
-#ifdef __posix_threads__
-	ReleaseSemaphore(&__localesema);
-#endif
+static inline void __localeunlock(void) {
+	__recursiveSpinUnlock(&__localesema);
 }
 
 /* the kept copy of name: the same string every time for the same name */

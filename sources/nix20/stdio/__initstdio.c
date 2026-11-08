@@ -11,6 +11,7 @@
 #include <stdlib.h>
 #include <unistd.h>
 #include "stabs.h"
+#include "spinlock.h"
 
 #ifdef DEBUG
 #include "clib/debug_protos.h"
@@ -45,9 +46,7 @@ extern FILE **__sF;
  */
 StdFileDes **__stdfiledes;
 unsigned __stdfilesize;
-#ifdef __posix_threads__
-unsigned __stdLock[2];
-#endif
+rspinlock_t __stdLock;
 /* The normal Amiga shell sets no process->pr_CES stream -
  * we use Open("*",MODE_NEWFILE) in this case
  */
@@ -119,9 +118,7 @@ FILE *fdopen(int filedes, const char *mode) {
 				f->tmpinc = 0;
 				f->tmpdir = 0;
 				f->name = 0;
-#ifdef __posix_threads__
-				f->__spinlock[0] = 0;
-#endif
+				__initRecursiveSpinLock(&f->__spinlock);
 				return f;
 			}
 			free(node);
@@ -279,8 +276,8 @@ int fclose(FILE *stream) {
 
 	node = (struct filenode *) ((struct MinNode *) stream - 1);
 	Remove((struct Node * )&node->node);
-	free(node);
 	__STDIO_UNLOCK(stream);
+	free(node);
 	return retval;
 }
 
