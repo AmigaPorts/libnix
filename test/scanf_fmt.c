@@ -1,7 +1,8 @@
 /* scanf's conversion specifications, narrow and wide, with the results
    glibc gives: assignment suppression before the field width, and the
    integer conversions and %n storing the size of their length modifier,
-   no more.  Prints what fails; the exit code is the number of failures.  */
+   no more, and %u taking a sign.  Prints what fails; the exit code is the
+   number of failures.  */
 
 #include <stdio.h>
 #include <string.h>
@@ -81,6 +82,10 @@ int main(void)
   STORED("%jd", "-9000000000", long long, -9000000000LL);
   STORED("%zu", "4000000000", unsigned long, 4000000000UL);
   STORED("%td", "-7", long, -7);
+  STORED("%u", "-1", unsigned int, 4294967295U);
+  STORED("%hhu", "-1", unsigned char, 255);
+  STORED("%llu", "-2", unsigned long long, 18446744073709551614ULL);
+  STORED("%u", "+7", unsigned int, 7);
   STORED("abc%hhn", "abc", signed char, 3);
   STORED("abc%hn", "abc", short, 3);
   STORED("abc%n", "abc", int, 3);
