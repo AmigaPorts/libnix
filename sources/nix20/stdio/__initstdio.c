@@ -120,7 +120,7 @@ FILE *fdopen(int filedes, const char *mode) {
 				f->tmpinc = 0;
 				f->tmpdir = 0;
 				f->name = 0;
-				__STDIO_INIT_LOCK(f->spinLock);
+				__STDIO_INIT_LOCK(f->__spinlock);
 
 				return f;
 			}

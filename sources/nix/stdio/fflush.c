@@ -11,12 +11,12 @@ int fflush(FILE *stream) /* fflush one or all files */
   if(stream!=NULL)
     return __fflush(stream);
   retval=0;
-  __GLOBAL_STDIO_LOCK
+  __GLOBAL_STDIO_LOCK;
   node=___filelist.mlh_Head;
   while((nextnode=node->mln_Succ)!=NULL)
   { if(__fflush(&((struct filenode *)node)->theFILE))
       retval=EOF;
     node=nextnode; }
-  __GLOBAL_STDIO_UNLOCK
+  __GLOBAL_STDIO_UNLOCK;
   return retval;
 }
