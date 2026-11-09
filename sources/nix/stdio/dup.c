@@ -6,13 +6,11 @@
 
 extern StdFileDes **__stdfiledes;
 extern unsigned __stdfilesize;
-#ifdef __posix_threads__
-unsigned __stdLock[2];
-#endif
+
 extern StdFileDes *__allocfd();
 
 int dup(int oldfd) {
-	__spinLock(__stdLock);
+	__GLOBAL_STDIO_LOCK;
 	if ((unsigned)oldfd < __stdfilesize) {
 		int fd;
 		StdFileDes *neu, *sfd = __stdfiledes[oldfd];
@@ -20,7 +18,7 @@ int dup(int oldfd) {
 
 			if (sfd->lx_fx) {
 				int r = sfd->lx_fx->lx_dup(sfd);
-				__spinUnlock(__stdLock);
+				__GLOBAL_STDIO_UNLOCK;
 				return r;
 			}
 
@@ -28,10 +26,10 @@ int dup(int oldfd) {
 			fd = neu->lx_pos;
 			*neu = *sfd;
 			neu->lx_pos = fd;
-			__spinLock(__stdLock);
+			__GLOBAL_STDIO_UNLOCK;
 			return fd;
 		}
 	}
-	__spinLock(__stdLock);
+	__GLOBAL_STDIO_UNLOCK;
 	return -1;
 }
