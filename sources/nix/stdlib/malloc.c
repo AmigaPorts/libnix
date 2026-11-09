@@ -9,7 +9,6 @@
 #include <exec/memory.h>
 #include <proto/exec.h>
 #include <proto/dos.h>
-#include "spinlock.h"
 #include "stabs.h"
 
 //#define TRACK_AND_CHECK
@@ -139,7 +138,7 @@ void free(void * _p) {
 extern ULONG *__MEMORY_STEP;
 
 struct MinList __memorylist; /* memorylist (empty): free needs also access */
-spinlock_t __memLock;
+struct SignalSemaphore  *__memsema;
 void *malloc(size_t size)
 {
   struct MinNode *node;
@@ -152,7 +151,7 @@ void *malloc(size_t size)
   size = (size + 3) & ~3;
   size+=sizeof(ULONG);
 
-  __spinLock(&__memLock);
+  ObtainSemaphore(__memsema);
   node=__memorylist.mlh_Head;
   while(node->mln_Succ) /* yet some memory in my list ? */
   {
@@ -183,7 +182,7 @@ void *malloc(size_t size)
   }
 
  end:
- __spinUnlock(&__memLock);
+  ReleaseSemaphore(__memsema);
 
 //	printf("malloc    %08lx: %ld\n", a, size); fflush(stdout);
 
@@ -198,13 +197,14 @@ void free(void *ptr) {
 		return;
 	}
 
-	__spinLock(&__memLock);
+	ObtainSemaphore(__memsema);
 //  printf("free      %08x: %8d\n", ptr, ((ULONG *)ptr)[-1]); fflush(stdout);
 
 	a = (struct MemHeader *) __memorylist.mlh_Head;
 	for (;;) {
 		if (((struct MinNode *) a)->mln_Succ == NULL) /* Is not in list ????? */
 		{
+			ReleaseSemaphore(__memsema);
 			return;
 		}
 
@@ -222,7 +222,7 @@ void free(void *ptr) {
 //		  printf("FreeMem(%08lx, %ld)\n", a, (char *)a->mh_Upper-(char *)a);
 		FreeMem(a, (char * )a->mh_Upper - (char * )a);
 	}
-	 __spinUnlock(&__memLock);
+	ReleaseSemaphore(__memsema);
 }
 
 
@@ -234,6 +234,8 @@ void free(void *ptr) {
 void __initmalloc(void)
 {
   NEWLIST(&__memorylist);
+  __memsema = AllocMem(sizeof(struct SignalSemaphore), MEMF_PUBLIC | MEMF_CLEAR);
+  InitSemaphore(__memsema);
 }
 
 void __exitmalloc(void)
@@ -242,6 +244,7 @@ void __exitmalloc(void)
 //	  printf("FreeMem(%08lx, %ld)\n", a, (char *)a->mh_Upper-(char *)a);
     FreeMem(a,(char *)a->mh_Upper-(char *)a); /* free all memory */
   }
+  FreeMem(__memsema, sizeof(struct SignalSemaphore));
 }
 
 ADD2EXIT(__exitmalloc,-50);
