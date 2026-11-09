@@ -50,9 +50,11 @@ void __slowSpinLock(spinlock_t *l asm("a0")) {
         if (!locked)
             break;
 
+        Forbid();
         dis->tc_Node.ln_Pri -= 5;     /* Lower priority a bit. */
-        SysBase->SysFlags |= 1 << 15; /* Tell Permit() to reschedule. */
-        dis->tc_TDNestCnt = 1;        /* Fake Forbid. */
+        /* Tell Permit() to reschedule, even to a task of the same priority.
+           Atomically set both bits, since interrupts change SysFlags too. */
+        __asm__ volatile ("or.w #0xc000,%0" : "+m" (SysBase->SysFlags) : : "cc");
         Permit();                     /* Allow the lock owner to run. */
         dis->tc_Node.ln_Pri += 5;     /* Restore priority. */
     }
