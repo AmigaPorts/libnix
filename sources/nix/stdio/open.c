@@ -8,9 +8,6 @@
 
 extern StdFileDes **__stdfiledes;
 extern unsigned __stdfilesize;
-#ifdef __posix_threads__
-unsigned __stdLock[2];
-#endif
 
 StdFileDes *__allocfd(void);
 extern void _setup_file(StdFileDes *fp);
@@ -55,9 +52,9 @@ int open(const char *path, int flags, ...) {
  */
 StdFileDes *__allocfd(void) {
 #ifdef __posix_threads__
-	__spinLock(__stdLock);
+	__GLOBAL_STDIO_LOCK;
 	StdFileDes * sfd = __allocfd2();
-	__spinUnlock(__stdLock);
+	__GLOBAL_STDIO_UNLOCK;
 	return sfd;
 }
 static StdFileDes *__allocfd2(void) {
