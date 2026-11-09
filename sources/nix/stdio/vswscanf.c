@@ -10,6 +10,6 @@ int vswscanf(const wchar_t *s, const wchar_t *format, va_list args)
 	buffer._w = 0;
 	buffer._flags = __SSTR | __SRD;
 	buffer.tmpp = NULL;
-	__initRecursiveSpinLock(&buffer.__spinlock);
+	__STDIO_INIT_LOCK(buffer.__spinlock);
 	return vfwscanf(&buffer, format, args);
 }

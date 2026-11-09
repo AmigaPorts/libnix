@@ -4,7 +4,6 @@
 #include "stdio.h"
 
 int __fflush(FILE *stream);
-extern rspinlock_t __stdLock;
 wint_t ungetwc(wint_t c, FILE *stream) {
 	size_t i;
 	wint_t cc;

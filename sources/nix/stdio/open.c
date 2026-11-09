@@ -8,7 +8,6 @@
 
 extern StdFileDes **__stdfiledes;
 extern unsigned __stdfilesize;
-extern rspinlock_t __stdLock;
 
 StdFileDes *__allocfd(void);
 extern void _setup_file(StdFileDes *fp);
@@ -50,7 +49,7 @@ int open(const char *path, int flags, ...) {
  * Reuse or allocate a StdFileDes object.
  */
 StdFileDes *__allocfd(void) {
-	__recursiveSpinLock(&__stdLock);
+	__GLOBAL_STDIO_LOCK;
 	StdFileDes *fp, **sfd;
 	int file, max;
 
@@ -60,14 +59,14 @@ StdFileDes *__allocfd(void) {
 
 	if (file == SHRT_MAX) {
 		errno = EMFILE;
-		__recursiveSpinUnlock(&__stdLock);
+		__GLOBAL_STDIO_UNLOCK;
 		return NULL;
 	}
 
 	if (file == max) {
 		if ((sfd = (StdFileDes **)realloc(__stdfiledes, (file + 1) * sizeof(fp))) == NULL) {
 			errno = ENOMEM;
-			__recursiveSpinUnlock(&__stdLock);
+			__GLOBAL_STDIO_UNLOCK;
 			return NULL;
 		}
 		__stdfiledes = sfd;
@@ -78,11 +77,11 @@ StdFileDes *__allocfd(void) {
 	if ((fp = sfd[0]) == NULL) {
 		if ((sfd[0] = fp = (StdFileDes *)malloc(sizeof(*fp))) == NULL) {
 			errno = ENOMEM;
-			__recursiveSpinUnlock(&__stdLock);
+			__GLOBAL_STDIO_UNLOCK;
 			return NULL;
 		}
 		fp->lx_pos = file;
 	}
-	__recursiveSpinUnlock(&__stdLock);
+	__GLOBAL_STDIO_UNLOCK;
 	return fp;
 }

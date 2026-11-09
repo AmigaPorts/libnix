@@ -6,11 +6,11 @@
 
 extern StdFileDes **__stdfiledes;
 extern unsigned __stdfilesize;
-extern rspinlock_t __stdLock;
+
 extern StdFileDes *__allocfd();
 
 int dup(int oldfd) {
-	__recursiveSpinLock(&__stdLock);
+	__GLOBAL_STDIO_LOCK;
 	if ((unsigned)oldfd < __stdfilesize) {
 		int fd;
 		StdFileDes *neu, *sfd = __stdfiledes[oldfd];
@@ -18,7 +18,7 @@ int dup(int oldfd) {
 
 			if (sfd->lx_fx) {
 				int r = sfd->lx_fx->lx_dup(sfd);
-				__recursiveSpinUnlock(&__stdLock);
+				__GLOBAL_STDIO_UNLOCK;
 				return r;
 			}
 
@@ -26,10 +26,10 @@ int dup(int oldfd) {
 			fd = neu->lx_pos;
 			*neu = *sfd;
 			neu->lx_pos = fd;
-			__recursiveSpinUnlock(&__stdLock);
+			__GLOBAL_STDIO_UNLOCK;
 			return fd;
 		}
 	}
-	__recursiveSpinUnlock(&__stdLock);
+	__GLOBAL_STDIO_UNLOCK;
 	return -1;
 }

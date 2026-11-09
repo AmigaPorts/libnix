@@ -19,7 +19,7 @@ int vswprintf(wchar_t *s, size_t size, const wchar_t *format, va_list args) {
 	buffer._w = (size > 0) ? (int) ((size - 1) * sizeof(wchar_t)) : 0;
 	buffer._flags = __SSTR | __SWR;
 	buffer.linebufsize = 0;
-	__initRecursiveSpinLock(&buffer.__spinlock);
+	__STDIO_INIT_LOCK(buffer.__spinlock);
 
 	/* __vfwprintf_total_size returns the number of WIDE CHARACTERS that
 	 * would have been written (C99), not bytes.  Do not divide by

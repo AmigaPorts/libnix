@@ -36,7 +36,9 @@ int __locale_mb_cur_max(void) {
 
 /* Keep returned names and opened locales alive while callers use them.
    Thread-enabled builds serialize individual setlocale() calls.  */
+#ifdef __posix_threads__
 rspinlock_t __localesema;
+#endif
 
 struct __localename {
 	struct __localename *next;
@@ -55,11 +57,15 @@ static struct Locale *__ctypelocale; /* the locale ctype[] was made from */
 #endif
 
 static inline void __localelock(void) {
+#ifdef __posix_threads__
 	__recursiveSpinLock(&__localesema);
+#endif	
 }
 
 static inline void __localeunlock(void) {
+#ifdef __posix_threads__
 	__recursiveSpinUnlock(&__localesema);
+#endif
 }
 
 /* the kept copy of name: the same string every time for the same name */

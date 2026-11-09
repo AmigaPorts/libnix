@@ -3,8 +3,6 @@
 
 int __fflush(FILE *stream);
 
-extern rspinlock_t __stdLock;
-
 int ungetc(int c, FILE *stream) {
 	__STDIO_LOCK(stream);
 	int r = EOF;

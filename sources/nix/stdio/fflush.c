@@ -3,7 +3,6 @@
 #include "__filenode.h"
 
 extern __stdargs int __fflush(FILE *stream);
-extern rspinlock_t __stdLock;
 
 int fflush(FILE *stream) /* fflush one or all files */
 { struct MinNode *node,*nextnode;
@@ -12,12 +11,12 @@ int fflush(FILE *stream) /* fflush one or all files */
   if(stream!=NULL)
     return __fflush(stream);
   retval=0;
-  __recursiveSpinLock(&__stdLock); 
+  __GLOBAL_STDIO_LOCK
   node=___filelist.mlh_Head;
   while((nextnode=node->mln_Succ)!=NULL)
   { if(__fflush(&((struct filenode *)node)->theFILE))
       retval=EOF;
     node=nextnode; }
-  __recursiveSpinUnlock(&__stdLock);
+  __GLOBAL_STDIO_UNLOCK
   return retval;
 }

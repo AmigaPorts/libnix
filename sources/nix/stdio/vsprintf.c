@@ -10,7 +10,7 @@ int vsprintf(char *s, const char *format, va_list args) {
 	buffer._w = INT_MAX;
 	buffer._flags = __SSTR | __SWR;
 	buffer.linebufsize = 0;
-	__initRecursiveSpinLock(&buffer.__spinlock);
+	__STDIO_INIT_LOCK(buffer.__spinlock);
 	retval = vfprintf(&buffer, format, args);
 	/* directly, as vsnprintf does: fputc with _w = retval wrote nothing
 	 after an empty output */

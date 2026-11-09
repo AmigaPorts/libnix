@@ -46,7 +46,9 @@ extern FILE **__sF;
  */
 StdFileDes **__stdfiledes;
 unsigned __stdfilesize;
+#ifdef __posix_threads__
 rspinlock_t __stdLock;
+#endif
 /* The normal Amiga shell sets no process->pr_CES stream -
  * we use Open("*",MODE_NEWFILE) in this case
  */
@@ -118,7 +120,8 @@ FILE *fdopen(int filedes, const char *mode) {
 				f->tmpinc = 0;
 				f->tmpdir = 0;
 				f->name = 0;
-				__initRecursiveSpinLock(&f->__spinlock);
+				__STDIO_INIT_LOCK(f->spinLock);
+
 				return f;
 			}
 			free(node);
