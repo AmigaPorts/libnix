@@ -51,7 +51,7 @@ typedef struct {
 typedef struct {
     union {
         spinlock_t lock;
-        ULONG count;
+        UWORD count;
     };
     ULONG owner;
 } rspinlock_t;
@@ -61,7 +61,7 @@ extern void __slowSpinLock(spinlock_t *l asm("a0"));
 
 /* Initializes a recursive spinlock to the unlocked state. */
 static inline void __initRecursiveSpinLock(rspinlock_t *lock asm("a0")) {
-    lock->count = 0;
+    lock->lock.lock = 0;
     lock->owner = 0;
 }
 
@@ -103,6 +103,7 @@ static inline void __recursiveSpinLock(rspinlock_t *l asm("a0")) {
     }
 
     __spinLock(&l->lock);
+    l->count = 1;
     l->owner = (ULONG) dis;
 }
 
@@ -111,11 +112,10 @@ static inline void __recursiveSpinLock(rspinlock_t *l asm("a0")) {
  */
 static inline void __recursiveSpinUnlock(rspinlock_t *l asm("a0")) {
     __asm__ volatile ("" ::: "memory");
-
-    if (l->count == 1)
+    if (--l->count == 0) {
         l->owner = 0;
-
-    --l->count;
+        l->lock.lock = 0;
+    }
 }
 
 #ifdef __cplusplus
