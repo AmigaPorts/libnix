@@ -103,7 +103,6 @@ FILE *fdopen(int filedes, const char *mode) {
 		if (node != NULL) {
 			FILE * f = &node->theFILE;
 			if ((f->_bf._base = (unsigned char *) malloc(*__BUFSIZE)) != NULL) {
-				AddHead((struct List * )&___filelist, (struct Node * )&node->node);
 				f->_p = 0;
 				f->_r = 0;
 				f->_w = 0;
@@ -120,6 +119,11 @@ FILE *fdopen(int filedes, const char *mode) {
 				f->tmpdir = 0;
 				f->name = 0;
 				__STDIO_INIT_LOCK(f->__spinlock);
+				/* only a stream that's all set up goes in the list,
+				   which fflush(NULL) may be walking */
+				__GLOBAL_STDIO_LOCK;
+				AddHead((struct List * )&___filelist, (struct Node * )&node->node);
+				__GLOBAL_STDIO_UNLOCK;
 				return f;
 			}
 			free(node);
@@ -262,6 +266,9 @@ int fclose(FILE *stream) {
 		return EOF;
 	}
 
+	/* __stdLock before the stream's lock, as everywhere: the node leaves the
+	   list, which fflush(NULL) may be walking */
+	__GLOBAL_STDIO_LOCK;
 	__STDIO_LOCK(stream);
 	retval = __fclose(stream) ? EOF : 0;
 	if (stream->_flags & __SMBF) /* Free buffer if necessary */
@@ -278,6 +285,7 @@ int fclose(FILE *stream) {
 	node = (struct filenode *) ((struct MinNode *) stream - 1);
 	Remove((struct Node * )&node->node);
 	__STDIO_UNLOCK(stream);
+	__GLOBAL_STDIO_UNLOCK;
 	free(node);
 	return retval;
 }
