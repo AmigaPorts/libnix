@@ -4,11 +4,9 @@
  * The slow path is entered only when the atomic test-and-set operation
  * detects an already-held lock.
  *
- * Instead of continuously spinning at the current priority, the waiting
- * task temporarily lowers its priority and calls Permit(). This allows
- * the scheduler to run the lock owner, which can then release the lock.
- *
- * The original priority is restored before retrying the atomic operation.
+ * Between attempts, the waiting task ends its time slice, as sched_yield()
+ * and gcc's __gthread_yield() do, so that the lock owner can run and
+ * release the lock.
  *
  * --------------------------------------------------------------------------
  *  Copyright and license
@@ -27,14 +25,11 @@
 #include "spinlock.h"
 
 /*
- * Waits until the spinlock can be acquired.
- *
- * Temporarily lowers the current task's priority and yields through
- * Permit() whenever another task holds the lock.
+ * Waits until the spinlock can be acquired, yielding the CPU whenever
+ * another task holds it.
  */
 void __slowSpinLock(spinlock_t *l asm("a0")) {
     register struct ExecBase *SysBase asm("a6") = *(struct ExecBase **)4;
-    struct Task *dis = SysBase->ThisTask;
 
     for (;;) {
         BYTE locked;
@@ -50,12 +45,13 @@ void __slowSpinLock(spinlock_t *l asm("a0")) {
         if (!locked)
             break;
 
+        /* End our time slice, as exec does when it runs out: a reschedule
+           pending (bit 15) alone switches only to a higher-priority task,
+           and with the slice over (bit 14) we also go behind the ready
+           tasks of our own priority.  Atomically set both bits, since
+           interrupts change SysFlags too. */
         Forbid();
-        dis->tc_Node.ln_Pri -= 5;     /* Lower priority a bit. */
-        /* Tell Permit() to reschedule, even to a task of the same priority.
-           Atomically set both bits, since interrupts change SysFlags too. */
         __asm__ volatile ("or.w #0xc000,%0" : "+m" (SysBase->SysFlags) : : "cc");
-        Permit();                     /* Allow the lock owner to run. */
-        dis->tc_Node.ln_Pri += 5;     /* Restore priority. */
+        Permit();
     }
 }

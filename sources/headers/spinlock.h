@@ -3,8 +3,8 @@
  *
  * These spinlocks are intended exclusively for very short critical sections.
  * They use an atomic 68000 bit-test-and-set instruction for the fast path.
- * Contended locks enter a slow path that temporarily lowers the waiting
- * task's priority and calls Permit() to allow the owner to run.
+ * Contended locks enter a slow path that yields the CPU, as sched_yield()
+ * does, until the owner has released the lock.
  *
  * Recursive spinlocks additionally track the owning task and allow the
  * owner to acquire the same lock recursively.
