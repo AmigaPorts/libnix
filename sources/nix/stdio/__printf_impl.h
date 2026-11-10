@@ -133,6 +133,9 @@ extern unsigned __ulldivus(unsigned long long *llp, unsigned short n);
 #define CX_pct   PRINTF_L('%')
 #define CX_quote PRINTF_L('\'')
 
+/* The value of a hex digit from HEX_LOWER or HEX_UPPER */
+#define HEXVAL(c) ((c) <= CX_9 ? (c) - CX_0 : ((c) & ~0x20) - CX_A + 10)
+
 /* ======================================================================
  * SECTION: output macro
  * ==================================================================== */
@@ -838,6 +841,27 @@ int PRINTF_FN(FILE *stream, const TCHAR *format, va_list args) {
 								    int digit = (mant >> (48 - 4*i)) & 0xF;
 								    buffer[pos++] = hexdigits[digit];
 								}
+							}
+							/* A precision drops digits: round them to nearest, ties
+							 * to even.  A carry out of the leading digit makes a
+							 * subnormal's 0 a 1, and a normal 1 the next power of
+							 * two, still written with a leading 1. */
+							if ((flags & HAS_PRECI) && preci < pos - 3) {
+								int cut = 3 + preci, last = cut - 1, k;
+								int r = HEXVAL(buffer[cut]), sticky = 0;
+								for (k = cut + 1; k < pos; k++)
+									sticky |= buffer[k] != CX_0;
+								if (r > 8 || (r == 8 && (sticky || (HEXVAL(buffer[last]) & 1)))) {
+									while (last >= 3 && buffer[last] == hexdigits[15])
+										buffer[last--] = CX_0;
+									if (last >= 3)
+										buffer[last] = hexdigits[HEXVAL(buffer[last]) + 1];
+									else if (buffer[2] == CX_0)
+										buffer[2] = CX_1;
+									else
+										exponent++;
+								}
+								pos = cut;
 							}
 							type += CX_P - CX_A;
 							leading = 3;
