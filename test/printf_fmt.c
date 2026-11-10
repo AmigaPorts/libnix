@@ -1,6 +1,7 @@
-/* printf's conversion specifications, narrow and wide: %n stores the size
-   of its length modifier, no more.  Prints what fails; the exit code is the
-   number of failures.  */
+/* printf's conversion specifications, narrow and wide, with the results
+   glibc gives: %n stores the size of its length modifier, no more, and the
+   precision of %#x counts the digits, not the 0x.  Prints what fails; the
+   exit code is the number of failures.  */
 
 #include <stdio.h>
 #include <string.h>
@@ -51,6 +52,20 @@ static void stored(const char *fmt, const void *want, size_t size)
 #define STORED(fmt, type, v) \
   do { type w_ = (v); stored(fmt, &w_, sizeof(w_)); } while (0)
 
+/* fmt, with one int, prints want, as glibc does */
+static void printed(const char *fmt, int v, const char *want)
+{
+  char s[64];
+  wchar_t wfmt[32], ws[64], wwant[64];
+
+  snprintf(s, sizeof(s), fmt, v);
+  check(!strcmp(s, want), fmt, "snprintf");
+  widen(wfmt, fmt);
+  widen(wwant, want);
+  swprintf(ws, 64, wfmt, v);
+  check(!wcscmp(ws, wwant), fmt, "swprintf");
+}
+
 int main(void)
 {
   STORED("abc%hhn", signed char, 3);
@@ -61,5 +76,12 @@ int main(void)
   STORED("abc%jn", long long, 3);
   STORED("abc%zn", unsigned long, 3);
   STORED("abc%tn", long, 3);
+
+  printed("[%#.5x]", 1, "[0x00001]");
+  printed("[%#.1x]", 1, "[0x1]");
+  printed("[%#.0x]", 1, "[0x1]");
+  printed("[%#08.3x]", 1, "[   0x001]");
+  printed("[%#.5o]", 1, "[00001]");
+  printed("[%#10.4X]", 255, "[    0X00FF]");
   return failures;
 }

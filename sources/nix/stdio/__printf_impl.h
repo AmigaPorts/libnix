@@ -425,11 +425,10 @@ int PRINTF_FN(FILE *stream, const TCHAR *format, va_list args) {
 							}
 							/* If v == 0, don't add prefix - just let the digit loop output "0" */
 						} else if ((type == CX_x || type == CX_X) && v) {
+							/* the precision counts the digits, not the 0x */
 							if (size1 + 2 <= sizeof(buffer1) / sizeof(buffer1[0])) {
 								buffer1[size1++] = CX_0;
 								buffer1[size1++] = type;
-								if (preci != 0x7fff)
-									preci -= 2;
 							}
 						}
 					}
