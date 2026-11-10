@@ -204,6 +204,7 @@ void free(void *ptr) {
 	for (;;) {
 		if (((struct MinNode *) a)->mln_Succ == NULL) /* Is not in list ????? */
 		{
+			ReleaseSemaphore(__memsema);
 			return;
 		}
 
