@@ -92,9 +92,10 @@ static inline void __spinUnlock(spinlock_t *l asm("a0")) {
 /* Acquires a recursive spinlock.
  * If the current task already owns the lock, only the recursion count
  * is incremented; otherwise the underlying spinlock is acquired.
+ * __spinLock()'s bset is the barrier that keeps the locked section's
+ * accesses after it.
  */
 static inline void __recursiveSpinLock(rspinlock_t *l asm("a0")) {
-    __asm__ volatile ("" ::: "memory");
     struct ExecBase *SysBase = *(struct ExecBase **) 4;
     struct Task *dis = SysBase->ThisTask;
     if (l->owner == (ULONG) dis) {
@@ -109,11 +110,14 @@ static inline void __recursiveSpinLock(rspinlock_t *l asm("a0")) {
 
 /* Releases one recursion level.
  * The owner is cleared only when the final recursion level is released.
+ * The barrier keeps everything before it, the owner's clearing included,
+ * ahead of the store that frees the lock: a later owner = 0 would erase
+ * the next owner's.
  */
 static inline void __recursiveSpinUnlock(rspinlock_t *l asm("a0")) {
-    __asm__ volatile ("" ::: "memory");
     if (--l->count == 0) {
         l->owner = 0;
+        __asm__ volatile ("" ::: "memory");
         l->lock.lock = 0;
     }
 }
