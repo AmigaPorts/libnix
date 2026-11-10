@@ -592,7 +592,7 @@ int main(int argc, char **argv) {
 		TESTFMT("hho width|       052|", "%#10hho", a);
 		TESTFMT("hhx width|      0x2a|", "%#10hhx", a);
 		TESTFMT("hho prec|00052|", "%#.5hho", a);
-		TESTFMT("hhx prec|0x02a|", "%#.5hhx", a);
+		TESTFMT("hhx prec|0x0002a|", "%#.5hhx", a);
 		TESTFMT("hho left|052       |", "%#-10hho", a);
 		TESTFMT("hhx left|0x2a      |", "%#-10hhx", a);
 	}
