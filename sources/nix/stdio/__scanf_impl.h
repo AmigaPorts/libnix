@@ -48,9 +48,11 @@
 # define CX_p           L'p'
 # define CX_P           L'P'
 # define CX_s           L's'
+# define CX_t           L't'
 # define CX_u           L'u'
 # define CX_x           L'x'
 # define CX_X           L'X'
+# define CX_z           L'z'
 # define CX_dot         L'.'
 # define CX_minus       L'-'
 # define CX_plus        L'+'
@@ -101,9 +103,11 @@
 # define CX_p           'p'
 # define CX_P           'P'
 # define CX_s           's'
+# define CX_t           't'
 # define CX_u           'u'
 # define CX_x           'x'
 # define CX_X           'X'
+# define CX_z           'z'
 # define CX_dot         '.'
 # define CX_minus       '-'
 # define CX_plus        '+'
@@ -175,6 +179,23 @@ static inline char *store_char(char *bp, int wide, int c)
 
 #define VAL(a)  ((a)&&size<=width)
 
+/* subtype: the length modifier's letter, CX_i for none, or these */
+#define SUB_HH  1       /* hh: char */
+#define SUB_LL  2       /* ll and j: long long */
+
+/* Store an integer conversion, or %n, at the size of its length modifier.
+ * Signed and unsigned types of a size take the same bits. */
+#define STORE_INT(v) do { \
+    switch (subtype) { \
+    case SUB_HH: *va_arg(args, char *) = (v); break; \
+    case CX_h:   *va_arg(args, short *) = (v); break; \
+    case CX_l: \
+    case CX_L:   *va_arg(args, long *) = (v); break; \
+    case SUB_LL: *va_arg(args, long long *) = (v); break; \
+    default:     *va_arg(args, int *) = (v); break; \
+    } \
+} while (0)
+
 static inline int hexval(int c)
 {
 	if (c >= CX_0 && c <= CX_9)
@@ -223,8 +244,19 @@ int VSCANF_NAME(FILE *stream, const TCHAR *format, va_list args) {
 					width = width * 10 + (*ptr++ - CX_0);
 			}
 
-			while (*ptr == CX_h || *ptr == CX_l || *ptr == CX_L)
-				subtype = *ptr++;
+			/* z and t are long-sized here, j is long long */
+			while (*ptr == CX_h || *ptr == CX_l || *ptr == CX_L
+					|| *ptr == CX_j || *ptr == CX_z || *ptr == CX_t) {
+				TCHAR m = *ptr++;
+				if (m == CX_h && subtype == CX_h)
+					subtype = SUB_HH;
+				else if ((m == CX_l && subtype == CX_l) || m == CX_j)
+					subtype = SUB_LL;
+				else if (m == CX_z || m == CX_t)
+					subtype = CX_l;
+				else
+					subtype = m;
+			}
 
 			type = *ptr++;
 
@@ -618,12 +650,14 @@ if (!ignore)
 					PREV(c);
 				break;
 			case CX_n:
-								if (!ignore)
-				*va_arg(args, int *) = incount;
+				if (!ignore)
+					STORE_INT(incount);
 				size = 1;
 				break;
 			default: {
+				/* ll and j only: 64-bit arithmetic is slow on a 68000 */
 				unsigned long v = 0;
+				unsigned long long vv = 0;
 				int base;
 				int min = 0;
 
@@ -666,7 +700,10 @@ if (!ignore)
 
 				base = (type == CX_x || type == CX_X) ? 16 : (type == CX_o ? 8 : 10);
 				while (VAL(ISXDIGIT(c) && (base != 10 || ISDIGIT(c)) && (base != 8 || c <= CX_7))) {
-					v = v * base + hexval(c);
+					if (subtype == SUB_LL)
+						vv = vv * base + hexval(c);
+					else
+						v = v * base + hexval(c);
 					NEXT(c);
 				}
 
@@ -680,37 +717,14 @@ if (!ignore)
 				if (ignore || !size)
 					break;
 
-				if (type == CX_u)
-					switch (subtype) {
-					case CX_l:
-						case CX_L:
-												*va_arg(args, unsigned long *) = v;
-						break;
-					case CX_i:
-												*va_arg(args, unsigned int *) = v;
-						break;
-					case CX_h:
-												*va_arg(args, unsigned short *) = v;
-						break;
-					}
-				else {
-					signed long v2;
+				if (subtype == SUB_LL) {
 					if (min == CX_minus)
-						v2 = -v;
-					else
-						v2 = v;
-					switch (subtype) {
-					case CX_l:
-						case CX_L:
-												*va_arg(args, signed long *) = v2;
-						break;
-					case CX_i:
-												*va_arg(args, signed int *) = v2;
-						break;
-					case CX_h:
-												*va_arg(args, signed short *) = v2;
-						break;
-					}
+						vv = -vv;
+					STORE_INT(vv);
+				} else {
+					if (min == CX_minus)
+						v = -v;
+					STORE_INT(v);
 				}
 				blocks++;
 				break;

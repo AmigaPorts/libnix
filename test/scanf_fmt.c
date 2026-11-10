@@ -1,8 +1,10 @@
 /* scanf's conversion specifications, narrow and wide, with the results
-   glibc gives: assignment suppression before the field width.  Prints what
-   fails; the exit code is the number of failures.  */
+   glibc gives: assignment suppression before the field width, and the
+   integer conversions and %n storing the size of their length modifier,
+   no more.  Prints what fails; the exit code is the number of failures.  */
 
 #include <stdio.h>
+#include <string.h>
 #include <wchar.h>
 
 static int failures;
@@ -37,8 +39,53 @@ static void suppressed(const char *fmt, const char *in, int r, int v)
   check(n == r && x == v, fmt, in, "swscanf");
 }
 
+/* fmt stores want, of its size, in a buffer of guard bytes */
+static void stored(const char *fmt, const char *in, const void *want, size_t size)
+{
+  wchar_t wfmt[32], win[32];
+  unsigned char b[16], g[16];
+  int pass;
+
+  memset(g, 0xa5, sizeof(g));
+  memcpy(g + 4, want, size);
+  for (pass = 0; pass < 2; pass++)
+    {
+      memset(b, 0xa5, sizeof(b));
+      if (!pass)
+        sscanf(in, fmt, b + 4);
+      else
+        {
+          widen(wfmt, fmt);
+          widen(win, in);
+          swscanf(win, wfmt, b + 4);
+        }
+      check(!memcmp(b, g, sizeof(b)), fmt, in, pass ? "swscanf" : "sscanf");
+    }
+}
+
+#define STORED(fmt, in, type, v) \
+  do { type w_ = (v); stored(fmt, in, &w_, sizeof(w_)); } while (0)
+
 int main(void)
 {
+  STORED("%hhd", "-5", signed char, -5);
+  STORED("%hhu", "200", unsigned char, 200);
+  STORED("%hhx", "7f", unsigned char, 0x7f);
+  STORED("%hd", "-300", short, -300);
+  STORED("%d", "-70000", int, -70000);
+  STORED("%ld", "-70000", long, -70000);
+  STORED("%lld", "-1234567890123", long long, -1234567890123LL);
+  STORED("%llx", "123456789abcdef0", unsigned long long, 0x123456789abcdef0ULL);
+  STORED("%llu", "18446744073709551615", unsigned long long, 18446744073709551615ULL);
+  STORED("%lli", "0x7fffffffffffffff", long long, 0x7fffffffffffffffLL);
+  STORED("%jd", "-9000000000", long long, -9000000000LL);
+  STORED("%zu", "4000000000", unsigned long, 4000000000UL);
+  STORED("%td", "-7", long, -7);
+  STORED("abc%hhn", "abc", signed char, 3);
+  STORED("abc%hn", "abc", short, 3);
+  STORED("abc%n", "abc", int, 3);
+  STORED("abc%lln", "abc", long long, 3);
+
   suppressed("%*3d%d", "12345", 1, 45);
   suppressed("%*d %d", "1 2", 1, 2);
   suppressed("%*2s%d", "ab7", 1, 7);
