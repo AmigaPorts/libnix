@@ -280,8 +280,9 @@ while IFS= read -r line; do
 
   symbol=$(echo "$line" | awk '{ print $NF }')
 
+  # The assembler names: one more leading underscore than in C.
   case "$symbol" in
-    __initlibraries|__initcpp)
+    ___initlibraries|___initcpp)
       continue
       ;;
   esac
