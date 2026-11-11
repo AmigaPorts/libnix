@@ -300,6 +300,7 @@ typedef struct _StdFileDes {
 } StdFileDes;
 
 extern __stdargs StdFileDes *_lx_fhfromfd(int fd);
+extern int __fcntl(StdFileDes *sfd, int cmd, long arg);
 
 /* tmpnam() writes "T:tempfile_2_<task>_<count>", up to 35 bytes. */
 #define L_tmpnam 64
