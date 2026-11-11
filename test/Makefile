@@ -32,6 +32,8 @@ TARGET_TESTS = \
 	c99math \
 	dup_close \
 	fcmp \
+	fcntl_ioctl \
+	fcntl_ioctl_socket \
 	fma \
 	fnmatch \
 	fread \
@@ -109,6 +111,11 @@ c99math_LIBS = -lm
 fcmp_SRCS = ../sources/math/math/__eqdf2.c ../sources/math/math/__eqsf2.c
 fcmp_CFLAGS = -m68000
 fcmp_LIBS = -lm
+
+fcntl_ioctl_SRCS = $(addprefix ../sources/nix/extra/,fcntl.c __fcntl.c) ../sources/nix/stdio/ioctl.c
+
+fcntl_ioctl_socket_SRCS = ../sources/nix/extra/__fcntl.c $(addprefix ../sources/socket/socket/,fcntl.c ioctl.c)
+fcntl_ioctl_socket_LIBS = -lsocket
 
 # Built with an FPU (-m68020 -m68881), it also checks the directed rounding modes.
 fma_SRCS = ../sources/math/common/s_fma.c ../sources/math/common/sf_fma.c

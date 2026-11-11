@@ -16,13 +16,15 @@ __stdargs int ioctl(int s, unsigned long cmd, ...)
   caddr_t data;
   va_list va;
 
-  if (fp->lx_flags & LX_FILE) {
+  if (!fp) {
     errno = EBADF; return -1;
   }
-  
+  if (!(fp->lx_flags & LX_SOCKET)) {
+    errno = ENOTTY; return -1;
+  }
+
+  /* ioctl(fd, request, arg): arg is the request's data pointer */
   va_start(va, cmd);
-  (void)va_arg(va, int); /* inout */
-  (void)va_arg(va, int); /* arglen */
   data = va_arg(va, caddr_t);
   va_end(va);
 
