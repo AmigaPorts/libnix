@@ -1,5 +1,5 @@
-/* popen() and pclose().  Not part of check-target: the simulators have no
-   PIPE: or shell, so run it on AmigaOS from its own directory:
+/* popen() and pclose(), on AmigaOS or under volamos 0.18 or later, from
+   its own directory:
      popen
    It starts itself as the command, with these arguments:
      --emit N     print N numbered lines, return 7

@@ -43,6 +43,7 @@ TARGET_TESTS = \
 	mathfp \
 	memset \
 	multibyte \
+	popen \
 	printf \
 	printf_fmt \
 	printf_ld \
@@ -63,11 +64,10 @@ TARGET_TESTS = \
 	wmemset \
 	wprintf
 
-# Need what the simulators lack: PIPE: and a shell (popen), Exec tasks
-# (setlocale_threads), a thread-enabled gcc (setlocale_threads, cxa-dtors).
+# Need what the simulators lack: Exec tasks (setlocale_threads), a
+# thread-enabled gcc (setlocale_threads, cxa-dtors).
 MANUAL_TESTS = \
 	cxa-dtors \
-	popen \
 	setlocale_threads
 
 # The library's flags, FAST_MATH as in Makefile.m68k-amigaos.
