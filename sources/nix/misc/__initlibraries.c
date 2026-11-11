@@ -15,19 +15,21 @@ extern __attribute__((noreturn)) void exit(int returncode);
 #pragma GCC optimize ("-O2")
 
 /* Reports every library that failed to open, with a dos.library of its own:
-   dos.library may be one of them, at __oslibversion.  */
+   dos.library may be one of them, at __oslibversion.  Started from Workbench,
+   the program has no output to report to, and exits all the same.  */
 static __attribute__((noreturn)) __attribute__((noinline)) void __openliberror() {
 	static char const msg[] = " failed to open\n";
 	struct DosLibrary * DOSBase = (struct DosLibrary *)OldOpenLibrary("dos.library");
 
 	if (DOSBase) {
+		BPTR out = Output();
 		long * l = &__LIB_LIST__ + 1;
-		while (*l) {
+		while (out && *l) {
 			long * base = l++;
 			char const * const name = *(char **) (l++);
 			if (*base == -1) {
-				Write(Output(), (APTR)name, strlen(name));
-				Write(Output(), (APTR)msg, sizeof msg - 1);
+				Write(out, (APTR)name, strlen(name));
+				Write(out, (APTR)msg, sizeof msg - 1);
 			}
 		}
 		CloseLibrary((struct Library *)DOSBase);
