@@ -17,7 +17,7 @@ extern __attribute__((noreturn)) void exit(int returncode);
 /* Reports every library that failed to open, with a dos.library of its own:
    dos.library may be one of them, at __oslibversion.  Started from Workbench,
    the program has no output to report to, and exits all the same.  */
-static __attribute__((noreturn)) __attribute__((noinline)) void __openliberror() {
+static __attribute__((noreturn)) __attribute__((noinline)) void __openliberror(void) {
 	static char const msg[] = " failed to open\n";
 	struct DosLibrary * DOSBase = (struct DosLibrary *)OldOpenLibrary("dos.library");
 
@@ -52,7 +52,7 @@ static int is_resource(char const * name) {
 	return 1;
 }
 
-void __initlibraries() {
+void __initlibraries(void) {
 	long * l = &__LIB_LIST__ + 1;
 	long failed = 0;
 	/* A base that fails to open keeps its -1: the list ends at the first 0. */
@@ -85,7 +85,7 @@ void __initlibraries() {
 	}
 }
 
-void __exitlibraries() {
+void __exitlibraries(void) {
 	long * l = &__LIB_LIST__ + 1;
 	while (*l) {
 		long * base = l++;
