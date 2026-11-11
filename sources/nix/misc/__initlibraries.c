@@ -14,53 +14,57 @@ extern __attribute__((noreturn)) void exit(int returncode);
 #pragma GCC push_options
 #pragma GCC optimize ("-O2")
 
-#define FAILED " failed to load\n"
-
+/* Reports every library that failed to open, with a dos.library of its own:
+   dos.library may be one of them, at __oslibversion.  */
 static __attribute__((noreturn)) __attribute__((noinline)) void __openliberror() {
-	char buf[80];
+	static char const msg[] = " failed to open\n";
+	struct DosLibrary * DOSBase = (struct DosLibrary *)OldOpenLibrary("dos.library");
 
-	long * l = &__LIB_LIST__ + 1;
-	while (*l) {
-		long * base = l++;
-		char const * const name = *(char **) (l++);
-		if (*base == -1) {
-			char * p = buf;
-			for (char const * q = name; *q;) { *p++ = *q++; } // strcpy
-			for (char const * q = FAILED; *q;) { *p++ = *q++; } // strcat
-			*p = 0;
-			Write(Output(), buf, strlen(buf));
+	if (DOSBase) {
+		long * l = &__LIB_LIST__ + 1;
+		while (*l) {
+			long * base = l++;
+			char const * const name = *(char **) (l++);
+			if (*base == -1) {
+				Write(Output(), (APTR)name, strlen(name));
+				Write(Output(), (APTR)msg, sizeof msg - 1);
+			}
 		}
+		CloseLibrary((struct Library *)DOSBase);
 	}
 	exit(20);
 }
 
-__attribute__((noinline))
-static int endswithResource(char const * name) {
-	char const * p = name;
-	while (*p) ++p;
-	p -= 9;
-	if (p < name) return 0;
-	for (char const * q = ".resource";*q;++p, ++q) {
-		if (*p != *q)
+/* Whether NAME ends in .resource.  */
+static int is_resource(char const * name) {
+	static char const suffix[] = ".resource";
+	size_t i = sizeof suffix - 1;
+	size_t n = strlen(name);
+
+	if (n < i)
+		return 0;
+	name += n - i;
+	while (i--)
+		if (name[i] != suffix[i])
 			return 0;
-	}
 	return 1;
 }
 
-void __initlibraries(void) {
+void __initlibraries() {
 	long * l = &__LIB_LIST__ + 1;
 	long failed = 0;
+	/* A base that fails to open keeps its -1: the list ends at the first 0. */
 	while (*l) {
 		long * base = l++;
 		char const * const name = *(char **) (l++);
-		long lib = (long)(endswithResource(name) ? OpenResource(name) : OpenLibrary(name, __oslibversion));
+		long lib = (long)(is_resource(name) ? OpenResource(name) : OpenLibrary(name, __oslibversion));
 		if (lib)
 			*base = lib;
 		else
 			failed = 1;
 	}
 	if (failed)
- 		  __openliberror();
+		__openliberror();
 
 	/* On an FPU, the IEEE maths libraries set the whole FPCR of the task
 	 * that opens them: mathieeesingbas to $40 (round to single precision),
@@ -79,15 +83,15 @@ void __initlibraries(void) {
 	}
 }
 
-void __exitlibraries(void) {
+void __exitlibraries() {
 	long * l = &__LIB_LIST__ + 1;
 	while (*l) {
 		long * base = l++;
 		char const * const name = *(char **) (l++);
-		if (*base != -1) {
-			if (!endswithResource(name))
-				CloseLibrary((struct Library *)*base);
-		}
+		/* *base == -1: it failed to open */
+		/* .resource: never closed, exec has no CloseResource() and resources have no Close vector */
+		if (*base != -1 && !is_resource(name))
+			CloseLibrary((struct Library *)*base);
 	}
 }
 
