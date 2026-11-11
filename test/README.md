@@ -9,12 +9,15 @@ Built with the cross compiler and run under a simulator:
 
 ```
 make -C test check-target
-make -C test check-target SIM=volamos SIMFLAGS="--stack 4K --sanitize"
+make -C test check-target SIM=volamos SIMFLAGS="--stack 4K --sanitize -V TESTS:$PWD/test/build --cwd TESTS:"
 ```
 
 Each test prints `PASS: <test>` or `FAIL: <test>` followed by its output,
 and the run ends with the number of failures. Each test runs in the build
-directory, where it may create files.
+directory, where it may create files. Under volamos, `-V` and `--cwd` make it
+the program's current directory too: volamos's own default, `SYS:`, is
+shared by all its runs, and `popen` starts itself from its current
+directory.
 
 A test is `<test>.c`, linked ahead of the installed libraries with the
 library sources it lists in `<test>_SRCS`, so it tests the sources here,
@@ -47,7 +50,6 @@ compare IEEE-754 bits and are compiled without fast-math or builtins.
 `make -C test manual` builds the tests the simulators cannot run. Run them
 on AmigaOS:
 
-- `popen` needs PIPE: and a shell, see `popen.c`.
 - `setlocale_threads` exercises concurrent locale changes. It needs Exec
   tasks, libpthread, and a libnix built by a thread-enabled compiler, so
   that `__posix_threads__` enables the semaphore. It prints
