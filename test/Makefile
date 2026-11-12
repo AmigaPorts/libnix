@@ -262,7 +262,7 @@ check-target: $(addprefix $(O)/,$(TARGET_TESTS))
 		flags="$(SIMFLAGS)"; \
 		case " $(NET_TESTS) " in *" $$t "*) flags="$$flags $(NET_SIMFLAGS)";; esac; \
 		if (cd $(O) && $(SIM) $$flags ./$$t) >$(O)/$$t.log 2>&1; then \
-			echo "PASS: $$t"; \
+			if grep -q '^SKIP: ' $(O)/$$t.log; then sed "s/^SKIP: /SKIP: $$t: /" $(O)/$$t.log; else echo "PASS: $$t"; fi; \
 		else \
 			echo "FAIL: $$t"; sed 's/^/    /' $(O)/$$t.log; failed=$$((failed + 1)); \
 		fi; \
