@@ -1,58 +1,61 @@
-#define DEVICES_TIMER_H
-#include <dos/dosextens.h>
-#include <proto/exec.h>
-#include <proto/dos.h>
 #include "stdio.h"
 #include <errno.h>
-#include <fcntl.h>
 #include <limits.h>
 #include <stdlib.h>
 #include <unistd.h>
-#include "stabs.h"
-
-/*
- **
- */
 
 extern StdFileDes **__stdfiledes;
-extern int __stdfilesize;
+extern unsigned __stdfilesize;
 
+/* Make newfd a copy of oldfd, closing newfd first if it is open.  A copy
+   shares the original's handle, which close() keeps open until the last of
+   them is closed; a socket gets a socket of its own from its dup hook.  */
 int dup2(int oldfd, int newfd) {
-	if (oldfd < __stdfilesize) {
-		StdFileDes *old = __stdfiledes[oldfd];
-		if (old && old->lx_inuse) {
-			int fd;
-			StdFileDes * neu;
-			if (newfd < __stdfilesize) {
-				neu = __stdfiledes[newfd];
-				if (neu && neu->lx_inuse)
-					close(newfd);
-			} else
-				neu = 0;
-			if (!neu) {
-				StdFileDes ** sfd = __stdfiledes;
-				if (newfd >= __stdfilesize) {
-					if ((sfd = realloc(__stdfiledes, ((unsigned)newfd + 1) * sizeof(int)))
-							== NULL) {
-						errno = ENOMEM;
-						return -1;
-					}
-					__stdfiledes = sfd;
-					for (; __stdfilesize <= newfd; ++__stdfilesize)
-						sfd[__stdfilesize] = 0;
-				}
-				neu = sfd[newfd] = (StdFileDes *) malloc(sizeof(StdFileDes));
-				if (!neu) {
-					errno = ENOMEM;
-					return -1;
-				}
-				neu->lx_pos = newfd;
-			}
-			fd = neu->lx_pos;
-			*neu = *old;
-			neu->lx_pos = fd;
-			return fd;
-		}
+	StdFileDes *old, *neu;
+	int r = -1;
+
+	__GLOBAL_STDIO_LOCK;
+	if (!(old = _lx_fhfromfd(oldfd)) || (unsigned) newfd >= SHRT_MAX) {
+		errno = EBADF;
+		goto out;
 	}
-	return -1;
+	if (newfd == oldfd) {
+		r = newfd;
+		goto out;
+	}
+	if ((unsigned) newfd >= __stdfilesize) {
+		StdFileDes **sfd = realloc(__stdfiledes, ((unsigned) newfd + 1) * sizeof(*sfd));
+		if (!sfd) {
+			errno = ENOMEM;
+			goto out;
+		}
+		__stdfiledes = sfd;
+		while (__stdfilesize <= (unsigned) newfd)
+			sfd[__stdfilesize++] = NULL;
+	}
+	close(newfd);
+
+	if (old->lx_fx) {
+		/* the new socket is in the lowest free slot: swap it into newfd's */
+		int fd = old->lx_fx->lx_dup(old);
+		if (fd >= 0) {
+			neu = __stdfiledes[newfd];
+			if ((__stdfiledes[newfd] = __stdfiledes[fd]))
+				__stdfiledes[newfd]->lx_pos = newfd;
+			if ((__stdfiledes[fd] = neu))
+				neu->lx_pos = fd;
+			r = newfd;
+		}
+		goto out;
+	}
+
+	if (!(neu = __stdfiledes[newfd]) && !(neu = __stdfiledes[newfd] = malloc(sizeof(*neu)))) {
+		errno = ENOMEM;
+		goto out;
+	}
+	*neu = *old;
+	neu->lx_pos = r = newfd;
+out:
+	__GLOBAL_STDIO_UNLOCK;
+	return r;
 }

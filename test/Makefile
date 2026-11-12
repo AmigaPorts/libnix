@@ -30,6 +30,7 @@ TARGET_TESTS = \
 	atan2-zero \
 	atan2f-zero \
 	c99math \
+	dup_close \
 	fcmp \
 	fma \
 	fnmatch \
@@ -117,6 +118,8 @@ fread_SRCS = ../sources/nix/stdio/fread.c ../sources/nix/stdio/__srget.c
 frexpl_SRCS = ../sources/math/extra/frexpl.c
 frexpl_CFLAGS = -fno-fast-math -fno-builtin
 frexpl_LIBS = -lm
+
+dup_close_SRCS = $(addprefix ../sources/nix/stdio/,dup.c dup2.c) ../sources/nix20/stdio/__initstdio.c
 
 fstat_SRCS = ../sources/nix20/stdio/fstat.c
 
