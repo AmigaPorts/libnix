@@ -33,22 +33,26 @@ int dup2(int oldfd, int newfd) {
 		while (__stdfilesize <= (unsigned) newfd)
 			sfd[__stdfilesize++] = NULL;
 	}
-	close(newfd);
 
 	if (old->lx_fx) {
-		/* the new socket is in the lowest free slot: swap it into newfd's */
+		/* The new socket is in the lowest free slot.  newfd is closed only
+		   now that there is a copy, and the two slots are swapped.  */
 		int fd = old->lx_fx->lx_dup(old);
 		if (fd >= 0) {
-			neu = __stdfiledes[newfd];
-			if ((__stdfiledes[newfd] = __stdfiledes[fd]))
+			if (fd != newfd) {
+				close(newfd);
+				neu = __stdfiledes[newfd];
+				__stdfiledes[newfd] = __stdfiledes[fd];
 				__stdfiledes[newfd]->lx_pos = newfd;
-			if ((__stdfiledes[fd] = neu))
-				neu->lx_pos = fd;
+				if ((__stdfiledes[fd] = neu))
+					neu->lx_pos = fd;
+			}
 			r = newfd;
 		}
 		goto out;
 	}
 
+	close(newfd);
 	if (!(neu = __stdfiledes[newfd]) && !(neu = __stdfiledes[newfd] = malloc(sizeof(*neu)))) {
 		errno = ENOMEM;
 		goto out;

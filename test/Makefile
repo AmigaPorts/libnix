@@ -55,6 +55,7 @@ TARGET_TESTS = \
 	scanf_fmt \
 	scanf_int \
 	scanf_round \
+	sock_dup \
 	sscanf \
 	stack \
 	strcmp \
@@ -70,6 +71,11 @@ TARGET_TESTS = \
 MANUAL_TESTS = \
 	cxa-dtors \
 	setlocale_threads
+
+# Need a TCP/IP stack, which volamos has with --net; they skip themselves
+# without one.
+NET_TESTS = sock_dup
+NET_SIMFLAGS = $(if $(findstring volamos,$(SIM)),--net)
 
 # The library's flags, FAST_MATH as in Makefile.m68k-amigaos.
 FAST_MATH ?=
@@ -120,6 +126,9 @@ frexpl_CFLAGS = -fno-fast-math -fno-builtin
 frexpl_LIBS = -lm
 
 dup_close_SRCS = $(addprefix ../sources/nix/stdio/,dup.c dup2.c) ../sources/nix20/stdio/__initstdio.c
+
+sock_dup_SRCS = $(dup_close_SRCS)
+sock_dup_LIBS = -lsocket
 
 fstat_SRCS = ../sources/nix20/stdio/fstat.c
 
@@ -250,7 +259,9 @@ $(O)/cxa-dtors: cxa-dtors.cpp
 check-target: $(addprefix $(O)/,$(TARGET_TESTS))
 	$(Q)failed=0; \
 	for t in $(TARGET_TESTS); do \
-		if (cd $(O) && $(SIM) $(SIMFLAGS) ./$$t) >$(O)/$$t.log 2>&1; then \
+		flags="$(SIMFLAGS)"; \
+		case " $(NET_TESTS) " in *" $$t "*) flags="$$flags $(NET_SIMFLAGS)";; esac; \
+		if (cd $(O) && $(SIM) $$flags ./$$t) >$(O)/$$t.log 2>&1; then \
 			echo "PASS: $$t"; \
 		else \
 			echo "FAIL: $$t"; sed 's/^/    /' $(O)/$$t.log; failed=$$((failed + 1)); \
