@@ -11,5 +11,5 @@ int __stdargs fcntl(int fd, int cmd, ... /* arg */ )
 	va_start(va, cmd);
 	arg = va_arg(va, long);
 	va_end(va);
-	return __fcntl(_lx_fhfromfd(fd), cmd, arg);
+	return __fcntl(fd, cmd, arg);
 }

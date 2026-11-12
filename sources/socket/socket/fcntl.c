@@ -3,7 +3,8 @@
 #include <stdarg.h>
 #include <sys/ioctl.h>
 
-/* Replaces libnix's fcntl() to set O_NONBLOCK on a socket through FIONBIO.  */
+/* Replaces libnix's fcntl() to set O_NONBLOCK on a socket through FIONBIO,
+   which records it for F_GETFL.  */
 __stdargs int fcntl(int fd, int cmd, ... /* arg */ )
 {
   StdFileDes *sfd = _lx_fhfromfd(fd);
@@ -18,5 +19,5 @@ __stdargs int fcntl(int fd, int cmd, ... /* arg */ )
     long on = (arg & O_NONBLOCK) != 0;
     return ioctl(fd, FIONBIO, &on);
   }
-  return __fcntl(sfd, cmd, arg);
+  return __fcntl(fd, cmd, arg);
 }
