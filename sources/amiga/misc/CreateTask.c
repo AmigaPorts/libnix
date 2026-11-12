@@ -10,7 +10,7 @@ struct newMemList {
   struct MemEntry nml_ME[2];
 };
 
-const struct newMemList MemTemplate = {
+static const struct newMemList MemTemplate = {
   {0,},
   2,
   { {MEMF_CLEAR|MEMF_PUBLIC, sizeof(struct Task)},

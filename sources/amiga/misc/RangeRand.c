@@ -13,6 +13,6 @@ ULONG RangeRand(ULONG maxValue)
   }while((i>>=1));
   RangeSeed=a;
   if((UWORD)maxValue)
-    return (UWORD)((UWORD)a*(UWORD)maxValue>>16);
+    return (UWORD)((ULONG)(UWORD)a*(UWORD)maxValue>>16); /* 16x16: no libgcc call */
   return (UWORD)a;
 }

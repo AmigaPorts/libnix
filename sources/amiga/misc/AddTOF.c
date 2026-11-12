@@ -14,9 +14,9 @@ VOID AddTOF(struct Isrvstr *intr,LONG (*code)(APTR),APTR arg)
 { APTR SysBase = *(APTR *)4L;
 
   intr->Iptr  = intr;
-  intr->code  = (int (*)())stub;
-  intr->ccode = (int (*)())code;
-  intr->Carg  = (int)arg;
+  intr->code  = (APTR)stub;
+  intr->ccode = (APTR)code;
+  intr->Carg  = arg;
   AddIntServer(INTB_VERTB,(struct Interrupt *)intr);
 }
 
