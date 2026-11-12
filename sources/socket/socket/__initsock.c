@@ -89,6 +89,8 @@ static int __stdargs _sock_dup(struct _StdFileDes *fp)
 
   if (rc >= 0) {
     fp2->lx_sock = rc; rc = fp2->lx_pos;
+    /* the copy shares the socket, and so whether it blocks */
+    fp2->lx_flags |= fp->lx_flags & LX_NONBLOCK;
   }
   else {
     fp2->lx_inuse = 0;
