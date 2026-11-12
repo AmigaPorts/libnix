@@ -83,9 +83,14 @@ static inline void __spinLock(spinlock_t *l asm("a0")) {
         __slowSpinLock(l);
 }
 
-/* Releases a spinlock and makes preceding memory accesses visible. */
+/* Releases a spinlock and makes preceding memory accesses visible.
+ * The fence is atomic_signal_fence(), by the name that needs no
+ * <stdatomic.h>, which <stdio.h> must not include: it emits no code and
+ * keeps the compiler from moving accesses across it, all that one CPU
+ * needs.
+ */
 static inline void __spinUnlock(spinlock_t *l asm("a0")) {
-    __asm__ volatile ("" ::: "memory");
+    __atomic_signal_fence(__ATOMIC_SEQ_CST);
     l->lock = 0;
 }
 
@@ -117,7 +122,7 @@ static inline void __recursiveSpinLock(rspinlock_t *l asm("a0")) {
 static inline void __recursiveSpinUnlock(rspinlock_t *l asm("a0")) {
     if (--l->count == 0) {
         l->owner = 0;
-        __asm__ volatile ("" ::: "memory");
+        __atomic_signal_fence(__ATOMIC_SEQ_CST);
         l->lock.lock = 0;
     }
 }
