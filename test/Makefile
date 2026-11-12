@@ -76,7 +76,7 @@ MANUAL_TESTS = \
 
 # Need a TCP/IP stack, which volamos has with --net; they skip themselves
 # without one.
-NET_TESTS = sock_dup
+NET_TESTS = fcntl_ioctl_socket sock_dup
 NET_SIMFLAGS = $(if $(findstring volamos,$(SIM)),--net)
 
 # The library's flags, FAST_MATH as in Makefile.m68k-amigaos.
@@ -274,7 +274,7 @@ check-target: $(addprefix $(O)/,$(TARGET_TESTS))
 		flags="$(SIMFLAGS)"; \
 		case " $(NET_TESTS) " in *" $$t "*) flags="$$flags $(NET_SIMFLAGS)";; esac; \
 		if (cd $(O) && $(SIM) $$flags ./$$t) >$(O)/$$t.log 2>&1; then \
-			if grep -q '^SKIP: ' $(O)/$$t.log; then sed "s/^SKIP: /SKIP: $$t: /" $(O)/$$t.log; else echo "PASS: $$t"; fi; \
+			if grep -q '^SKIP: ' $(O)/$$t.log; then sed -n "s/^SKIP: /SKIP: $$t: /p" $(O)/$$t.log; else echo "PASS: $$t"; fi; \
 		else \
 			echo "FAIL: $$t"; sed 's/^/    /' $(O)/$$t.log; failed=$$((failed + 1)); \
 		fi; \

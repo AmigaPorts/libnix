@@ -1,8 +1,9 @@
 /* fcntl_ioctl.c, linked with the socket library's fcntl() and ioctl(), and
    their checks on a socket: O_NONBLOCK set by fcntl() or by ioctl(FIONBIO)
    and reported by F_GETFL, kept by a read-modify-write of the flags, and in
-   effect: accept() on a listening socket does not wait.  Without a TCP/IP
-   stack (the simulators have none), the socket checks are skipped.  */
+   effect: accept() on a listening socket does not wait.  The socket checks
+   need a TCP/IP stack, which volamos has with --net; they are skipped
+   without one.  */
 
 static void socket_checks(void);
 #define EXTRA_CHECKS socket_checks
@@ -20,7 +21,7 @@ static void socket_checks(void)
   s = socket(AF_INET, SOCK_STREAM, 0);
   if (s < 0)
     {
-      printf("no TCP/IP stack: socket checks skipped\n");
+      printf("SKIP: no TCP/IP stack, for the socket checks\n");
       return;
     }
 
