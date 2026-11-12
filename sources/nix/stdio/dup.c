@@ -1,4 +1,5 @@
 #include "stdio.h"
+#include <errno.h>
 
 /*
  **
@@ -31,5 +32,6 @@ int dup(int oldfd) {
 		}
 	}
 	__GLOBAL_STDIO_UNLOCK;
+	errno = EBADF;
 	return -1;
 }

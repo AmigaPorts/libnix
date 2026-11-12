@@ -227,31 +227,41 @@ void __initstdio(void) {
 
 
 /**
- * Close the file descriptor d.
+ * Close the file descriptor d.  dup() and dup2() copy a descriptor, and its
+ * copies share its handle: the last one to close closes it.  The descriptor
+ * table is scanned instead of counting the copies, which keeps descriptors
+ * the size they are, and the lock makes the scan and the Close() one step.
  *
  * Located here since it's called from __exitstdio
  */
 int close(int d) {
-	StdFileDes *sfd = _lx_fhfromfd(d);
+	StdFileDes *sfd;
+	int r = 0;
 
-	if (sfd) {
+	__GLOBAL_STDIO_LOCK;
+	if ((sfd = _lx_fhfromfd(d))) {
 
-		if (sfd->lx_fx)
-			return sfd->lx_fx->lx_close(sfd);
+		if (sfd->lx_fx) {
+			r = sfd->lx_fx->lx_close(sfd);
+		} else if (!(sfd->lx_inuse -= 1) && !(sfd->lx_flags & LX_SYS)) {
+			int i;
 
-		if (!(sfd->lx_inuse -= 1)) {
-			if (!(sfd->lx_flags & LX_SYS)) {
-				if (!Close(sfd->lx_fh)) {
+			for (i = 0; i < __stdfilesize; i++) {
+				StdFileDes *p = __stdfiledes[i];
+				if (p && p->lx_inuse && !p->lx_fx && p->lx_fh == sfd->lx_fh)
+					break;
+			}
+			if (i == __stdfilesize && !Close(sfd->lx_fh)) {
 #ifndef __KICK13__
-					__seterrno();
-					return EOF;
+				__seterrno();
+				r = EOF;
 #endif
-				}
 			}
 		}
 	}
+	__GLOBAL_STDIO_UNLOCK;
 
-	return 0;
+	return r;
 }
 
 /**
