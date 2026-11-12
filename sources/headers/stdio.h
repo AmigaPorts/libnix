@@ -255,6 +255,9 @@ struct StandardPacket;
 #define LX_SOCKET 0x80
 #define LX_SYS    0x04
 #define LX_ATTY   0x02
+/* a socket set to O_NONBLOCK, which fcntl() reports back: its lx_oflags is
+   its lx_family */
+#define LX_NONBLOCK 0x40
 
 struct _StdFileDes;
 struct _StdFileFx {
@@ -300,7 +303,7 @@ typedef struct _StdFileDes {
 } StdFileDes;
 
 extern __stdargs StdFileDes *_lx_fhfromfd(int fd);
-extern int __fcntl(StdFileDes *sfd, int cmd, long arg);
+extern int __fcntl(int fd, int cmd, long arg);
 
 /* tmpnam() writes "T:tempfile_2_<task>_<count>", up to 35 bytes. */
 #define L_tmpnam 64

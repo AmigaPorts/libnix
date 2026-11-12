@@ -112,9 +112,14 @@ fcmp_SRCS = ../sources/math/math/__eqdf2.c ../sources/math/math/__eqsf2.c
 fcmp_CFLAGS = -m68000
 fcmp_LIBS = -lm
 
-fcntl_ioctl_SRCS = $(addprefix ../sources/nix/extra/,fcntl.c __fcntl.c) ../sources/nix/stdio/ioctl.c
+# F_DUPFD makes its copy with dup2(), and close() frees it.
+FCNTL_DUP_SRCS = ../sources/nix/stdio/dup2.c ../sources/nix20/stdio/__initstdio.c
 
-fcntl_ioctl_socket_SRCS = ../sources/nix/extra/__fcntl.c $(addprefix ../sources/socket/socket/,fcntl.c ioctl.c)
+fcntl_ioctl_SRCS = $(addprefix ../sources/nix/extra/,fcntl.c __fcntl.c) ../sources/nix/stdio/ioctl.c \
+	$(FCNTL_DUP_SRCS)
+
+fcntl_ioctl_socket_SRCS = ../sources/nix/extra/__fcntl.c $(addprefix ../sources/socket/socket/,fcntl.c ioctl.c) \
+	$(FCNTL_DUP_SRCS)
 fcntl_ioctl_socket_LIBS = -lsocket
 
 # Built with an FPU (-m68020 -m68881), it also checks the directed rounding modes.

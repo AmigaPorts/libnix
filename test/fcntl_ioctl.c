@@ -1,8 +1,8 @@
 /* fcntl() and ioctl() on files: fcntl() reports the access mode, keeps
-   O_APPEND and accepts FD_CLOEXEC, and fails with EINVAL for O_NONBLOCK and
-   unknown commands; ioctl() fails with ENOTTY.  Both fail with EBADF on a
-   closed descriptor.  fcntl_ioctl_socket runs the same checks against the
-   socket library's versions.  */
+   O_APPEND and O_NONBLOCK, accepts FD_CLOEXEC, duplicates with F_DUPFD, and
+   fails with EINVAL for unknown commands; ioctl() fails with ENOTTY.  Both
+   fail with EBADF on a closed descriptor.  fcntl_ioctl_socket runs the same checks against the
+   socket library's versions, and adds its own on a socket (EXTRA_CHECKS).  */
 
 #include <errno.h>
 #include <fcntl.h>
@@ -28,7 +28,7 @@ int main(void)
 {
   char buf[8];
   long n = 0;
-  int fd, fl;
+  int fd, fl, d1, d2;
 
   fd = open(NAME, O_WRONLY | O_CREAT | O_TRUNC, 0666);
   check(fd >= 0, "open for writing");
@@ -52,9 +52,14 @@ int main(void)
   check(fcntl(fd, F_SETFL, fl) == 0, "F_SETFL without O_APPEND succeeds");
   check(!(fcntl(fd, F_GETFL) & O_APPEND), "F_GETFL has no O_APPEND again");
 
+  /* O_NONBLOCK has no effect on a file, but F_GETFL reports it */
+  check(fcntl(fd, F_SETFL, fl | O_NONBLOCK) == 0, "F_SETFL O_NONBLOCK on a file succeeds");
+  check(fcntl(fd, F_GETFL) & O_NONBLOCK, "F_GETFL has O_NONBLOCK");
+  check(fcntl(fd, F_SETFL, fl) == 0 && !(fcntl(fd, F_GETFL) & O_NONBLOCK),
+        "F_SETFL clears O_NONBLOCK");
+
   errno = 0;
-  check(fcntl(fd, F_SETFL, O_NONBLOCK) == -1 && errno == EINVAL,
-        "F_SETFL O_NONBLOCK on a file fails with EINVAL");
+  check(fcntl(fd, F_DUPFD, -1) == -1 && errno == EINVAL, "F_DUPFD below 0 fails with EINVAL");
   errno = 0;
   check(fcntl(fd, 9999) == -1 && errno == EINVAL, "an unknown command fails with EINVAL");
 
@@ -63,17 +68,31 @@ int main(void)
 
   close(fd);
 
+  /* F_DUPFD takes the lowest free descriptor from its argument on, and the
+     copy shares the file position and outlives the original */
   fd = open(NAME, O_RDONLY);
-  check(fd >= 0 && read(fd, buf, sizeof buf) == 5 && !memcmp(buf, "abcde", 5),
-        "the file is abcde");
+  check(fd >= 0 && read(fd, buf, 2) == 2 && !memcmp(buf, "ab", 2), "the file starts with ab");
+  d1 = fcntl(fd, F_DUPFD, 10);
+  check(d1 == 10, "F_DUPFD 10 gives 10");
+  d2 = fcntl(fd, F_DUPFD, 10);
+  check(d2 == 11, "F_DUPFD 10 again gives 11");
   close(fd);
+  check(read(d1, buf, sizeof buf) == 3 && !memcmp(buf, "cde", 3),
+        "the copy reads on after the original is closed");
+  close(d1);
+  close(d2);
 
   errno = 0;
   check(fcntl(fd, F_GETFL) == -1 && errno == EBADF, "fcntl on a closed fd fails with EBADF");
   errno = 0;
   check(ioctl(fd, FIONBIO, &n) == -1 && errno == EBADF, "ioctl on a closed fd fails with EBADF");
+  errno = 0;
+  check(fcntl(fd, F_DUPFD, 10) == -1 && errno == EBADF, "F_DUPFD of a closed fd fails with EBADF");
 
   remove(NAME);
+#ifdef EXTRA_CHECKS
+  EXTRA_CHECKS();
+#endif
   printf("%d failures\n", failures);
   return failures;
 }

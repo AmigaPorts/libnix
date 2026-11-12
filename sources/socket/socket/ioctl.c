@@ -13,6 +13,7 @@ __stdargs int ioctl(int s, unsigned long cmd, ...)
 { struct SocketSettings *lss;
   StdFileDes *fp = _lx_fhfromfd(s);
   int rc;
+  int fionbio = cmd == FIONBIO; /* before the AS225 renumbering below */
   caddr_t data;
   va_list va;
 
@@ -83,6 +84,14 @@ __stdargs int ioctl(int s, unsigned long cmd, ...)
     default:
       rc = 0;
     break;
+  }
+
+  /* for fcntl()'s F_GETFL */
+  if (rc == 0 && fionbio) {
+    if (*(long *)data)
+      fp->lx_flags |= LX_NONBLOCK;
+    else
+      fp->lx_flags &= ~LX_NONBLOCK;
   }
 
   return rc;
