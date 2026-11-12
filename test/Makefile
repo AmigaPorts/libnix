@@ -27,6 +27,7 @@ all: check
 # and <test>_LIBS go to the test's own compile and link.
 
 TARGET_TESTS = \
+	amigalib \
 	atan2-zero \
 	atan2f-zero \
 	c99math \
@@ -49,6 +50,7 @@ TARGET_TESTS = \
 	printf_fmt \
 	printf_ld \
 	printf_s \
+	rexxvars \
 	rint \
 	romtag \
 	round \
@@ -80,6 +82,16 @@ NET_SIMFLAGS = $(if $(findstring volamos,$(SIM)),--net)
 # The library's flags, FAST_MATH as in Makefile.m68k-amigaos.
 FAST_MATH ?=
 LIB_CFLAGS = -I../sources/headers -fno-builtin $(FAST_MATH) -D__libnix__ -fno-tree-loop-distribute-patterns
+
+# amiga.lib, which m68k-amigaos-gcc builds from these sources.  DoPktn.c only
+# aliases DoPkt0() to DoPkt4(), which are library stubs there.
+amigalib_SRCS = $(filter-out %/DoPktn.c,$(wildcard ../sources/amiga/misc/*.c))
+amigalib_LIBFLAGS = -Os
+amigalib_CFLAGS = -fno-builtin -Wno-pointer-sign
+
+# Includes sources/amiga/misc/RexxVars.c, with OpenLibrary() answering for a
+# mock rexxsyslib.library.
+rexxvars_CFLAGS = -fno-builtin -Wno-pointer-sign -Wno-unused-variable
 
 # The signed-zero assertions compare bits, so the tests themselves are built
 # without fast-math and builtins.
