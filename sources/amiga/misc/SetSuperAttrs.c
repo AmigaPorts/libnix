@@ -13,7 +13,7 @@ asm(
 "		pea	sp@(20:W);"
 "		pea	259:W;"
 "		movel	sp,a1;"
-"		movel	sp@(24:W),a0;"
+"		movel	a0@(24:W),a0;"
 "		jbsr	L_Invoke;"
 "		lea	sp@(12:W),sp;"
 "L_Null:		movel	sp@+,a2;"
