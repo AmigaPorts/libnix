@@ -1,20 +1,29 @@
-#include <time.h>
-#include <proto/dos.h>
-#include <proto/timer.h>
+/* gettimeofday(): the DateStamp() clock, which counts from 1978-01-01, taken
+   as UTC.  */
+
 #include <sys/time.h>
+#include <dos/dos.h>
+#include <proto/dos.h>
+
+/* 1978-01-01 in seconds since 1970-01-01 */
+#define AMIGA_EPOCH 252460800L
 
 int gettimeofday(struct timeval *tv, struct timezone *tz) {
 	if (tv) {
-		struct DateStamp stamp;
-		DateStamp(&stamp);
+		struct DateStamp ds;
+		unsigned short ticks, secs;
 
-		long s = stamp.ds_Tick / TICKS_PER_SECOND;
-		tv->tv_secs = (stamp.ds_Days * 24 * 60 + stamp.ds_Minute) * 60 + _timezone + s + 252460800;
-		tv->tv_usec = stamp.ds_Tick * (1000000 / TICKS_PER_SECOND) - s * 1000000;
+		DateStamp(&ds);
+		/* under 3000: a 16-bit division, which the 68000 has */
+		ticks = ds.ds_Tick;
+		secs = ticks / TICKS_PER_SECOND;
+		tv->tv_sec = (ds.ds_Days * 1440L + ds.ds_Minute) * 60L + secs + AMIGA_EPOCH;
+		tv->tv_usec = (unsigned short) (ticks - secs * TICKS_PER_SECOND)
+			* (1000000L / TICKS_PER_SECOND);
 	}
 	if (tz) {
+		tz->tz_minuteswest = 0;
 		tz->tz_dsttime = 0;
-		tz->tz_minuteswest = _timezone / 60;
 	}
 	return 0;
 }

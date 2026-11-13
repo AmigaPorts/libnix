@@ -1,10 +1,8 @@
-/* Greenwich mean time offset and daylight savings time flag 
+/* The variables of tzset().  libnix has no time zones: Unix time is the
+   system clock taken as UTC, for time(), file dates and localtime() alike,
+   so the variables say UTC and tzset() has nothing to do.
  */
 #include <time.h>
-#ifndef __KICK13__
-#include <proto/locale.h>
-#include <stabs.h>
-#endif
 
 long __timezone__data = 0;
 int  __daylight__data = 0;
@@ -15,17 +13,4 @@ int  * __daylight = &__daylight__data;
 char **__tzname = __tzname__data;
 
 void tzset() {
-#ifndef __KICK13__
-	if (LocaleBase) {
-		struct Locale * locale = OpenLocale(0);
-		if (locale) {
-			__timezone__data = locale->loc_GMTOffset * 60;
-			CloseLocale(locale);
-		}
-	}
-#endif
 }
-
-#ifndef __KICK13__
-ADD2INIT(tzset, -11);
-#endif

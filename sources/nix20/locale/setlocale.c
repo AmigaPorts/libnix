@@ -26,10 +26,6 @@ static unsigned char *ctype;
 /* for LC_NUMERIC */
 extern char *__decimalpoint;
 
-/* for LC_TIME */
-extern long __timezone__data;
-//extern int _daylight;
-
 struct lconv __lconv;
 
 int __locale_mb_cur_max(void) {
@@ -264,13 +260,6 @@ static char *__setlocale(size_t a, size_t b, const char *name) {
 	}
 	/* "C" gives printf() and scanf() the point back too */
 	__decimalpoint = __lconv.decimal_point;
-
-#ifndef __KICK13__
-	if (__localevec[LC_TIME - 1] != NULL)
-		__timezone__data = __localevec[LC_TIME - 1]->loc_GMTOffset * 60;
-	else
-#endif
-		__timezone__data = 0;
 
 	return (char *) name;
 }
