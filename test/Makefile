@@ -2,7 +2,6 @@
 #   make check                 host tests, with the host compiler
 #   make check-target          target tests, under a simulator
 #   make check-target SIM=volamos SIMFLAGS="--stack 4K --sanitize"
-#   make manual                tests to run by hand on AmigaOS
 #   make build/<test>          one test
 # Everything is built in $(O); V=1 shows the commands.
 
@@ -68,11 +67,13 @@ TARGET_TESTS = \
 	wmemset \
 	wprintf
 
-# Need what the simulators lack: Exec tasks (setlocale_threads), a
-# thread-enabled gcc (setlocale_threads, cxa-dtors).
-MANUAL_TESTS = \
+# Need a thread-enabled gcc, with its libstdc++ and libpthread: check-target
+# runs them unless gcc's thread model is "single", and says SKIP if it is.
+THREAD_TESTS = \
 	cxa-dtors \
 	setlocale_threads
+THREAD_MODEL := $(shell $(CROSS_CC) -v 2>&1 | sed -n 's/^Thread model: //p')
+RUN_TESTS = $(TARGET_TESTS) $(if $(filter-out single,$(THREAD_MODEL)),$(THREAD_TESTS))
 
 # Need a TCP/IP stack, which volamos has with --net; they skip themselves
 # without one.
@@ -265,7 +266,7 @@ $(O)/$(1): $(wildcard $(1).c) $(call test_objs,$(1))
 	$$(Q)$$(CROSS_CC) $$(CROSS_CFLAGS) -Wall $$($(1)_CFLAGS) -o $$@ $$^ $$($(1)_LIBS)
 endef
 
-$(foreach t,$(filter-out cxa-dtors,$(TARGET_TESTS) $(MANUAL_TESTS)),$(eval $(call test_program,$(t))))
+$(foreach t,$(filter-out cxa-dtors,$(TARGET_TESTS) $(THREAD_TESTS)),$(eval $(call test_program,$(t))))
 
 $(O)/cxa-dtors: cxa-dtors.cpp
 	@mkdir -p $(@D)
@@ -275,9 +276,12 @@ $(O)/cxa-dtors: cxa-dtors.cpp
 
 # Each test runs in $(O), where it may create files, and prints its output
 # only when it fails.
-check-target: $(addprefix $(O)/,$(TARGET_TESTS))
+check-target: $(addprefix $(O)/,$(RUN_TESTS))
 	$(Q)failed=0; \
-	for t in $(TARGET_TESTS); do \
+	for t in $(filter-out $(RUN_TESTS),$(THREAD_TESTS)); do \
+		echo "SKIP: $$t: gcc has no thread model"; \
+	done; \
+	for t in $(RUN_TESTS); do \
 		flags="$(SIMFLAGS) $(CPU_SIMFLAGS)"; \
 		case " $(NET_TESTS) " in *" $$t "*) flags="$$flags $(NET_SIMFLAGS)";; esac; \
 		if (cd $(O) && $(SIM) $$flags ./$$t) >$(O)/$$t.log 2>&1; then \
@@ -286,10 +290,8 @@ check-target: $(addprefix $(O)/,$(TARGET_TESTS))
 			echo "FAIL: $$t"; sed 's/^/    /' $(O)/$$t.log; failed=$$((failed + 1)); \
 		fi; \
 	done; \
-	echo "$$failed of $(words $(TARGET_TESTS)) target tests failed"; \
+	echo "$$failed of $(words $(RUN_TESTS)) target tests failed"; \
 	test $$failed = 0
-
-manual: $(addprefix $(O)/,$(MANUAL_TESTS))
 
 # ---------------------------------------------------------------------------
 # Host tests. -iquote is searched for "quoted" includes only, so libnix's own
@@ -335,5 +337,5 @@ check: $(O)/host/amigapath check-atan2
 clean:
 	rm -rf $(O)
 
-.PHONY: all check check-atan2 check-target manual clean
+.PHONY: all check check-atan2 check-target clean
 .SECONDARY:
