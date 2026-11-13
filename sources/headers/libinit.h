@@ -87,7 +87,8 @@ extern const char DevIdString[];
 extern const char DevName[];
 
 extern APTR __LibTable__[];
-extern APTR __FuncTable__[];
+/* in a section of its own, not in the data hunk: never a4-relative */
+extern APTR __FuncTable__[] __attribute__((section(".list___FuncTable__,\"aw\"")));
 
 extern LONG __datadata_relocs[];
 
