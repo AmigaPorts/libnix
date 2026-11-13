@@ -108,7 +108,7 @@ c99math_CFLAGS = -fno-builtin
 c99math_LIBS = -lm
 
 clock_SRCS = \
-	$(addprefix ../sources/nix/time/,time.c gettimeofday.c localtime.c) \
+	$(addprefix ../sources/nix/time/,time.c gettimeofday.c localtime.c clock_gettime.c) \
 	$(addprefix ../sources/nix20/locale/,__gmtoffset.c setlocale.c)
 
 fcmp_SRCS = ../sources/math/math/__eqdf2.c ../sources/math/math/__eqsf2.c

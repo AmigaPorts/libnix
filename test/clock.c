@@ -2,8 +2,10 @@
    time() and gettimeofday() are DateStamp() since 1970, whatever timezone
    holds and whatever setlocale() is asked; localtime() is gmtime() and
    mktime() undoes it; a new file's date is the clock's, and utime() stores
-   the date as the DateStamp it is.  */
+   the date as the DateStamp it is.  clock_gettime() reads the same clock
+   as CLOCK_REALTIME and timer.device's E-clock as CLOCK_MONOTONIC.  */
 
+#include <errno.h>
 #include <locale.h>
 #include <stdio.h>
 #include <time.h>
@@ -11,7 +13,12 @@
 #include <sys/stat.h>
 #include <sys/time.h>
 #include <dos/dos.h>
+#include <dos/dosextens.h>
+#include <devices/timer.h>
 #include <proto/dos.h>
+#include <proto/timer.h>
+
+#define TimerBase (DOSBase->dl_TimeReq->tr_node.io_Device)
 
 #define NAME "T:libnix-clock-test"
 
@@ -48,16 +55,53 @@ static long now(void)
 static void clocks(void)
 {
   struct timeval tv;
+  struct timespec ts = { -1, -1 };
   long before, after;
   time_t t;
 
   before = now();
   t = time(NULL);
   gettimeofday(&tv, NULL);
+  clock_gettime(CLOCK_REALTIME, &ts);
   after = now();
   check(t >= before && t <= after, "time() is the DateStamp since 1970");
   check(tv.tv_sec >= before && tv.tv_sec <= after, "gettimeofday() too");
   check(tv.tv_usec >= 0 && tv.tv_usec < 1000000, "with microseconds below a second");
+  check(ts.tv_sec >= before && ts.tv_sec <= after, "clock_gettime(CLOCK_REALTIME) too");
+  check(ts.tv_nsec >= 0 && ts.tv_nsec < 1000000000, "with nanoseconds below a second");
+}
+
+/* The E-clock counter in nanoseconds, and its frequency in *FREQ.  */
+static long long eclock(unsigned long *freq)
+{
+  struct EClockVal ev;
+  unsigned long long ticks;
+
+  *freq = ReadEClock(&ev);
+  ticks = (unsigned long long) ev.ev_hi << 32 | ev.ev_lo;
+  return ticks / *freq * 1000000000 + ticks % *freq * 1000000000 / *freq;
+}
+
+static void monotonic(void)
+{
+  struct timespec ts = { -1, -1 }, res = { -1, -1 };
+  long long before, after, t;
+  unsigned long freq;
+
+  check(clock_getres(CLOCK_REALTIME, &res) == 0 && res.tv_sec == 0
+        && res.tv_nsec == 1000000000 / TICKS_PER_SECOND, "clock_getres(CLOCK_REALTIME) says a tick");
+  before = eclock(&freq);
+  check(clock_gettime(CLOCK_MONOTONIC, &ts) == 0, "clock_gettime(CLOCK_MONOTONIC) succeeds");
+  after = eclock(&freq);
+  t = ts.tv_sec * 1000000000LL + ts.tv_nsec;
+  check(ts.tv_nsec >= 0 && ts.tv_nsec < 1000000000, "with nanoseconds below a second");
+  /* to an E-clock tick, which the conversion may round away */
+  check(t >= before - 2000 && t <= after + 2000, "and is the E-clock counter");
+  check(clock_getres(CLOCK_MONOTONIC, &res) == 0 && res.tv_sec == 0
+        && res.tv_nsec == 1000000000 / freq, "clock_getres(CLOCK_MONOTONIC) says an E-clock tick");
+  errno = 0;
+  check(clock_gettime((clockid_t) 99, &ts) == -1 && errno == EINVAL,
+        "a clock there isn't fails with EINVAL");
 }
 
 int main(void)
@@ -81,6 +125,7 @@ int main(void)
   stage = ", after setlocale(LC_ALL, \"\")";
   clocks();
   stage = "";
+  monotonic();
 
   t = time(NULL);
   tm = *localtime(&t);
