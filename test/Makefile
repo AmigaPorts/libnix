@@ -85,13 +85,15 @@ LIB_CFLAGS = -I../sources/headers -fno-builtin $(FAST_MATH) -D__libnix__ -fno-tr
 
 # amiga.lib, which m68k-amigaos-gcc builds from these sources.  DoPktn.c only
 # aliases DoPkt0() to DoPkt4(), which are library stubs there.
+# -Wno-pointer-sign, as in Makefile.m68k-amigaos: the functions under test take
+# STRPTR (unsigned char) strings, and the tests pass them string literals.
 amigalib_SRCS = $(filter-out %/DoPktn.c,$(wildcard ../sources/amiga/misc/*.c))
 amigalib_LIBFLAGS = -Os
 amigalib_CFLAGS = -fno-builtin -Wno-pointer-sign
 
 # Includes sources/amiga/misc/RexxVars.c, with OpenLibrary() answering for a
 # mock rexxsyslib.library.
-rexxvars_CFLAGS = -fno-builtin -Wno-pointer-sign -Wno-unused-variable
+rexxvars_CFLAGS = -fno-builtin -Wno-pointer-sign
 
 # The signed-zero assertions compare bits, so the tests themselves are built
 # without fast-math and builtins.

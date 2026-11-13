@@ -26,6 +26,7 @@
 #include <clib/dos_protos.h>
 #include <clib/alib_protos.h>
 #include <clib/mathieeedoubbas_protos.h>
+#include <string.h>
 
 extern struct ExecBase *SysBase;
 extern ULONG RangeSeed;
@@ -56,13 +57,6 @@ static void check(LONG ok, CONST_STRPTR what)
       Printf("FAIL: %s\n", (LONG)what);
       failures++;
     }
-}
-
-static LONG same(CONST_STRPTR a, CONST_STRPTR b)
-{
-  while (*a && *a == *b)
-    a++, b++;
-  return *a == *b;
 }
 
 /* ------------------------------------------------------------------ */
@@ -115,7 +109,7 @@ static void test_acrypt(void)
       buf[12] = 0x55;
       r = ACrypt(buf, t[i].pw, t[i].user);
       Printf("ACrypt %ld = %s\n", i, (LONG)(r ? r : (STRPTR)"(null)"));
-      check(r == buf && same(buf, t[i].expect), "ACrypt result");
+      check(r == buf && !strcmp(buf, t[i].expect), "ACrypt result");
       check(buf[12] == 0x55, "ACrypt writes 12 bytes");
     }
 }
@@ -126,7 +120,7 @@ static void test_sprintf(void)
 
   sprintf(buf, "%ld %s %lx %lc|%-6ld|%06ld|%d", 123456789, "str", 0xcafeL, 'x', 42, 7, 0x12345);
   Printf("sprintf \"%s\"\n", (LONG)buf);
-  check(same(buf, "123456789 str CAFE x|42    |000007|1"), "sprintf");
+  check(!strcmp(buf, "123456789 str CAFE x|42    |000007|1"), "sprintf");
 }
 
 static void test_list(void)
@@ -553,8 +547,8 @@ static void test_invert(void)
     }
   Printf("InvertString: %ld events, description \"%s\"\n", n, (LONG)mock_description);
   check(n == 6, "InvertString event count");
-  check(same(mock_description, "alt f1"), "InvertString description");
-  check(same(text, "aB\\n\\t<alt f1>\\<"), "InvertString leaves the string");
+  check(!strcmp(mock_description, "alt f1"), "InvertString description");
+  check(!strcmp(text, "aB\\n\\t<alt f1>\\<"), "InvertString leaves the string");
   FreeIEvents(chain);
 
   chain = InvertString("k", (APTR)&mock_cx);
@@ -566,13 +560,13 @@ static void test_invert(void)
   /* the original writes a '>' over the end of the string here */
   chain = InvertString(open_end, NULL);
   Printf("InvertString without '>': %ld events, description \"%s\"\n", count(chain), (LONG)mock_description);
-  check(count(chain) == 2 && same(mock_description, "alt f2") && same(open_end, "x<alt f2"), "InvertString without '>'");
+  check(count(chain) == 2 && !strcmp(mock_description, "alt f2") && !strcmp(open_end, "x<alt f2"), "InvertString without '>'");
   FreeIEvents(chain);
 #endif
 
   chain = InvertString(bad, NULL);
   Printf("InvertString bad description: %ld\n", (LONG)(chain != NULL));
-  check(!chain && same(bad, "ab<!bad>c"), "InvertString bad description");
+  check(!chain && !strcmp(bad, "ab<!bad>c"), "InvertString bad description");
   chain = InvertString("a\\q", NULL);
   Printf("InvertString bad escape: %ld\n", (LONG)(chain != NULL));
   check(!chain, "InvertString bad escape");
@@ -609,10 +603,10 @@ static void test_args(void)
     return;
   s = ArgString(tt, "NAME", "default");
   Printf("ArgString NAME = %s\n", (LONG)s);
-  check(same(s, "value"), "ArgString");
+  check(!strcmp(s, "value"), "ArgString");
   s = ArgString(tt, "MISSING", "default");
   Printf("ArgString MISSING = %s\n", (LONG)s);
-  check(same(s, "default"), "ArgString default");
+  check(!strcmp(s, "default"), "ArgString default");
   n = ArgInt(tt, "NUM", 7);
   Printf("ArgInt NUM = %ld\n", n);
   check(n == 42, "ArgInt");
@@ -735,7 +729,7 @@ static void test_stubs(void)
 
   r = SplitName("abc/def", '/', buf, 0, sizeof(buf));
   Printf("SplitName = %ld \"%s\"\n", r, (LONG)buf);
-  check(r == 4 && same(buf, "abc"), "SplitName");
+  check(r == 4 && !strcmp(buf, "abc"), "SplitName");
   r = SplitName("abc", '/', buf, 0, sizeof(buf));
   Printf("SplitName at the end = %ld\n", r);
   check(r == -1, "SplitName WORD result");
@@ -794,7 +788,7 @@ int main(int argc, char **argv)
   LONG i;
 
   for (i = 0; i < sizeof(sections) / sizeof(sections[0]); i++)
-    if (argc > 1 ? same(argv[1], sections[i].name) : sections[i].always)
+    if (argc > 1 ? !strcmp(argv[1], sections[i].name) : sections[i].always)
       {
 	Printf("== %s\n", (LONG)sections[i].name);
 	sections[i].run();

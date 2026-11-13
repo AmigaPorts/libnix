@@ -12,13 +12,14 @@
 #include <rexx/errors.h>
 #include <proto/exec.h>
 #include <proto/dos.h>
+#include <string.h>
 
 static struct Library *mock_open(CONST_STRPTR name);
 
 #undef OpenLibrary
 #define OpenLibrary(name, version) mock_open(name)
 #undef CloseLibrary
-#define CloseLibrary(base) ((void)(base))
+#define CloseLibrary(base) ((void)SysBase, (void)(base))
 
 #include "../sources/amiga/misc/RexxVars.c"
 
@@ -31,13 +32,6 @@ static void check(LONG ok, CONST_STRPTR what)
       Printf("FAIL: %s\n", (LONG)what);
       failures++;
     }
-}
-
-static LONG same(CONST_STRPTR a, CONST_STRPTR b)
-{
-  while (*a && *a == *b)
-    a++, b++;
-  return *a == *b;
 }
 
 /* ------------------------------------------------------------------ */
@@ -56,7 +50,7 @@ static LONG loglen;
 
 static struct Library *mock_open(CONST_STRPTR name)
 {
-  return library_open && same(name, "rexxsyslib.library") ? &mock.lib : NULL;
+  return library_open && !strcmp(name, "rexxsyslib.library") ? &mock.lib : NULL;
 }
 
 static void logs(CONST_STRPTR s)
@@ -142,7 +136,7 @@ void mock_call(ULONG slot, struct regs *r)
       break;
     case LVO_FetchValue:
       logs("FetchValue:"), logs(text(r->a1)), logs(":"), logs(text((struct NexxStr *)r->d0)), logs(":"), logn(r->d1), logs(" ");
-      r->d1 = same(text(r->a1), "UNSET") ? 0x100 : 0;
+      r->d1 = !strcmp(text(r->a1), "UNSET") ? 0x100 : 0;
       r->a1 = &stored.ns;
       r->d0 = 0xdead0008, r->a0 = (APTR)0xdead0009;
       break;
@@ -198,7 +192,7 @@ static void expect(LONG r, LONG want, CONST_STRPTR calls, CONST_STRPTR what)
 {
   Printf("%s = %ld: %s\n", (LONG)what, r, (LONG)logbuf);
   check(r == want, what);
-  if (!same(logbuf, calls))
+  if (strcmp(logbuf, calls))
     {
       Printf("  expected:  %s\n", (LONG)calls);
       check(0, what);
