@@ -230,7 +230,7 @@ LONG SetRexxVar(struct RexxMsg *msg, CONST_STRPTR name, CONST_STRPTR value, LONG
 
   if (!CheckRexxMsg(msg))
     return ERR10_010;
-  if (length>65535)
+  if ((ULONG)length>65535)
     return ERR10_009;
   return rx_guard(&((struct RexxTask *)msg->rm_TaskBlock)->rt_ErrTrap,rx_assign,&as);
 }

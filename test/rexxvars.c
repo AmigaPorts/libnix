@@ -300,6 +300,10 @@ int main(void)
   expect(r, ERR10_009, "IsRexxMsg ", "SetRexxVar, value too long");
 
   reset();
+  r = SetRexxVar(&msg, "RESULT", "x", -1);
+  expect(r, ERR10_009, "IsRexxMsg ", "SetRexxVar, negative length");
+
+  reset();
   r = SetRexxVar(&msg, "NO GOOD", "x", 1);
   expect(r, ERR10_040, "IsRexxMsg CurrentEnv GetSpace:16 StrcpyN IsSymbol:NO GOOD FreeSpace:NO GOOD:16 ", "SetRexxVar, bad name");
 
