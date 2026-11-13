@@ -723,7 +723,6 @@ static void test_rexx(void)
 static void test_stubs(void)
 {
   struct Task *me = FindTask(NULL);
-  union { DOUBLE d; ULONG l[2]; } u;
   UBYTE buf[80];
   LONG r;
 
@@ -754,6 +753,8 @@ static void test_stubs(void)
          and code built for the FPU takes it from fp0 */
       Printf("SKIP: IEEEDPAdd: the stub does not return in fp0\n");
 #else
+      union { DOUBLE d; ULONG l[2]; } u;
+
       u.d = IEEEDPAdd(1.5, 2.25);
       Printf("IEEEDPAdd = %08lx %08lx\n", u.l[0], u.l[1]);
       check(u.l[0] == 0x400e0000 && u.l[1] == 0, "IEEEDPAdd");
