@@ -11,16 +11,16 @@ ULONG FastRand(ULONG seed)
 
 #else
 
-asm("
-		.text
+asm(
+"		.text\n"
 
-		.globl	_FastRand
+"		.globl	_FastRand\n"
 
-_FastRand:	movel	sp@(4:W),d0
-		addl	d0,d0
-		bhis	L1
-		eoril	#0x1D872B41,d0
-L1:		rts
-");
+"_FastRand:	movel	sp@(4:W),d0\n"
+"		addl	d0,d0\n"
+"		bhis	L1\n"
+"		eoril	#0x1D872B41,d0\n"
+"L1:		rts\n"
+);
 
 #endif

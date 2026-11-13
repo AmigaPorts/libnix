@@ -18,7 +18,7 @@ struct MsgPort *CreatePort(CONST_STRPTR name,LONG pri)
     else {
       port->mp_Node.ln_Type = NT_MSGPORT;
       port->mp_Node.ln_Pri  = pri;
-      port->mp_Node.ln_Name = name;
+      port->mp_Node.ln_Name = (APTR)name;
       /* done via AllocMem
       port->mp_Flags        = PA_SIGNAL;
       */
