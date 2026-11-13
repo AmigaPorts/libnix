@@ -77,9 +77,6 @@ int utimes(const char *file, const struct timeval times[2]) {
 		t -= (2922L * SECSPERDAY); /* Datestamps start from Jan 1, 1978, unix
 		 time from Jan 1, 1970, i.e., 2922 days
 		 earlier! */
-#if 0
-    t -= _timezone;	/* Adjust for local time */
-#endif
 		d.ds_Days = t / SECSPERDAY;
 		t %= SECSPERDAY;
 		d.ds_Minute = t / 60L;

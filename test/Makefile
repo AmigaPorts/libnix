@@ -30,6 +30,7 @@ TARGET_TESTS = \
 	atan2-zero \
 	atan2f-zero \
 	c99math \
+	clock \
 	dup_close \
 	fcmp \
 	fma \
@@ -125,6 +126,10 @@ c99math_SRCS = \
 c99math_LIBFLAGS = -I../sources/math/mathfp
 c99math_CFLAGS = -fno-builtin
 c99math_LIBS = -lm
+
+clock_SRCS = \
+	$(addprefix ../sources/nix/time/,time.c gettimeofday.c localtime.c) \
+	$(addprefix ../sources/nix20/locale/,__gmtoffset.c setlocale.c)
 
 fcmp_SRCS = ../sources/math/math/__eqdf2.c ../sources/math/math/__eqsf2.c
 fcmp_CFLAGS = -m68000

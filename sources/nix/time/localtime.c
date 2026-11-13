@@ -1,7 +1,7 @@
 #include <time.h>
 
+/* The system clock is taken as UTC, so local time is gmtime()'s.  */
 struct tm *localtime(const time_t *t)
-{ time_t ti=*t;
-  ti-=_timezone;
-  return gmtime(&ti);
+{
+  return gmtime(t);
 }
