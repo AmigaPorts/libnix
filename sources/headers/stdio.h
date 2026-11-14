@@ -256,7 +256,9 @@ struct StandardPacket;
 #define LX_SYS    0x04
 #define LX_ATTY   0x02
 /* a socket set to O_NONBLOCK, which fcntl() reports back: its lx_oflags is
-   its lx_family */
+   its lx_family.  dup() and accept() copy it, but it is kept for each
+   descriptor: setting it through one copy of a socket is not seen in
+   F_GETFL on the others, although the socket itself changes for all.  */
 #define LX_NONBLOCK 0x40
 
 struct _StdFileDes;

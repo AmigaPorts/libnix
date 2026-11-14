@@ -30,6 +30,8 @@ int accept(int s, struct sockaddr *name, socklen_t *namelen)
 
   if (rc >= 0) {
     fp2->lx_sock = rc; rc = fp2->lx_pos;
+    /* the stack gives the new socket the listener's non-blocking state */
+    fp2->lx_flags |= fp->lx_flags & LX_NONBLOCK;
   }
   else {
     fp2->lx_inuse = 0;
