@@ -17,24 +17,29 @@ int pipe(int pipefd[2]) {
 	if (bin && bout) {
 		Write(bin, tmp, 0); // no longer blocks!?
 		StdFileDes* in = __allocfd();
-		StdFileDes* out = __allocfd();
-		if (in && out) {
+		if (in) {
+			StdFileDes* out;
+
 			in->lx_oflags = O_RDONLY;
 			in->lx_fh = bin;
 			_setup_file(in);
 
-			out->lx_flags = O_APPEND;
-			out->lx_fh = bout;
-			_setup_file(out);
+			/* only now: __allocfd() hands out the same descriptor until
+			   _setup_file() marks it in use */
+			out = __allocfd();
+			if (out) {
+				/* not O_APPEND: write() would seek to the end first,
+				   and a pipe cannot seek */
+				out->lx_oflags = O_WRONLY;
+				out->lx_fh = bout;
+				_setup_file(out);
 
-			pipefd[0] = in->lx_pos;
-			pipefd[1] = out->lx_pos;
-			return 0;
-		}
-		if (in)
+				pipefd[0] = in->lx_pos;
+				pipefd[1] = out->lx_pos;
+				return 0;
+			}
 			in->lx_inuse = 0;
-		if (out)
-			out->lx_inuse = 0;
+		}
 	}
 	if (bin) Close(bin);
 	if (bout) Close(bout);
