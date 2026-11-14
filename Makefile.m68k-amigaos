@@ -1,5 +1,6 @@
-# libnix Makefile for m68k-amigaos-gcc.  Makefile.gcc6, its old name, is a
-# symlink to it for the builds that still use that name.
+# libnix Makefile for m68k-amigaos-gcc.  Makefile is a symlink to it.
+# It builds in the current directory: the source directory, or a build
+# directory, with make -f <sources>/Makefile.m68k-amigaos.
 
 MAJOR=0
 MINOR=1
@@ -9,7 +10,10 @@ PREFIX ?= /opt/amiga
 CFLAGS ?= -Os -fomit-frame-pointer
 
 uname := $(shell uname)
-root ?= $(shell echo $$PWD)
+# the sources: where this file is, unless the caller says
+ifeq ($(origin root),undefined)
+root := $(patsubst %/,%,$(dir $(realpath $(lastword $(MAKEFILE_LIST)))))
+endif
 export root
 
 target ?= m68k-amigaos
@@ -79,6 +83,7 @@ endif
 # with clean among the goals, clean first
 ifneq (,$(filter clean,$(MAKECMDGOALS)))
 $(VARIANTS_TO_BUILD): clean
+$(STARTUPS) $(gen)/sfdc/stamp $(gen)/libbases/stamp $(gen)/amiga/stamp: clean
 libc: clean
 endif
 
@@ -90,7 +95,6 @@ endif
 ifeq (socket,$(lib))
 crt = -mcrt=nix20
 endif
-CFLAGS += $(crt)
 endif
 else
 CC = m68k-elf-gcc
@@ -104,32 +108,43 @@ STARTUPS ?= lib/ncrt0.o
 
 endif
 
-# extend CFLAGS in the top-level make only: the sub-makes inherit them
-ifeq (,$(kind))
+# The library's own flags, which follow the caller's CFLAGS on every command
+# line.  They are not added to CFLAGS: a sub-make only inherits a CFLAGS that
+# came from the environment, not the default or one from the command line.
+#
 # FAST_MATH=-ffast-math builds with it, which breaks NaN, infinities and signed
 # zeros in the math functions, and the exact rounding error fma() and fmaf()
 # compute: libc-test fails many of them with it.
 FAST_MATH ?=
-CFLAGS += -I$(root)/sources/headers -fno-builtin $(FAST_MATH) -D__libnix__
+LIB_CFLAGS = -I$(root)/sources/headers -fno-builtin $(FAST_MATH) -D__libnix__
 # The library implements the mem* functions.  Keep loop distribution from
 # replacing one of their loops with a call back into the same function.
-CFLAGS += -fno-tree-loop-distribute-patterns
+LIB_CFLAGS += -fno-tree-loop-distribute-patterns
 # AmigaOS APIs take STRPTR (unsigned char) strings, so -Wpointer-sign
 # would flag every call that passes a plain char string.
-CFLAGS += -Wall -Wno-pointer-sign
+LIB_CFLAGS += -Wall -Wno-pointer-sign
 # With the gcc we build and test with, more warnings, and all of them errors.
 # Older gcc, as in the amiga6 toolchain, lacks some of these options and warns
 # differently.  WERROR= keeps them warnings.
+ifeq (,$(gcc_major))
 gcc_major := $(firstword $(subst ., ,$(shell $(CC) -dumpversion 2>/dev/null)))
+export gcc_major
+endif
 ifeq (y,$(shell test "$(gcc_major)" -ge 16 2>/dev/null && echo y))
 WERROR ?= -Werror
-CFLAGS += -Wimplicit-fallthrough -Wtype-limits -Wold-style-definition -Wstrict-prototypes $(WERROR)
+LIB_CFLAGS += -Wimplicit-fallthrough -Wtype-limits -Wold-style-definition -Wstrict-prototypes $(WERROR)
 endif
-endif
+LIB_CFLAGS += $(crt)
 
 .PHONY: all one rest clean install install_one info
 .PHONY: $(VARIANTS_TO_BUILD)
 all: $(VARIANTS_TO_BUILD)
+
+# The tests, in test/: check runs the host ones, check-target the target ones,
+# with the installed libraries.  That make must not read this file as well.
+.PHONY: check check-target
+check check-target:
+	$(MAKE) -C $(root)/test MAKEFILES= $@
 
 $(VARIANTS_TO_BUILD): $(STARTUPS) $(gen)/libbases/stamp $(gen)/amiga/stamp
 
@@ -177,10 +192,10 @@ libdir:
 	@mkdir -p lib
 
 lib/devinit.o lib/libinit.o lib/libinitr.o: lib/%.o: $(root)/sources/startup/%.c libdir
-	$(CC) -c $(CFLAGS) $(flags) $< -o $@
+	$(CC) -c $(CFLAGS) $(LIB_CFLAGS) $(flags) $< -o $@
 
 lib/libinitb.o: $(root)/sources/startup/libinit.c libdir
-	$(CC) -c $(CFLAGS) $(flags) -D__BASEREL__ $< -o $@
+	$(CC) -c $(CFLAGS) $(LIB_CFLAGS) $(flags) -D__BASEREL__ $< -o $@
 
 # $(TGT) marks the ELF build in the startups that have an ELF variant
 lib/ncrt0.o lib/xcrt0.o: lib/%.o: $(root)/sources/startup/%.S libdir
@@ -193,7 +208,7 @@ lib/nlbcrt0.o lib/nlrcrt0.o: lib/%.o: $(root)/sources/startup/%.S libdir
 	$(AS) -m68020 $< -o $@
 
 lib/init_shared.o: $(root)/sources/startup/init_shared.c libdir
-	$(CC) $(CFLAGS) -fbaserel -m68000 -Os -c $< -o $@
+	$(CC) $(CFLAGS) $(LIB_CFLAGS) -fbaserel -m68000 -Os -c $< -o $@
 
 .PHONY: libnix libnix13 libnix20 libnixmain libnix_main libm libsocket libstub libamiga libc
 libnix:
@@ -278,15 +293,15 @@ lib$(libname).a: $(shell find $(root)/sources/$(lib)/* -name '*.c') $(stolen) $(
 	@dups="$$(find $(root)/sources/$(lib)/* -name '*.c' | xargs -n1 basename | sort | uniq -d | xargs)"; \
 	if [ -n "$$dups" ]; then echo "sources/$(lib) has more than one file named: $$dups" >&2; exit 1; fi
 	@mkdir -p $(lib)
-	@echo compiling for $(kind)/$@ using $(CC) -c $(CFLAGS) $(flags)
+	@echo compiling for $(kind)/$@ using $(CC) -c $(CFLAGS) $(LIB_CFLAGS) $(flags)
 	@touch -t 0001010000 $(lib)/stamp && if [ -e $@ ]; then touch -r $@ $(lib)/stamp; fi
 	@if [ "$$(find $(headers) -newer $(lib)/stamp)" != "" ]; then rm -f $(lib)/*.o $@; touch -t 0001010000 $(lib)/stamp; fi
 	@if [ "$$(find $(root)/Makefile.m68k-amigaos -newer $(lib)/stamp)" != "" ]; then rm -f $(lib)/*.o $@; touch -t 0001010000 $(lib)/stamp; fi
 	@cd $(lib) && files="$$(find $^ -name '*.c' -newer stamp)" && \
 	o2="$$(printf '%s\n' $$files | grep -E '$(O2_SOURCES)' | xargs)" && \
 	files="$$(printf '%s\n' $$files | grep -vE '$(O2_SOURCES)' | xargs)" && \
-	if [ -n "$$files" ]; then echo "$(CC) -c $(CFLAGS) $(flags) $$files" && $(CC) -c $(CFLAGS) $(flags) $$files; fi && \
-	if [ -n "$$o2" ]; then echo "$(CC) -c $(CFLAGS) $(flags) -O2 $$o2" && $(CC) -c $(CFLAGS) $(flags) -O2 $$o2; fi
+	if [ -n "$$files" ]; then echo "$(CC) -c $(CFLAGS) $(LIB_CFLAGS) $(flags) $$files" && $(CC) -c $(CFLAGS) $(LIB_CFLAGS) $(flags) $$files; fi && \
+	if [ -n "$$o2" ]; then echo "$(CC) -c $(CFLAGS) $(LIB_CFLAGS) $(flags) -O2 $$o2" && $(CC) -c $(CFLAGS) $(LIB_CFLAGS) $(flags) -O2 $$o2; fi
 	@objs="$$(find ./$(lib)/* -name '*.o' -newer $(lib)/stamp)" && echo "$(AR) rcs $@ $$objs" && \
 	$(AR) rcs $@ $$objs
 
@@ -297,9 +312,9 @@ amiga_sources = find $(gen)/amiga $(root)/sources/amiga -name '*.[cs]'
 libamiga.a: $(gen)/amiga/stamp $(shell find $(root)/sources/amiga -name '*.c') $(headers) $(root)/Makefile.m68k-amigaos
 	@dups="$$($(amiga_sources) | sed 's|.*/||; s|\.[cs]$$||' | sort | uniq -d | xargs)"; \
 	if [ -n "$$dups" ]; then echo "$@ has more than one source named: $$dups" >&2; exit 1; fi
-	@echo compiling for $(kind)/$@ using $(CC) -c $(CFLAGS) $(flags)
+	@echo compiling for $(kind)/$@ using $(CC) -c $(CFLAGS) $(LIB_CFLAGS) $(flags)
 	@rm -rf amiga $@ && mkdir amiga
-	@cd amiga && $(amiga_sources) | xargs $(CC) -c $(CFLAGS) $(flags)
+	@cd amiga && $(amiga_sources) | xargs $(CC) -c $(CFLAGS) $(LIB_CFLAGS) $(flags)
 	@find amiga -name '*.o' | sort | xargs $(AR) rcs $@
 
 libb/libnix4.library:
@@ -319,6 +334,7 @@ clean:
 	find * -name '*.o' -delete
 	find * -name '*.a' -delete
 	find * -name stamp -delete
+	rm -rf $(gen)
 
 info:
 	@echo "$(uname)"
