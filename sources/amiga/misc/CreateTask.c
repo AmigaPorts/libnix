@@ -13,8 +13,8 @@ struct newMemList {
 static const struct newMemList MemTemplate = {
   {0,},
   2,
-  { {MEMF_CLEAR|MEMF_PUBLIC, sizeof(struct Task)},
-    {MEMF_CLEAR, 0} }
+  { {{MEMF_CLEAR|MEMF_PUBLIC}, sizeof(struct Task)},
+    {{MEMF_CLEAR}, 0} }
 };
 
 #define NEWLIST(l) ((l)->lh_Head = (struct Node *)&(l)->lh_Tail, \

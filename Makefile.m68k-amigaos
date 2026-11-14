@@ -14,6 +14,13 @@ export root
 
 target ?= m68k-amigaos
 
+# sfdc writes most of libamiga.a's sources from the NDK's SFD files, into
+# $(gen) in the top-level build directory: one copy serves every multilib.
+SFDC ?= sfdc
+SFD_DIR ?= $(PREFIX)/$(target)/ndk/lib/sfd
+gen ?= $(CURDIR)/gen
+export gen
+
 # The sub-makes run in the build directories without -f: make reads this file there through MAKEFILES.
 MAKEFILES=$(root)/Makefile.m68k-amigaos
 
@@ -43,16 +50,16 @@ AS = $(target)-as
 # directory per line with the options that select it after a ';', each
 # prefixed with '@' (libb/libm020;@fbaserel@m68020-60).  The base directory
 # '.' is built in lib/, every other one in a directory of its own name, and
-# the FPU directories (m68881) only get libm: nothing else depends on the FPU.
-# All but the FPU directories are built at -Os, whatever CFLAGS says: $(flags)
-# comes last on the command line.
+# the FPU directories (m68881) only get libm and libamiga: nothing else depends
+# on the FPU.  All but the FPU directories are built at -Os, whatever CFLAGS
+# says: $(flags) comes last on the command line.
 MULTILIBS := $(shell $(CC) -print-multi-lib)
 multilib_dir = $(word 1,$(subst ;, ,$1))
 multilib_flags = $(strip $(subst @, -,$(word 2,$(subst ;, ,$1))))
 multilib_kind = $(if $(filter .,$(call multilib_dir,$1)),lib,$(call multilib_dir,$1))
 
 VARIANTS_TO_BUILD = info $(foreach m,$(MULTILIBS),$(call multilib_kind,$m))
-LIBS_TO_BUILD ?= libnix libnix13 libnix20 libnixmain libnix_main libm libsocket libstub
+LIBS_TO_BUILD ?= libnix libnix13 libnix20 libnixmain libnix_main libm libsocket libstub libamiga
 STARTUPS ?= lib/devinit.o lib/libinit.o lib/libinitb.o lib/libinitr.o lib/ncrt0.o lib/nbcrt0.o lib/nlbcrt0.o lib/nrcrt0.o lib/nlrcrt0.o lib/init_shared.o
 
 # protect conflicting targets
@@ -123,13 +130,12 @@ endif
 .PHONY: $(VARIANTS_TO_BUILD)
 all: $(VARIANTS_TO_BUILD)
 
-$(VARIANTS_TO_BUILD): $(STARTUPS)
+$(VARIANTS_TO_BUILD): $(STARTUPS) $(gen)/amiga/stamp
 
 # the base multilib, in lib/
 lib:
 	@mkdir -p $@
 	$(MAKE) one kind=$@ flags="-Os"
-	if [ -e lib/libstubs.a ] && $(AR) t lib/libstubs.a | grep -q __initlib; then rm -f lib/libstubs.a; fi
 
 # every other multilib: build in its directory, install into the same
 # directory under $(PREFIX)/$(target)/libnix/lib
@@ -137,7 +143,7 @@ define multilib_rules
 .PHONY: $(1) install_$(subst /,_,$(1))
 $(1):
 	@mkdir -p $$@
-	$$(MAKE) one kind=$$@ flags="$(2)$(if $(findstring m68881,$(2)),, -Os)" $(if $(findstring m68881,$(2)),LIBS_TO_BUILD=libm)
+	$$(MAKE) one kind=$$@ flags="$(2)$(if $(findstring m68881,$(2)),, -Os)" $(if $(findstring m68881,$(2)),LIBS_TO_BUILD="libm libamiga")
 install_$(subst /,_,$(1)):
 	$$(MAKE) install_one kind=$(1) to="$(1)/"
 endef
@@ -155,10 +161,12 @@ install_lib:
 	$(MAKE) install_one kind=lib to=""
 	mv $(PREFIX)/$(target)/libnix/lib/libstubs.a $(PREFIX)/$(target)/lib/
 
-# install the files for the given $(kind) into $(to)
+# install the files for the given $(kind) into $(to); libamiga.a goes to the
+# library directory that every C library searches
 install_one:
-	mkdir -p $(PREFIX)/$(target)/libnix/lib/$(to)
-	rsync $(kind)/*.a $(PREFIX)/$(target)/libnix/lib/$(to)
+	mkdir -p $(PREFIX)/$(target)/libnix/lib/$(to) $(PREFIX)/$(target)/lib/$(to)
+	rsync --exclude libamiga.a $(kind)/*.a $(PREFIX)/$(target)/libnix/lib/$(to)
+	if [ -e $(kind)/libamiga.a ]; then rsync $(kind)/libamiga.a $(PREFIX)/$(target)/lib/$(to); fi
 	find $(kind) -maxdepth 1 -name "*.o" -exec cp {} $(PREFIX)/$(target)/libnix/lib/$(to) \;
 
 # startup stuff
@@ -185,7 +193,7 @@ lib/nlbcrt0.o lib/nlrcrt0.o: lib/%.o: $(root)/sources/startup/%.S libdir
 lib/init_shared.o: $(root)/sources/startup/init_shared.c libdir
 	$(CC) $(CFLAGS) -fbaserel -m68000 -Os -c $< -o $@
 
-.PHONY: libnix libnix13 libnix20 libnixmain libnix_main libm libsocket libstub libc
+.PHONY: libnix libnix13 libnix20 libnixmain libnix_main libm libsocket libstub libamiga libc
 libnix:
 	$(MAKE) -C $(kind) rest libnix.a lib=nix
 libnix13:
@@ -199,10 +207,30 @@ libm:
 libsocket:
 	$(MAKE) -C $(kind) libsocket.a lib=socket
 
+# The library bases were in libstubs.a and are in libamiga.a: an empty archive,
+# for the -lstubs of gcc's specs.
 libstub:
-	$(MAKE) -C $(kind) libstubs.a lib=stubs
+	printf '!<arch>\n' >$(kind)/libstubs.a
 
-libc: $(STARTUPS)
+# amiga.lib: sfdc writes a stub for every public function of the NDK's
+# libraries, the library bases that the startup code opens and the LVO symbols.
+libamiga:
+	$(MAKE) -C $(kind) libamiga.a
+
+SFD_FILES = $(wildcard $(SFD_DIR)/*_lib.sfd)
+
+# An SFD file with no library to open, such as a device's, leaves an empty
+# file for its base.
+$(gen)/amiga/stamp: $(SFD_FILES) $(shell command -v $(SFDC))
+	@if [ -z "$(SFD_FILES)" ]; then echo "no SFD files in $(SFD_DIR): set SFD_DIR" >&2; exit 1; fi
+	rm -rf $(gen)/amiga && mkdir -p $(gen)/amiga
+	$(SFDC) --quiet --target=m68k-gcc-amigaos --mode=stubs --output=$(gen)/amiga/%f.c $(SFD_FILES)
+	$(SFDC) --quiet --target=m68k-gcc-amigaos --mode=autoopen --output=$(gen)/amiga/%n_autoopen.c $(SFD_FILES)
+	$(SFDC) --quiet --target=m68k-gcc-amigaos --mode=lvolib --output=$(gen)/amiga/%n_lvo.s $(SFD_FILES)
+	grep -L dlist___LIB_LIST__ $(gen)/amiga/*_autoopen.c | xargs rm -f
+	touch $@
+
+libc: $(STARTUPS) $(gen)/amiga/stamp
 	$(MAKE) -C lib kind=lib libstubs.a lib=stubs
 	$(MAKE) -C $(lc) kind=$(lc) rest libnix.a lib=nix
 	$(MAKE) -C $(lc) kind=$(lc) rest libnix20.a lib=nix20
@@ -245,6 +273,18 @@ lib$(libname).a: $(shell find $(root)/sources/$(lib)/* -name '*.c') $(stolen) $(
 	if [ -n "$$o2" ]; then echo "$(CC) -c $(CFLAGS) $(flags) -O2 $$o2" && $(CC) -c $(CFLAGS) $(flags) -O2 $$o2; fi
 	@objs="$$(find ./$(lib)/* -name '*.o' -newer $(lib)/stamp)" && echo "$(AR) rcs $@ $$objs" && \
 	$(AR) rcs $@ $$objs
+
+# libamiga.a, from the sources sfdc wrote and the support functions in
+# sources/amiga.  There are too many for one command line, and all are compiled
+# again when any of them, a header or this file changed.
+amiga_sources = find $(gen)/amiga $(root)/sources/amiga -name '*.[cs]'
+libamiga.a: $(gen)/amiga/stamp $(shell find $(root)/sources/amiga -name '*.c') $(headers) $(root)/Makefile.m68k-amigaos
+	@dups="$$($(amiga_sources) | sed 's|.*/||; s|\.[cs]$$||' | sort | uniq -d | xargs)"; \
+	if [ -n "$$dups" ]; then echo "$@ has more than one source named: $$dups" >&2; exit 1; fi
+	@echo compiling for $(kind)/$@ using $(CC) -c $(CFLAGS) $(flags)
+	@rm -rf amiga $@ && mkdir amiga
+	@cd amiga && $(amiga_sources) | xargs $(CC) -c $(CFLAGS) $(flags)
+	@find amiga -name '*.o' | sort | xargs $(AR) rcs $@
 
 libb/libnix4.library:
 	cd libb && $(root)/preplib

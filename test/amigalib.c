@@ -748,17 +748,13 @@ static void test_stubs(void)
 
   if ((MathIeeeDoubBasBase = OpenLibrary("mathieeedoubbas.library", 0)))
     {
-#ifdef __HAVE_68881__
-      /* the stub leaves the double in d0/d1, where the library returns it,
-         and code built for the FPU takes it from fp0 */
-      Printf("SKIP: IEEEDPAdd: the stub does not return in fp0\n");
-#else
       union { DOUBLE d; ULONG l[2]; } u;
 
+      /* the library returns the double in d0/d1; code built for the FPU
+         takes it from fp0, where that multilib's stub moves it */
       u.d = IEEEDPAdd(1.5, 2.25);
       Printf("IEEEDPAdd = %08lx %08lx\n", u.l[0], u.l[1]);
       check(u.l[0] == 0x400e0000 && u.l[1] == 0, "IEEEDPAdd");
-#endif
       r = IEEEDPFix(-12345.0);
       Printf("IEEEDPFix = %ld\n", r);
       check(r == -12345, "IEEEDPFix");

@@ -27,6 +27,7 @@ all: check
 
 TARGET_TESTS = \
 	amigalib \
+	amigastubs \
 	atan2-zero \
 	atan2f-zero \
 	c99math \
@@ -89,13 +90,16 @@ CPU_SIMFLAGS = $(if $(findstring volamos,$(SIM)),$(if $(CROSS_CPU),--cpu $(CROSS
 FAST_MATH ?=
 LIB_CFLAGS = -I../sources/headers -fno-builtin $(FAST_MATH) -D__libnix__ -fno-tree-loop-distribute-patterns
 
-# amiga.lib, which m68k-amigaos-gcc builds from these sources.  DoPktn.c only
-# aliases DoPkt0() to DoPkt4(), which are library stubs there.
+# amiga.lib's support functions; the library stubs come from the installed
+# libamiga.a.
 # -Wno-pointer-sign, as in Makefile.m68k-amigaos: the functions under test take
 # STRPTR (unsigned char) strings, and the tests pass them string literals.
-amigalib_SRCS = $(filter-out %/DoPktn.c,$(wildcard ../sources/amiga/misc/*.c))
+amigalib_SRCS = $(wildcard ../sources/amiga/misc/*.c)
 amigalib_LIBFLAGS = -Os
 amigalib_CFLAGS = -fno-builtin -Wno-pointer-sign
+
+# The installed libamiga.a alone: stubs, library bases and LVO symbols.
+amigastubs_CFLAGS = -fno-builtin -Wno-pointer-sign
 
 # Includes sources/amiga/misc/RexxVars.c, with OpenLibrary() answering for a
 # mock rexxsyslib.library.
