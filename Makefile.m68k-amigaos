@@ -214,9 +214,11 @@ libstub:
 SFD_FILES = $(wildcard $(SFD_DIR)/*_lib.sfd)
 
 # An SFD file with nothing for the startup code to open, such as a device's,
-# leaves an empty file.
+# leaves an empty file.  An sfdc before 1.14 writes bases that do not open.
 $(gen)/libbases/stamp: $(SFD_FILES) $(shell command -v $(SFDC))
 	@if [ -z "$(SFD_FILES)" ]; then echo "no SFD files in $(SFD_DIR): set SFD_DIR" >&2; exit 1; fi
+	@v="$$($(SFDC) --version 2>&1 | sed -n 's/^sfdc \([0-9]*\)\.\([0-9]*\).*/\1 \2/p')"; set -- $$v; \
+	if [ $$(($${1:-0} * 1000 + $${2:-0})) -lt 1014 ]; then echo "$(SFDC) is sfdc $${1:-?}.$${2:-?}: libnix needs 1.14 or later" >&2; exit 1; fi
 	rm -rf $(gen)/libbases && mkdir -p $(gen)/libbases
 	$(SFDC) --quiet --target=m68k-amigaos --mode=autoopen --output=$(gen)/libbases/%n.c $(SFD_FILES)
 	grep -L dlist___LIB_LIST__ $(gen)/libbases/*.c | xargs rm -f
