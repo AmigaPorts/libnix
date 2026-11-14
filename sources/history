@@ -382,3 +382,14 @@ __request.c -- rewritten in C (Gunther Nikl)
 S Constructor (__CTOR_LIST__) and destructor (__DTOR_LIST__) lists from C++
   are now initialized by libnix, instead of libgcc.a. To turn this feature off
   use `int __initcpp = 0` in your code.
+
+V3.2
+The changes of Stefan "Bebbo" Franke for amiga-gcc and of AmigaPorts for
+m68k-amigaos-gcc since 2.2 are in the git log.
+
+The build runs sfdc 1.14 or later on the SFD files of NDK 3.2: for the
+library bases that the startup code opens, which libstubs.a has, and for
+libamiga.a, the replacement for amiga.lib: the stubs and LVO symbols of the
+NDK's libraries with the support functions of sources/amiga.
+
+libamiga.a is built for every multilib, the FPU ones included.
