@@ -58,6 +58,20 @@ int main(void)
   check(fcntl(fd, F_SETFL, fl) == 0 && !(fcntl(fd, F_GETFL) & O_NONBLOCK),
         "F_SETFL clears O_NONBLOCK");
 
+  /* a copy shares the flags: with O_APPEND set through the original a write
+     through the copy appends, and cleared through the copy, a write through
+     the original goes where it seeked to */
+  d1 = dup(fd);
+  check(d1 >= 0 && fcntl(fd, F_SETFL, fl | O_APPEND) == 0 && (fcntl(d1, F_GETFL) & O_APPEND),
+        "a copy has the O_APPEND set through the original");
+  lseek(d1, 0, SEEK_SET);
+  check(write(d1, "f", 1) == 1, "write f through the copy");
+  check(fcntl(d1, F_SETFL, fl) == 0 && !(fcntl(fd, F_GETFL) & O_APPEND),
+        "the original has O_APPEND cleared through the copy");
+  lseek(fd, 0, SEEK_SET);
+  check(write(fd, "A", 1) == 1, "write A through the original");
+  close(d1);
+
   errno = 0;
   check(fcntl(fd, F_DUPFD, -1) == -1 && errno == EINVAL, "F_DUPFD below 0 fails with EINVAL");
   errno = 0;
@@ -71,13 +85,13 @@ int main(void)
   /* F_DUPFD takes the lowest free descriptor from its argument on, and the
      copy shares the file position and outlives the original */
   fd = open(NAME, O_RDONLY);
-  check(fd >= 0 && read(fd, buf, 2) == 2 && !memcmp(buf, "ab", 2), "the file starts with ab");
+  check(fd >= 0 && read(fd, buf, 2) == 2 && !memcmp(buf, "Ab", 2), "the file starts with Ab");
   d1 = fcntl(fd, F_DUPFD, 10);
   check(d1 == 10, "F_DUPFD 10 gives 10");
   d2 = fcntl(fd, F_DUPFD, 10);
   check(d2 == 11, "F_DUPFD 10 again gives 11");
   close(fd);
-  check(read(d1, buf, sizeof buf) == 3 && !memcmp(buf, "cde", 3),
+  check(read(d1, buf, sizeof buf) == 4 && !memcmp(buf, "cdef", 4),
         "the copy reads on after the original is closed");
   close(d1);
   close(d2);
