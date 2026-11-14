@@ -1,8 +1,8 @@
 /* The installed libamiga.a, as the build wrote it from the SFD files: library
-   stubs, a varargs stub, the library bases that the startup code opens, and
-   the LVO symbols.  Only the clib prototypes are included, so every system
-   call here is a call into libamiga.a, and the test defines no library base
-   of its own.  */
+   stubs, a varargs stub and the LVO symbols.  Only the clib prototypes are
+   included, so every system call here is a call into libamiga.a.  The test
+   defines no library base of its own: the stubs take them from libstubs.a,
+   and the startup code opens them.  */
 
 #include <exec/types.h>
 #include <exec/memory.h>
