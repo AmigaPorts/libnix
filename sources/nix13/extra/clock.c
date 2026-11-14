@@ -4,6 +4,7 @@
 #include <proto/dos.h>
 #include <hardware/custom.h>
 #include "stabs.h"
+#include "amigatime.h"
 
 static struct DateStamp ds;
 
@@ -19,7 +20,7 @@ clock_t clock(void)
 	static clock_t lastti;
 	struct DateStamp ds;
 	DateStamp(&ds); /* Get timestamp */
-	clock_t ms = ((ds.ds_Days + 2922) * 1440 + ds.ds_Minute) * 60 * CLOCKS_PER_SEC + ds.ds_Tick * (CLOCKS_PER_SEC / TICKS_PER_SECOND);
+	clock_t ms = ((ds.ds_Days * 1440 + ds.ds_Minute) * 60 + AMIGA_EPOCH) * CLOCKS_PER_SEC + ds.ds_Tick * (CLOCKS_PER_SEC / TICKS_PER_SECOND);
 	int vp = lastvp;
 	int inc = c->vhposr >> 12;
 	if (ms == lastti) {

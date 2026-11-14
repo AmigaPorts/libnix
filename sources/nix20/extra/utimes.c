@@ -5,6 +5,7 @@
 #include <devices/timer.h>
 #include <sys/time.h>
 #include "amigapath.h"
+#include "amigatime.h"
 
 #define SECSPERDAY (24L * 60L * 60L)
 
@@ -74,9 +75,7 @@ int utimes(const char *file, const struct timeval times[2]) {
 			modtime.tv_usec %= 1000000;
 		}
 		t = modtime.tv_sec;
-		t -= (2922L * SECSPERDAY); /* Datestamps start from Jan 1, 1978, unix
-		 time from Jan 1, 1970, i.e., 2922 days
-		 earlier! */
+		t -= AMIGA_EPOCH;
 		d.ds_Days = t / SECSPERDAY;
 		t %= SECSPERDAY;
 		d.ds_Minute = t / 60L;

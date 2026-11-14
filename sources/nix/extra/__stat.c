@@ -1,6 +1,7 @@
 #include <dos/dosextens.h>
 #include <sys/types.h>
 #include <sys/stat.h>
+#include "amigatime.h"
 
 int __stat(struct stat *buf,struct FileInfoBlock *fib)
 {
@@ -24,8 +25,8 @@ int __stat(struct stat *buf,struct FileInfoBlock *fib)
    buf->st_rdev=0;
    buf->st_size=fib->fib_Size;
    buf->st_atime=buf->st_mtime=buf->st_ctime=
-     ((fib->fib_Date.ds_Days+2922)*1440+fib->fib_Date.ds_Minute)*60+
-     fib->fib_Date.ds_Tick/TICKS_PER_SECOND;
+     (fib->fib_Date.ds_Days*1440+fib->fib_Date.ds_Minute)*60+
+     fib->fib_Date.ds_Tick/TICKS_PER_SECOND+AMIGA_EPOCH;
 #ifdef st_atime
    /* newlib since 2019: st_atim and friends are struct timespec */
    buf->st_atim.tv_nsec=buf->st_mtim.tv_nsec=buf->st_ctim.tv_nsec=0;

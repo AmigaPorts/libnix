@@ -4,9 +4,7 @@
 #include <sys/time.h>
 #include <dos/dos.h>
 #include <proto/dos.h>
-
-/* 1978-01-01 in seconds since 1970-01-01 */
-#define AMIGA_EPOCH 252460800L
+#include "amigatime.h"
 
 int gettimeofday(struct timeval *tv, struct timezone *tz) {
 	if (tv) {
