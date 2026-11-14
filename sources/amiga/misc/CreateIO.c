@@ -10,7 +10,7 @@ struct IORequest *CreateExtIO(CONST struct MsgPort *port,LONG iosize)
 
   if (port && (ioreq=AllocMem(iosize,MEMF_CLEAR|MEMF_PUBLIC))) {
     ioreq->io_Message.mn_Node.ln_Type = NT_REPLYMSG;
-    ioreq->io_Message.mn_ReplyPort    = port;
+    ioreq->io_Message.mn_ReplyPort    = (struct MsgPort *)port;
     ioreq->io_Message.mn_Length       = iosize;
   }
   return ioreq;

@@ -27,6 +27,7 @@ all: check
 # and <test>_LIBS go to the test's own compile and link.
 
 TARGET_TESTS = \
+	amigalib \
 	atan2-zero \
 	atan2f-zero \
 	c99math \
@@ -49,6 +50,7 @@ TARGET_TESTS = \
 	printf_fmt \
 	printf_ld \
 	printf_s \
+	rexxvars \
 	rint \
 	romtag \
 	round \
@@ -77,9 +79,26 @@ MANUAL_TESTS = \
 NET_TESTS = sock_dup
 NET_SIMFLAGS = $(if $(findstring volamos,$(SIM)),--net)
 
+# volamos runs the CPU and FPU the tests are built for, as
+# baseboards/volamos.exp in m68k-amigaos-gcc does for check-c.
+CROSS_CPU = $(word 1,$(subst -, ,$(patsubst -m%,%,$(filter -m68020% -m68030 -m68040 -m68060,$(CROSS_CFLAGS)))))
+CPU_SIMFLAGS = $(if $(findstring volamos,$(SIM)),$(if $(CROSS_CPU),--cpu $(CROSS_CPU)) $(if $(filter -m68881 -mhard-float,$(CROSS_CFLAGS)),--fpu))
+
 # The library's flags, FAST_MATH as in Makefile.m68k-amigaos.
 FAST_MATH ?=
 LIB_CFLAGS = -I../sources/headers -fno-builtin $(FAST_MATH) -D__libnix__ -fno-tree-loop-distribute-patterns
+
+# amiga.lib, which m68k-amigaos-gcc builds from these sources.  DoPktn.c only
+# aliases DoPkt0() to DoPkt4(), which are library stubs there.
+# -Wno-pointer-sign, as in Makefile.m68k-amigaos: the functions under test take
+# STRPTR (unsigned char) strings, and the tests pass them string literals.
+amigalib_SRCS = $(filter-out %/DoPktn.c,$(wildcard ../sources/amiga/misc/*.c))
+amigalib_LIBFLAGS = -Os
+amigalib_CFLAGS = -fno-builtin -Wno-pointer-sign
+
+# Includes sources/amiga/misc/RexxVars.c, with OpenLibrary() answering for a
+# mock rexxsyslib.library.
+rexxvars_CFLAGS = -fno-builtin -Wno-pointer-sign
 
 # The signed-zero assertions compare bits, so the tests themselves are built
 # without fast-math and builtins.
@@ -259,7 +278,7 @@ $(O)/cxa-dtors: cxa-dtors.cpp
 check-target: $(addprefix $(O)/,$(TARGET_TESTS))
 	$(Q)failed=0; \
 	for t in $(TARGET_TESTS); do \
-		flags="$(SIMFLAGS)"; \
+		flags="$(SIMFLAGS) $(CPU_SIMFLAGS)"; \
 		case " $(NET_TESTS) " in *" $$t "*) flags="$$flags $(NET_SIMFLAGS)";; esac; \
 		if (cd $(O) && $(SIM) $$flags ./$$t) >$(O)/$$t.log 2>&1; then \
 			if grep -q '^SKIP: ' $(O)/$$t.log; then sed "s/^SKIP: /SKIP: $$t: /" $(O)/$$t.log; else echo "PASS: $$t"; fi; \
