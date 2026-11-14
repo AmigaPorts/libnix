@@ -40,8 +40,25 @@ static void socket_checks(void)
   if (bind(s, (struct sockaddr *) &sin, sizeof sin) == 0 && listen(s, 1) == 0)
     {
       errno = 0;
+      socklen_t len = sizeof sin;
+      int c, a;
+
       check(accept(s, NULL, NULL) == -1 && (errno == EWOULDBLOCK || errno == EAGAIN),
             "accept() on a non-blocking socket fails with EWOULDBLOCK");
+
+      /* the socket of a connection is non-blocking as its listener is */
+      c = socket(AF_INET, SOCK_STREAM, 0);
+      if (c >= 0 && getsockname(s, (struct sockaddr *) &sin, &len) == 0
+          && connect(c, (struct sockaddr *) &sin, sizeof sin) == 0
+          && (a = accept(s, NULL, NULL)) >= 0)
+        {
+          check(fcntl(a, F_GETFL) & O_NONBLOCK, "the accepted socket has the listener's O_NONBLOCK");
+          close(a);
+        }
+      else
+        printf("no connection over the loopback interface: the accepted socket's check skipped\n");
+      if (c >= 0)
+        close(c);
     }
   else
     printf("no loopback interface: the accept() check skipped\n");
