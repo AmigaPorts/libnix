@@ -28,7 +28,7 @@ int main(void)
 {
   char buf[8];
   long n = 0;
-  int fd, fl, d1, d2;
+  int fd, fl, d1, d2, p[2];
 
   fd = open(NAME, O_WRONLY | O_CREAT | O_TRUNC, 0666);
   check(fd >= 0, "open for writing");
@@ -88,6 +88,24 @@ int main(void)
   check(ioctl(fd, FIONBIO, &n) == -1 && errno == EBADF, "ioctl on a closed fd fails with EBADF");
   errno = 0;
   check(fcntl(fd, F_DUPFD, 10) == -1 && errno == EBADF, "F_DUPFD of a closed fd fails with EBADF");
+
+  /* a pipe's ends report their own access modes, not those of the files
+     that had their descriptors before */
+  d1 = open(NAME, O_RDONLY);
+  d2 = open(NAME, O_RDONLY | O_APPEND);
+  close(d1);
+  close(d2);
+  if (pipe(p) == 0)
+    {
+      check(fcntl(p[0], F_GETFL) == O_RDONLY, "the read end of a pipe is O_RDONLY");
+      check(fcntl(p[1], F_GETFL) == O_WRONLY, "the write end of a pipe is O_WRONLY");
+      check(write(p[1], "x", 1) == 1 && read(p[0], buf, 1) == 1 && buf[0] == 'x',
+            "a byte goes through the pipe");
+      close(p[0]);
+      close(p[1]);
+    }
+  else
+    printf("no PIPE:, the pipe checks skipped\n");
 
   remove(NAME);
 #ifdef EXTRA_CHECKS

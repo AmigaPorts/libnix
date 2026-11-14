@@ -112,13 +112,14 @@ fcmp_SRCS = ../sources/math/math/__eqdf2.c ../sources/math/math/__eqsf2.c
 fcmp_CFLAGS = -m68000
 fcmp_LIBS = -lm
 
-# F_DUPFD makes its copy with dup2(), and close() frees it.
-FCNTL_DUP_SRCS = ../sources/nix/stdio/dup2.c ../sources/nix20/stdio/__initstdio.c
+# F_DUPFD makes its copy with dup2(), and close() frees it; pipe() gives its
+# ends their access modes.
+FCNTL_DUP_SRCS = ../sources/nix/stdio/dup2.c ../sources/nix20/stdio/__initstdio.c ../sources/nix20/stdio/pipe.c
 
 fcntl_ioctl_SRCS = $(addprefix ../sources/nix/extra/,fcntl.c __fcntl.c) ../sources/nix/stdio/ioctl.c \
 	$(FCNTL_DUP_SRCS)
 
-fcntl_ioctl_socket_SRCS = ../sources/nix/extra/__fcntl.c $(addprefix ../sources/socket/socket/,fcntl.c ioctl.c) \
+fcntl_ioctl_socket_SRCS = ../sources/nix/extra/__fcntl.c $(addprefix ../sources/socket/socket/,fcntl.c ioctl.c accept.c) \
 	$(FCNTL_DUP_SRCS)
 fcntl_ioctl_socket_LIBS = -lsocket
 
