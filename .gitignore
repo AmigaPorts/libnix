@@ -1,7 +1,13 @@
 *~
 .DS_Store
-libnix*
-lib*
 .project
 .cproject
 .settings/
+
+# what make builds in the source directory: one directory per multilib, and
+# the sources sfdc writes
+/lib/
+/libb/
+/libb32/
+/libm020/
+/gen/
