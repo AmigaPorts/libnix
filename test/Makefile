@@ -33,6 +33,8 @@ TARGET_TESTS = \
 	clock \
 	dup_close \
 	fcmp \
+	fcntl_ioctl \
+	fcntl_ioctl_socket \
 	fma \
 	fnmatch \
 	fread \
@@ -78,7 +80,7 @@ RUN_TESTS = $(TARGET_TESTS) $(if $(filter-out single,$(THREAD_MODEL)),$(THREAD_T
 
 # Need a TCP/IP stack, which volamos has with --net; they skip themselves
 # without one.
-NET_TESTS = sock_dup
+NET_TESTS = fcntl_ioctl_socket sock_dup
 NET_SIMFLAGS = $(if $(findstring volamos,$(SIM)),--net)
 
 # volamos runs the CPU and FPU the tests are built for, as
@@ -134,6 +136,17 @@ clock_SRCS = \
 fcmp_SRCS = ../sources/math/math/__eqdf2.c ../sources/math/math/__eqsf2.c
 fcmp_CFLAGS = -m68000
 fcmp_LIBS = -lm
+
+# F_DUPFD makes its copy with dup2(), and close() frees it; pipe() gives its
+# ends their access modes.
+FCNTL_DUP_SRCS = ../sources/nix/stdio/dup2.c ../sources/nix20/stdio/__initstdio.c ../sources/nix20/stdio/pipe.c
+
+fcntl_ioctl_SRCS = $(addprefix ../sources/nix/extra/,fcntl.c __fcntl.c) ../sources/nix/stdio/ioctl.c \
+	$(FCNTL_DUP_SRCS)
+
+fcntl_ioctl_socket_SRCS = ../sources/nix/extra/__fcntl.c $(addprefix ../sources/socket/socket/,fcntl.c ioctl.c accept.c) \
+	$(FCNTL_DUP_SRCS)
+fcntl_ioctl_socket_LIBS = -lsocket
 
 # Built with an FPU (-m68020 -m68881), it also checks the directed rounding modes.
 fma_SRCS = ../sources/math/common/s_fma.c ../sources/math/common/sf_fma.c
@@ -290,7 +303,7 @@ check-target: $(addprefix $(O)/,$(RUN_TESTS))
 		flags="$(SIMFLAGS) $(CPU_SIMFLAGS)"; \
 		case " $(NET_TESTS) " in *" $$t "*) flags="$$flags $(NET_SIMFLAGS)";; esac; \
 		if (cd $(O) && $(SIM) $$flags ./$$t) >$(O)/$$t.log 2>&1; then \
-			if grep -q '^SKIP: ' $(O)/$$t.log; then sed "s/^SKIP: /SKIP: $$t: /" $(O)/$$t.log; else echo "PASS: $$t"; fi; \
+			if grep -q '^SKIP: ' $(O)/$$t.log; then sed -n "s/^SKIP: /SKIP: $$t: /p" $(O)/$$t.log; else echo "PASS: $$t"; fi; \
 		else \
 			echo "FAIL: $$t"; sed 's/^/    /' $(O)/$$t.log; failed=$$((failed + 1)); \
 		fi; \
