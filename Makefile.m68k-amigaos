@@ -14,6 +14,13 @@ export root
 
 target ?= m68k-amigaos
 
+# sfdc writes the library bases of libstubs.a from the NDK's SFD files, into
+# $(gen) in the top-level build directory: one copy serves every multilib.
+SFDC ?= sfdc
+SFD_DIR ?= $(PREFIX)/$(target)/ndk/lib/sfd
+gen ?= $(CURDIR)/gen
+export gen
+
 # The sub-makes run in the build directories without -f: make reads this file there through MAKEFILES.
 MAKEFILES=$(root)/Makefile.m68k-amigaos
 
@@ -123,7 +130,7 @@ endif
 .PHONY: $(VARIANTS_TO_BUILD)
 all: $(VARIANTS_TO_BUILD)
 
-$(VARIANTS_TO_BUILD): $(STARTUPS)
+$(VARIANTS_TO_BUILD): $(STARTUPS) $(gen)/libbases/stamp
 
 # the base multilib, in lib/
 lib:
@@ -199,10 +206,23 @@ libm:
 libsocket:
 	$(MAKE) -C $(kind) libsocket.a lib=socket
 
+# libstubs.a has the library bases that the startup code opens, which sfdc
+# writes and sources/stubs/steal.me adds to it.
 libstub:
 	$(MAKE) -C $(kind) libstubs.a lib=stubs
 
-libc: $(STARTUPS)
+SFD_FILES = $(wildcard $(SFD_DIR)/*_lib.sfd)
+
+# An SFD file with nothing for the startup code to open, such as a device's,
+# leaves an empty file.
+$(gen)/libbases/stamp: $(SFD_FILES) $(shell command -v $(SFDC))
+	@if [ -z "$(SFD_FILES)" ]; then echo "no SFD files in $(SFD_DIR): set SFD_DIR" >&2; exit 1; fi
+	rm -rf $(gen)/libbases && mkdir -p $(gen)/libbases
+	$(SFDC) --quiet --target=m68k-amigaos --mode=autoopen --output=$(gen)/libbases/%n.c $(SFD_FILES)
+	grep -L dlist___LIB_LIST__ $(gen)/libbases/*.c | xargs rm -f
+	touch $@
+
+libc: $(STARTUPS) $(gen)/libbases/stamp
 	$(MAKE) -C lib kind=lib libstubs.a lib=stubs
 	$(MAKE) -C $(lc) kind=$(lc) rest libnix.a lib=nix
 	$(MAKE) -C $(lc) kind=$(lc) rest libnix20.a lib=nix20
