@@ -5,7 +5,6 @@
 #include <sys/socket.h>
 //
 #include "socket.h"
-#include <inline/amitcp.h>
 #include <inline/as225.h>
 
 #define MAXALIASES 35
