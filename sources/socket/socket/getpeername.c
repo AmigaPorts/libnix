@@ -2,7 +2,6 @@
 #include <sys/socket.h>
 //
 #include "socket.h"
-#include <inline/amitcp.h>
 #include <inline/as225.h>
 
 int getpeername(int s, struct sockaddr *asa, socklen_t *alen)

@@ -3,7 +3,6 @@
 //
 #include "socket.h"
 
-#include <inline/amitcp.h>
 #include <inline/as225.h>
 
 int getsockname(int s, struct sockaddr *asa, socklen_t *alen)

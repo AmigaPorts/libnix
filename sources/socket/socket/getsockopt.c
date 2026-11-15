@@ -4,7 +4,6 @@
 //
 #include "socket.h"
 
-#include <inline/amitcp.h>
 #include <inline/as225.h>
 
 int getsockopt(int s, int level, int name, void *val, socklen_t *valsize)

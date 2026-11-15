@@ -7,8 +7,7 @@
 #include <netdb.h>
 #include <amitcp/usergroup.h>
 #include <amitcp/socketbasetags.h>
-#include "inline/usergroup.h"
-#include <inline/amitcp.h>
+#include "socket_libs.h"
 #include <inline/as225.h>
 #include "stdio.h"
 

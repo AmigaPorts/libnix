@@ -7,7 +7,6 @@
 #include <arpa/inet.h>
 //
 #include "socket.h"
-#include <inline/amitcp.h>
 #include <inline/as225.h>
 
 

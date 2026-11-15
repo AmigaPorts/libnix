@@ -5,14 +5,6 @@
 #include "socket.h"
 #include "stabs.h"
 
-#define UG_getgroups(ngroups, groups) \
-	LP2(0x60, int, UG_getgroups, int, ngroups, d0, int *, groups, a1, \
-	, USERGROUP_BASE_NAME)
-
-#define UG_setgroups(ngroups, groups) \
-	LP2(0x66, int, UG_setgroups, int, ngroups, d0, const int *, groups, a1, \
-	, USERGROUP_BASE_NAME)
-
 
 /*
 **
