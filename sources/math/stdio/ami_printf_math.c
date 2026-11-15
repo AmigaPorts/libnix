@@ -132,7 +132,7 @@ LDL __LDL_from_long_double(long double ld)
 	return r;
 }
 
-#if defined(__mc68020__) || defined(__mc68030__) || defined(__mc68040__)
+#if (defined(__mc68020__) || defined(__mc68030__) || defined(__mc68040__)) && !defined(__mc68060__)
 /**
  * 32-bit limb multiplication with 64-bit accumulation.
  * Designed for architectures with fast 32x32->64bit hardware multipliers.
@@ -266,7 +266,7 @@ LDL __LDL_mul(LDL a, LDL b)
     exp_b = b.l.exp - 16383;
     exp_r = exp_a + exp_b;
 
-#if defined(__mc68020__) || defined(__mc68030__) || defined(__mc68040__)
+#if (defined(__mc68020__) || defined(__mc68030__) || defined(__mc68040__)) && !defined(__mc68060__)
     /* Clear the padding limb for the same result with a 32-bit multiplication.*/
     a.s.word[5] = 0;
     b.s.word[5] = 0;
