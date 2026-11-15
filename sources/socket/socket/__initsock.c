@@ -161,7 +161,7 @@ static int __stdargs _sock_select(struct _StdFileDes *fp,int select_cmd,int io_m
   
   if (select_cmd == SELCMD_PREPARE) {
     FD_SET(fp->lx_sock, set);
-    if (fp->lx_sock > *nfds)
+    if ((u_long) fp->lx_sock > *nfds)
       *nfds = fp->lx_sock;
     return (1L << lss->lx_sigurg | 1L << lss->lx_sigio);
   }

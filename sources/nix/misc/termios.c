@@ -6,8 +6,7 @@
 extern StdFileDes *_lx_fhfromfd(int d);
 
 static struct termios std_termios = {
-		0, 0, 0,
-		ECHO
+		.c_lflag = ECHO
 };
 
 

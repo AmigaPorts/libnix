@@ -247,7 +247,7 @@ int close(int d) {
 			r = sfd->lx_fx->lx_close(sfd);
 			sfd->lx_inuse = 0;
 		} else if (!(sfd->lx_inuse -= 1) && !(sfd->lx_flags & LX_SYS)) {
-			int i;
+			unsigned i;
 
 			for (i = 0; i < __stdfilesize; i++) {
 				StdFileDes *p = __stdfiledes[i];

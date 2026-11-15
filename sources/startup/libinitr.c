@@ -130,7 +130,7 @@ LibOpen(REG(a6,__LIB lib))
 
   /* create new library base */
 
-  if ((child=(__LIB)MakeLibrary(&__FuncTable__[1],NULL,(ULONG (*)())LibInit,sizeof(*lib)+lib->DataSize,0))) {
+  if ((child=(__LIB)MakeLibrary(&__FuncTable__[1],NULL,(ULONG (*)())(void (*)(void))LibInit,sizeof(*lib)+lib->DataSize,0))) {
 
     LONG *relocs,numrel;
 

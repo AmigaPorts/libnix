@@ -132,7 +132,9 @@ export gcc_major
 endif
 ifeq (y,$(shell test "$(gcc_major)" -ge 16 2>/dev/null && echo y))
 WERROR ?= -Werror
-LIB_CFLAGS += -Wimplicit-fallthrough -Wtype-limits -Wold-style-definition -Wstrict-prototypes $(WERROR)
+# Not -Wunused-parameter: many functions here exist for their name and ignore
+# what they are passed.
+LIB_CFLAGS += -Wextra -Wno-unused-parameter -Wstrict-prototypes $(WERROR)
 endif
 LIB_CFLAGS += $(crt)
 
@@ -219,8 +221,10 @@ libnix20:
 	$(MAKE) -C $(kind) rest libnix20.a lib=nix20
 libnixmain:
 	$(MAKE) -C $(kind) libnixmain.a lib=nixmain
+# Most of libm is fdlibm as newlib has it, kept as it is there: it compares
+# signed with unsigned in a few places.
 libm:
-	$(MAKE) -C $(kind) libm.a lib=math libname=m flags="$(flags) -DFULL_SPECIFIERS"
+	$(MAKE) -C $(kind) libm.a lib=math libname=m flags="$(flags) -DFULL_SPECIFIERS -Wno-sign-compare"
 libsocket:
 	$(MAKE) -C $(kind) libsocket.a lib=socket
 
