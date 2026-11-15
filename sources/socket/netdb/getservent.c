@@ -13,10 +13,6 @@ void setservent(int stayopen)
 { struct SocketSettings *lss;
 
   switch (lss=_lx_get_socket_settings(),lss->lx_network_type) {
-    case LX_AS225:
-      SOCK_setservent(stayopen);
-    break;
-
     case LX_AMITCP:
       if (!lss->lx_serv_fp)
         lss->lx_serv_fp = fopen(TCP_PATH_SERVICES, "r");
@@ -35,10 +31,6 @@ void endservent(void)
 { struct SocketSettings *lss;
 
   switch (lss=_lx_get_socket_settings(),lss->lx_network_type) {
-    case LX_AS225:
-      SOCK_endservent();
-    break;
-
     default:
       lss->lx_serv_stayopen = 0;
       if (lss->lx_serv_fp) {
@@ -60,11 +52,6 @@ struct servent *getservent(void)
 { struct SocketSettings *lss;
 
   switch(lss=_lx_get_socket_settings(),lss->lx_network_type) {
-    case LX_AS225:
-      return SOCK_getservent();
-    break;
-
-
     case LX_AMITCP:
 
       if (!lss->lx_serv_line)

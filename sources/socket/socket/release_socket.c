@@ -13,11 +13,6 @@ int release_socket(int s)
 
   if (s2 >= 0) {
     switch (lss=_lx_get_socket_settings(),lss->lx_network_type) {
-      case LX_AS225:
-        rc = (int)SOCK_release(s2);
-        SOCK_close(s2);
-      break;
-
       case LX_AMITCP:
         rc = TCP_ReleaseSocket(s2, -1);
         TCP_CloseSocket(s2);

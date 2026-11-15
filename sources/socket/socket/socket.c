@@ -13,10 +13,6 @@ int socket(int domain, int type, int protocol)
     return -1;
 
   switch (lss=_lx_get_socket_settings(),lss->lx_network_type) {
-    case LX_AS225:
-      rc = SOCK_socket(domain, type, protocol);
-    break;
-
     case LX_AMITCP:
       rc = TCP_Socket(domain, type, protocol);
     break;

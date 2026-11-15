@@ -10,7 +10,7 @@ int gethostname(char *name, size_t namelen)
   if (lss->lx_network_type == LX_AMITCP) {
     return TCP_GetHostName(name,namelen);
   }
-  else { /* LX_AS225, default */
+  else {
     char *host, domain[257+1];
     int len;
     if ((host=getenv("HOSTNAME")) || (host=getenv("hostname"))) {

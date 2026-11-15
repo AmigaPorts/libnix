@@ -7,7 +7,6 @@
 #include <arpa/inet.h>
 //
 #include "socket.h"
-#include <inline/as225.h>
 
 
 #define MAXALIASES 35
@@ -17,10 +16,6 @@ void setnetent(int stayopen)
 { struct SocketSettings *lss;
 
   switch (lss=_lx_get_socket_settings(),lss->lx_network_type) {
-    case LX_AS225:
-      SOCK_setnetent(stayopen);
-    break;
-
     case LX_AMITCP:
       if (!lss->lx_net_fp)
         lss->lx_net_fp = fopen(TCP_PATH_NETWORKS, "r");
@@ -39,10 +34,6 @@ void endnetent(void)
 { struct SocketSettings *lss;
 
   switch (lss=_lx_get_socket_settings(),lss->lx_network_type) {
-    case LX_AS225:
-      SOCK_endnetent();
-    break;
-
     default:
       lss->lx_net_stayopen = 0;
       if (lss->lx_net_fp) {
@@ -64,10 +55,6 @@ struct netent *getnetent(void)
 { struct SocketSettings *lss;
 
   switch(lss=_lx_get_socket_settings(),lss->lx_network_type) {
-    case LX_AS225:
-      return SOCK_getnetent();
-    break;
-	
     case LX_AMITCP:
 
       if (!lss->lx_net_line)

@@ -3,18 +3,12 @@
 //
 #include "socket.h"
 
-#include <inline/as225.h>
-
 int getsockname(int s, struct sockaddr *asa, socklen_t *alen)
 { struct SocketSettings *lss;
   StdFileDes *fp = _lx_fhfromfd(s);
   int rc;
 
   switch (lss=_lx_get_socket_settings(),lss->lx_network_type) {
-    case LX_AS225:
-      rc = SOCK_getsockname(fp->lx_sock,asa,(int *)alen);
-    break;
-
     case LX_AMITCP:
       rc = TCP_GetSockName(fp->lx_sock,asa,(int *)alen);
     break;

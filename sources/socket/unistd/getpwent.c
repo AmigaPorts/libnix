@@ -101,28 +101,6 @@ static int pw_scan(int search, uid_t uid, const char *name, struct SocketSetting
 }
 
 /*
-** change the AS225/INet225's password structure to the global format
-*/
-static struct passwd *__AS225InetPwd(struct AS225_passwd *pwd,struct SocketSettings *lss)
-{
-  if (pwd) {
-    lss->lx_pwd.pw_name   = pwd->pw_name;
-    lss->lx_pwd.pw_passwd = pwd->pw_passwd;
-    lss->lx_pwd.pw_uid    = pwd->pw_uid;
-    lss->lx_pwd.pw_gid    = pwd->pw_gid;
-    lss->lx_pwd.pw_change = time((time_t *)NULL);
-    lss->lx_pwd.pw_class  = NULL;
-    lss->lx_pwd.pw_gecos  = pwd->pw_gecos;
-    lss->lx_pwd.pw_dir    = pwd->pw_dir;
-    lss->lx_pwd.pw_shell  = pwd->pw_shell;
-    lss->lx_pwd.pw_expire = (time_t)-1;
-    lss->lx_pwd.pw_change = (time_t)-1;
-    return &lss->lx_pwd;
-  }
-  return NULL;
-}
-
-/*
 ** change the AmiTCP password structure to the global format
 */
 static struct passwd *__TCP2InetPwd(struct TCP_passwd *pwd,struct SocketSettings *lss)
@@ -151,10 +129,6 @@ int setpassent(int stayopen)
 { struct SocketSettings *lss;
 
   switch (lss=_lx_get_socket_settings(),_lx_usergroup_type(lss)) {
-    case LX_AS225:
-      SOCK_setpwent(stayopen);
-    break;
-
     case LX_AMITCP:
       UG_setpwent();
     break;
@@ -178,10 +152,6 @@ void endpwent(void)
 { struct SocketSettings *lss;
 
   switch (lss=_lx_get_socket_settings(),_lx_usergroup_type(lss)) {
-    case LX_AS225:
-      SOCK_endpwent();
-    break;
-
     case LX_AMITCP:
       UG_endpwent();
     break;
@@ -201,10 +171,6 @@ struct passwd *getpwent(void)
   char *name;
 
   switch (lss=_lx_get_socket_settings(),_lx_usergroup_type(lss)) {
-    case LX_AS225:
-      return __AS225InetPwd(SOCK_getpwent(),lss);
-    break;
-
     case LX_AMITCP:
       if ((pwd=__TCP2InetPwd(UG_getpwent(),lss)) == NULL)
         errno = ug_GetErr();
@@ -242,10 +208,6 @@ struct passwd *getpwuid(uid_t uid)
     return (struct passwd *)&builtin_nobody; /* always handle nobody */
 
   switch (lss=_lx_get_socket_settings(),_lx_usergroup_type(lss)) {
-    case LX_AS225:
-      return __AS225InetPwd(SOCK_getpwuid(uid),lss);
-    break;
-
     case LX_AMITCP:
       /* Don't do this if uid == -2 (nobody2) */
       /* This happens when someone doesn't use AmiTCP's login */
@@ -293,10 +255,6 @@ struct passwd *getpwnam(const char *name)
     return (struct passwd *)&builtin_nobody;
 
   switch (lss=_lx_get_socket_settings(),_lx_usergroup_type(lss)) {
-    case LX_AS225:
-      return __AS225InetPwd(SOCK_getpwnam((char *)name),lss);
-    break;
-
     case LX_AMITCP:
       if ((pwd=__TCP2InetPwd(UG_getpwnam(name),lss)) == NULL)
         errno = ug_GetErr();
