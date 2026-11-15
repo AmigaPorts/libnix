@@ -296,13 +296,13 @@ int PRINTF_FN(FILE *stream, const TCHAR *format, va_list args) {
 			 * (loop condition becomes false when i reaches the size).
 			 * --------------------------------------------------------- */
 			do {
-				for (i = 0; i < sizeof(flagc) / sizeof(flagc[0]); i++)
+				for (i = 0; i < (int) (sizeof(flagc) / sizeof(flagc[0])); i++)
 					if (flagc[i] == *ptr) {
 						flags |= 1 << i;
 						ptr++;
 						break;
 					}
-			} while (i < sizeof(flagc) / sizeof(flagc[0]));
+			} while (i < (int) (sizeof(flagc) / sizeof(flagc[0])));
 			/* ---- 2. field width: literal digits or '*' ---------------
 			 * Width and precision saturate at PRINTF_MAX, so the sums
 			 * made of them can't overflow an int.                       */
@@ -503,7 +503,7 @@ int PRINTF_FN(FILE *stream, const TCHAR *format, va_list args) {
 						size2 = 6;
 					} else {
 						size2 = wcslen(ws);
-						if (size2 > preci) size2 = preci;
+						if (size2 > (unsigned long) preci) size2 = preci;
 						buffer2 = (TCHAR *) ws;
 					}
 				} else {
@@ -515,7 +515,7 @@ int PRINTF_FN(FILE *stream, const TCHAR *format, va_list args) {
 						size2 = 6;
 					} else {
 						size2 = 0;
-						while (size2 < preci && s[size2])
+						while (size2 < (unsigned long) preci && s[size2])
 							size2++;
 						buffer2 = (TCHAR *) s;
 						other_width = 1;
@@ -534,7 +534,7 @@ int PRINTF_FN(FILE *stream, const TCHAR *format, va_list args) {
 					} else {
 						/* narrowed as it is printed */
 						size2 = 0;
-						while (size2 < preci && ws[size2])
+						while (size2 < (unsigned long) preci && ws[size2])
 							size2++;
 						buffer2 = (TCHAR *) ws;
 						other_width = 1;
@@ -546,7 +546,7 @@ int PRINTF_FN(FILE *stream, const TCHAR *format, va_list args) {
 						size2 = 6;
 					} else {
 						size2 = strlen(s);
-						if (size2 > preci) size2 = preci;
+						if (size2 > (unsigned long) preci) size2 = preci;
 						buffer2 = (TCHAR *) s;
 					}
 				}
@@ -1102,20 +1102,21 @@ int PRINTF_FN(FILE *stream, const TCHAR *format, va_list args) {
 			     (orig_type == CX_o && !(flags & ALTERNATEFLAG))) &&
 			    buffer2[0] == CX_0)
 				size2 = 0;
-			pad = size1 + (size2 >= preci ? size2 : preci); /* Calculate the number of characters */
+			/* preci is 0 or more here */
+			pad = size1 + (size2 >= (unsigned long) preci ? size2 : (unsigned long) preci); /* Calculate the number of characters */
 			pad = pad >= width ? 0 : width - pad; /* and the number of resulting pad bytes */
 			if (flags & ZEROPADFLAG) /* Print the sign and prefix. */
-				for (i = 0; i < size1; i++)
+				for (i = 0; (unsigned long) i < size1; i++)
 					OUT(buffer1[i]);
 			if (!(flags & LALIGNFLAG)) /* Pad left */
 				for (i = 0; i < pad; i++)
 					OUT(flags&ZEROPADFLAG?CX_0:CX_space);
 			if (!(flags & ZEROPADFLAG)) /* Print the sign when zero padding is not used. */
-				for (i = 0; i < size1; i++)
+				for (i = 0; (unsigned long) i < size1; i++)
 					OUT(buffer1[i]);
 			for (i = size2; i < preci; i++) /* extend to precision */
 				OUT(CX_0);
-			for (i = 0; i < size2; i++) /* Print the converted value. */
+			for (i = 0; (unsigned long) i < size2; i++) /* Print the converted value. */
 				OUT(other_width ? OTHER_CHAR(buffer2, i) : buffer2[i]);
 			if (flags & LALIGNFLAG) /* Pad right */
 				for (i = 0; i < pad; i++)

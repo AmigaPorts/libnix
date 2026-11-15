@@ -64,7 +64,7 @@
 # define CX_caret       L'^'
 # define CX_NUL         L'\0'
 
-# define CX_EOF         WEOF
+# define CX_EOF         ((int) WEOF)   /* as the int it is compared with */
 
 #else /* narrow */
 

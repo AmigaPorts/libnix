@@ -65,7 +65,7 @@ off_t lseek(int d, off_t offset, int whence) {
 				diff = abs_pos - r;
 				while (diff) {
 					unsigned chunk = diff > sz ? sz : diff;
-					if (Write(file, tmp, chunk) != chunk)
+					if (Write(file, tmp, chunk) != (LONG) chunk)
 						break;
 					diff -= chunk;
 				}

@@ -10,15 +10,15 @@
 #pragma GCC push_options
 #pragma GCC optimize ("-O2")
 
-register long * __sp asm("sp");
+register unsigned long * __sp asm("sp");
 
 void __markstack() {
 	struct ExecBase *SysBase = *(struct ExecBase **) 4;
 	struct Task * task = SysBase->ThisTask;
 
-	long * p = (long *)task->tc_SPLower;
+	unsigned long * p = (unsigned long *)task->tc_SPLower;
 	while (p < __sp) {
-		*p = 0xDEADBEEF ^ (long)p;
+		*p = 0xDEADBEEFUL ^ (unsigned long)p;
 		++p;
 	}
 }
@@ -32,9 +32,9 @@ void __checkstack() {
 	struct ExecBase *SysBase = *(struct ExecBase **) 4;
 	struct Process * process = (struct Process *) SysBase->ThisTask;
 
-	long * p = (long *)process->pr_Task.tc_SPLower;
+	unsigned long * p = (unsigned long *)process->pr_Task.tc_SPLower;
 	while (p < __sp) {
-		if (*p != (0xDEADBEEF ^ (long)p))
+		if (*p != (0xDEADBEEFUL ^ (unsigned long)p))
 			break;
 		++p;
 	}

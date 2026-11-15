@@ -117,7 +117,7 @@ void __nocommandline(void)
     if(!(__argv=av=(char **)AllocVec(((__argc=ac)+1)*sizeof(char *),MEMF_ANY|MEMF_CLEAR)))
       exit(RETURN_FAIL);
 
-    for(a=cline,i=1;i<ac;i++)
+    for(a=cline,i=1;i<(size_t)ac;i++)
     { 
       av[i]=a;
       while(*a++)

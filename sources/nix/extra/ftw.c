@@ -8,6 +8,6 @@ __stdargs int ftw(const char *path, __stdargs int (*fn)(const char *, const stru
 	 * argument more than it needs behaves as expected. This is
 	 * actually undefined, but works on all real-world machines. */
 	return nftw(path,
-	    (__stdargs int (*)(const char *, const struct stat *, int, struct FTW *))fn,
+	    (__stdargs int (*)(const char *, const struct stat *, int, struct FTW *))(void (*)(void))fn,
 	    fd_limit, FTW_PHYS);
 }
