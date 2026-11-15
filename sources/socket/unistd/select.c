@@ -72,10 +72,6 @@ static inline int net_select(int s, fd_set *in, fd_set *out, fd_set *exc, struct
   int rc;
 
   switch (lss=_lx_get_socket_settings(),lss->lx_network_type) {
-    case LX_AS225:
-      rc = SOCK_selectwait(s, in, out, exc, timeout, sigs);
-    break;
-
     case LX_AMITCP:
       rc = TCP_WaitSelect(s, in, out, exc, timeout, (ULONG*)sigs);
     break;

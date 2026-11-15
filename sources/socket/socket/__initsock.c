@@ -44,10 +44,6 @@ static int __stdargs _sock_close(struct _StdFileDes *fp)
 
   switch (lss=_lx_get_socket_settings(),lss->lx_network_type) {
 
-    case LX_AS225:
-      rc = SOCK_close(fp->lx_sock);
-    break;
-
     case LX_AMITCP:
       rc = TCP_CloseSocket(fp->lx_sock);
     break;
@@ -69,14 +65,6 @@ static int __stdargs _sock_dup(struct _StdFileDes *fp)
     return -1;
 
   switch (lss=_lx_get_socket_settings(),lss->lx_network_type) {
-
-    case LX_AS225:
-      /* only INET-225 has dup */
-      if (lss->lx_SocketBase->lib_Version >= 8)
-        rc = SOCK_dup(fp->lx_sock);
-      else
-        rc = fp->lx_sock;
-    break;
 
     case LX_AMITCP:
       rc = TCP_Dup2Socket(fp->lx_sock, -1);
@@ -138,10 +126,6 @@ static int __stdargs _sock_poll(struct _StdFileDes *fp,int io_mode,struct Socket
   }
 
   switch (lss->lx_network_type) {
-
-    case LX_AS225:
-      rc = SOCK_selectwait(fp->lx_sock, &in, &out, &exc, &tv, NULL);
-    break;
 
     case LX_AMITCP:
       rc = TCP_WaitSelect(fp->lx_sock, &in, &out, &exc, &tv, NULL);
@@ -228,52 +212,7 @@ static int set_socket_stdio(int sock)
 
 static int init_inet_daemon(int *argc,char ***argv,struct SocketSettings *lss)
 { StdFileDes *fp = NULL;
-  int sock, err, i;
-
-  lss->lx_isdaemon = 0;
-
-  if (lss->lx_network_type == LX_AS225) {
-
-    /* code loosely derived from timed.c from AS225r2 */
-    /* this program was called from inetd if :
-     * 1> the first arg is a valid protocol(call getprotobyname)
-     * 2> inetd is started - FindPort("inetd") returns non-NULL
-     * NOT 3> argv[0] is the program found in inetd.conf for the program (scan inetd.conf)
-     */
-
-    /* save a little time with this comparison */
-	  err=-1;
-    if (*argc >= 4) {
-
-      struct servent *serv1 = SOCK_getservbyname((*argv)[1],"tcp");
-      struct servent *serv2 = SOCK_getservbyname((*argv)[1],"udp");
-
-      if ((serv1 || serv2) && FindPort("inetd")) {
-
-        long sock_arg;
-
-        sock_arg = atol((*argv)[2]);
-        lss->lx_sockid = atoi((*argv)[3]);
-        sock = SOCK_inherit((void *)sock_arg);
-        if (sock >= 0) {
-          lss->lx_isdaemon = 1; /* I was started from inetd */
-          do {
-            if ((fp=_create_socket(AF_INET, SOCK_STREAM, 0)) == NULL)
-              break;
-            fp->lx_sock = sock;
-            /* get rid of the args that AS225 put in */
-            for (i=1; i < (*argc)-3; i++)
-              (*argv)[i] = (*argv)[i+3];
-            (*argc) -= 3;
-            err = 0;
-          } while (0);
-        }
-      }
-    }
-
-    errno = err;
-    return (err ? -1 : fp->lx_pos);
-  }
+  int sock, err;
 
   if (lss->lx_network_type == LX_AMITCP) {
     struct Process *me = (struct Process *)FindTask(NULL);
@@ -320,37 +259,6 @@ static int init_inet_daemon(int *argc,char ***argv,struct SocketSettings *lss)
   return -1;
 }
 
-/* This is only needed for AS225 */
-static void shutdown_inet_daemon(struct SocketSettings *lss)
-{
-  if (lss->lx_network_type == LX_AS225 && lss->lx_isdaemon) {
-
-    /* AS225 inet daemon stuff */
-    struct inetmsg { struct Message msg; ULONG id; } inet_message;
-
-    if ((inet_message.id=lss->lx_sockid)) {
-
-      struct MsgPort *msgport,*replyport;
-
-      if ((replyport=CreateMsgPort())) {
-
-        inet_message.msg.mn_Node.ln_Type = NT_MESSAGE;
-        inet_message.msg.mn_ReplyPort    = replyport;
-        inet_message.msg.mn_Length       = sizeof(struct inetmsg);
-
-        Forbid();
-        if ((msgport=FindPort("inetd"))) {
-          PutMsg(msgport,&inet_message.msg);
-          /* we can't exit until we received a reply */
-          WaitPort(replyport);
-        }
-        Permit();
-        DeleteMsgPort(replyport);
-      }
-    }
-  }
-}
-
 /*
 **
 */
@@ -375,11 +283,6 @@ void __initsocket(void)
   lss->lx_sigio  = AllocSignal(-1l);
   DB( BUG("sigurg is %ld\nsigio is %ld\n", lss->lx_sigurg, lss->lx_sigio); )
 
-  /* We could check for the existance of the AMITCP port here
-     to make sure we're using the AmiTCP bsdsocket.library,
-     and not the bsdsocket.library emulation for AS225.
-     But in that case, the Miami package isn't recognized,
-     because they don't open an AMITCP port. Oh well... */
   lss->lx_network_type = LX_AMITCP;
   if ((lss->lx_BsdSocketBase=OpenLibrary("bsdsocket.library",3))) {
     struct Process *pr = (struct Process *)FindTask(NULL);
@@ -434,20 +337,6 @@ void __initsocket(void)
       return;
   }
 
-  lss->lx_network_type = LX_AS225;
-  if ((lss->lx_SocketBase=OpenLibrary("socket.library",3))) {
-
-    SOCK_setup_sockets(128, &errno);
-
-    sock = init_inet_daemon(&__argc, &__argv, lss);
-    if (sock >= 0) {
-      set_socket_stdio(sock);
-    }
-
-    network_installed = 1;
-    return;
-  }
-
   FreeSignal(lss->lx_sigio);
   FreeSignal(lss->lx_sigurg);
 
@@ -459,19 +348,7 @@ void __exitsocket(void)
 
   DB( BUG("__exitsocket start\n"); )
 
-  shutdown_inet_daemon(lss);
-
   switch (lss->lx_network_type) {
-    case LX_AS225:
-      DB( BUG("lss->lx_SocketBase is %lx\n", lss->lx_SocketBase); )
-      if (lss->lx_SocketBase) {
-        SOCK_cleanup_sockets();
-        CloseLibrary(lss->lx_SocketBase);
-        FreeSignal(lss->lx_sigio);
-        FreeSignal(lss->lx_sigurg);
-      }
-    break;
-
     case LX_AMITCP:
       DB( BUG("lss->lx_UserGroupBase is %lx\n", lss->lx_UserGroupBase); )
       if (lss->lx_UserGroupBase)

@@ -5,7 +5,6 @@
 #include <sys/socket.h>
 //
 #include "socket.h"
-#include <inline/as225.h>
 
 #define MAXALIASES 35
 #define TCP_PATH_PROTOCOLS "AmiTCP:db/protocols"
@@ -14,10 +13,6 @@ void setprotoent(int stayopen)
 { struct SocketSettings *lss;
 
   switch (lss=_lx_get_socket_settings(),lss->lx_network_type) {
-    case LX_AS225:
-      SOCK_setprotoent(stayopen);
-    break;
-
     case LX_AMITCP:
       if (!lss->lx_proto_fp)
         lss->lx_proto_fp = fopen(TCP_PATH_PROTOCOLS, "r");
@@ -36,10 +31,6 @@ void endprotoent(void)
 { struct SocketSettings *lss;
 
   switch (lss=_lx_get_socket_settings(),lss->lx_network_type) {
-    case LX_AS225:
-      SOCK_endprotoent();
-    break;
-
     default:
       lss->lx_proto_stayopen = 0;
       if (lss->lx_proto_fp) {
@@ -61,10 +52,6 @@ struct protoent *getprotoent(void)
 { struct SocketSettings *lss;
 
   switch (lss=_lx_get_socket_settings(),lss->lx_network_type) {
-    case LX_AS225:
-      return SOCK_getprotoent();
-    break;
-
     case LX_AMITCP:
 
       if (!lss->lx_proto_line)

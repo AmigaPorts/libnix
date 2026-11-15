@@ -18,9 +18,6 @@ int getdomainname(char *name, size_t namelen)
     case LX_AMITCP:
       return tcp_getdomainname(name, namelen);
 
-    case LX_AS225:
-      return SOCK_getdomainname(name, namelen);
-
     default:
       return -1;
   }

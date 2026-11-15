@@ -15,10 +15,6 @@ int accept(int s, struct sockaddr *name, socklen_t *namelen)
     return -1;
 
   switch (lss=_lx_get_socket_settings(),lss->lx_network_type) {
-    case LX_AS225:
-      rc = SOCK_accept(fp->lx_sock, name, (int*)namelen);
-    break;
-
     case LX_AMITCP:
       rc = TCP_Accept(fp->lx_sock, name, (int*)namelen);
     break;

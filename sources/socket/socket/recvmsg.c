@@ -9,10 +9,6 @@ ssize_t recvmsg(int s, struct msghdr *msg, int flags)
   int rc;
 
   switch (lss=_lx_get_socket_settings(),lss->lx_network_type) {
-    case LX_AS225:
-      rc = SOCK_recvmsg(fp->lx_sock,msg,flags);
-    break;
-
     case LX_AMITCP:
       rc = TCP_RecvMsg(fp->lx_sock,msg,flags);
     break;

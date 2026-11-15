@@ -8,7 +8,6 @@
 #include <amitcp/usergroup.h>
 #include <amitcp/socketbasetags.h>
 #include "socket_libs.h"
-#include <inline/as225.h>
 #include "stdio.h"
 
 #ifndef MAXLOGNAME
@@ -18,7 +17,7 @@
 /*
 **
 */
-typedef enum {LX_NONE, LX_AMITCP, LX_AS225} LX_NETWORK_TYPE;
+typedef enum {LX_NONE, LX_AMITCP} LX_NETWORK_TYPE;
 
 /*
 **
@@ -30,18 +29,12 @@ struct SocketSettings {
       struct Library *BsdSocketBase;
       struct Library *UserGroupBase;
     } AMITCP;
-    struct {
-      struct Library *SocketBase;
-    } AS225;
   } lx_stack;
 #define lx_BsdSocketBase lx_stack.AMITCP.BsdSocketBase
 #define lx_UserGroupBase lx_stack.AMITCP.UserGroupBase
-#define lx_SocketBase    lx_stack.AS225.SocketBase
 
   unsigned long     lx_sigurg;
   unsigned long     lx_sigio;
-  int               lx_sockid;
-  int               lx_isdaemon;
 
   /* Support for net functions */
   FILE             *lx_pwd_fp;      /* File pointer to the passwd file */

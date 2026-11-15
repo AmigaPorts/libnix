@@ -6,7 +6,6 @@
 
 struct group* getgrnam(const char *name);
 
-/* for AS225 */
 #define PATH_GROUP "inet:db/group"
 
 #define MAXGRP          200

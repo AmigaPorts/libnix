@@ -9,10 +9,6 @@ ssize_t send(int s, const void *buf, size_t len, int flags)
   int rc;
 
   switch (lss=_lx_get_socket_settings(),lss->lx_network_type) {
-    case LX_AS225:
-      rc = SOCK_send(fp->lx_sock,buf,len,flags);
-    break;
-
     case LX_AMITCP:
       rc = TCP_Send(fp->lx_sock,buf,len,flags);
     break;

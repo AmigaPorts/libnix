@@ -10,10 +10,6 @@ int listen(int s, int backlog)
 
   if ((fp=_lx_fhfromfd(s))) {
     switch (lss=_lx_get_socket_settings(),lss->lx_network_type) {
-      case LX_AS225:
-        rc = SOCK_listen(fp->lx_sock, backlog);
-      break;
-
       case LX_AMITCP:
         rc = TCP_Listen(fp->lx_sock, backlog);
       break;
