@@ -14,11 +14,7 @@ static inline int tcp_getdomainname(char *domainname, int dsize)
 int getdomainname(char *name, size_t namelen)
 { struct SocketSettings *lss = _lx_get_socket_settings();
 
-  switch (lss->lx_network_type) {
-    case LX_AMITCP:
-      return tcp_getdomainname(name, namelen);
-
-    default:
-      return -1;
-  }
+  if (lss->lx_network_type == LX_AMITCP)
+    return tcp_getdomainname(name, namelen);
+  return -1;
 }

@@ -3,13 +3,9 @@
 #include "socket.h"
 
 struct netent *getnetbyaddr(in_addr_t net, int type)
-{ struct SocketSettings *lss;
+{ struct SocketSettings *lss = _lx_get_socket_settings();
 
-  switch (lss=_lx_get_socket_settings(),lss->lx_network_type) {
-    case LX_AMITCP:
-      return TCP_GetNetByAddr(net,type);
-
-    default:
-      return NULL;
-  }
+  if (lss->lx_network_type == LX_AMITCP)
+    return TCP_GetNetByAddr(net,type);
+  return NULL;
 }

@@ -3,13 +3,9 @@
 #include "socket.h"
 
 struct netent *getnetbyname(const char *name)
-{ struct SocketSettings *lss;
+{ struct SocketSettings *lss = _lx_get_socket_settings();
 
-  switch (lss=_lx_get_socket_settings(),lss->lx_network_type) {
-    case LX_AMITCP:
-      return TCP_GetNetByName(name);
-
-    default:
-      return NULL;
-  }
+  if (lss->lx_network_type == LX_AMITCP)
+    return TCP_GetNetByName(name);
+  return NULL;
 }

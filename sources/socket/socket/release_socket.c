@@ -12,15 +12,10 @@ int release_socket(int s)
   int rc = -1;
 
   if (s2 >= 0) {
-    switch (lss=_lx_get_socket_settings(),lss->lx_network_type) {
-      case LX_AMITCP:
-        rc = TCP_ReleaseSocket(s2, -1);
-        TCP_CloseSocket(s2);
-      break;
-
-      default:
-        /* silence compiler */
-      break;
+    lss = _lx_get_socket_settings();
+    if (lss->lx_network_type == LX_AMITCP) {
+      rc = TCP_ReleaseSocket(s2, -1);
+      TCP_CloseSocket(s2);
     }
   }
 

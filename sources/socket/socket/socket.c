@@ -12,15 +12,11 @@ int socket(int domain, int type, int protocol)
   if ((fp=_create_socket(domain, type, protocol)) == NULL)
     return -1;
 
-  switch (lss=_lx_get_socket_settings(),lss->lx_network_type) {
-    case LX_AMITCP:
-      rc = TCP_Socket(domain, type, protocol);
-    break;
-
-    default:
-      rc = -1;
-    break;
-  }
+  lss = _lx_get_socket_settings();
+  if (lss->lx_network_type == LX_AMITCP)
+    rc = TCP_Socket(domain, type, protocol);
+  else
+    rc = -1;
   DB( BUG("Return from net_socket is %ld\n", rc); )
 
   if (rc >= 0) {

@@ -126,18 +126,14 @@ static struct passwd *__TCP2InetPwd(struct TCP_passwd *pwd,struct SocketSettings
 */
 
 int setpassent(int stayopen)
-{ struct SocketSettings *lss;
+{ struct SocketSettings *lss = _lx_get_socket_settings();
 
-  switch (lss=_lx_get_socket_settings(),_lx_usergroup_type(lss)) {
-    case LX_AMITCP:
-      UG_setpwent();
-    break;
-
-    default:
-	  nextuid=0;
-      if (pw_start(lss))
-        lss->lx_pwd_stayopen = stayopen;
-    break;
+  if (_lx_usergroup_type(lss) == LX_AMITCP)
+    UG_setpwent();
+  else {
+    nextuid=0;
+    if (pw_start(lss))
+      lss->lx_pwd_stayopen = stayopen;
   }
 
   return 1;
@@ -149,19 +145,15 @@ int setpwent(void)
 }
 
 void endpwent(void)
-{ struct SocketSettings *lss;
+{ struct SocketSettings *lss = _lx_get_socket_settings();
 
-  switch (lss=_lx_get_socket_settings(),_lx_usergroup_type(lss)) {
-    case LX_AMITCP:
-      UG_endpwent();
-    break;
-
-    default:
-    	nextuid=0;
-      if (lss->lx_pwd_fp) {
-        fclose(lss->lx_pwd_fp); lss->lx_pwd_fp = NULL;
-      }
-    break;
+  if (_lx_usergroup_type(lss) == LX_AMITCP)
+    UG_endpwent();
+  else {
+    nextuid=0;
+    if (lss->lx_pwd_fp) {
+      fclose(lss->lx_pwd_fp); lss->lx_pwd_fp = NULL;
+    }
   }
 }
 
@@ -170,33 +162,30 @@ struct passwd *getpwent(void)
   struct passwd *pwd;
   char *name;
 
-  switch (lss=_lx_get_socket_settings(),_lx_usergroup_type(lss)) {
-    case LX_AMITCP:
-      if ((pwd=__TCP2InetPwd(UG_getpwent(),lss)) == NULL)
-        errno = ug_GetErr();
-      return pwd;
-    break;
+  lss = _lx_get_socket_settings();
+  if (_lx_usergroup_type(lss) == LX_AMITCP) {
+    if ((pwd=__TCP2InetPwd(UG_getpwent(),lss)) == NULL)
+      errno = ug_GetErr();
+    return pwd;
+  }
 
+  if ((lss->lx_pwd_fp || pw_start(lss)) && pw_scan(0, 0, NULL, lss))
+    return &lss->lx_pwd;
+  switch (nextuid) {
+    case 0:
+      nextuid = 1;
+      return (struct passwd *)&builtin_root;
     default:
-      if ((lss->lx_pwd_fp || pw_start(lss)) && pw_scan(0, 0, NULL, lss))
-        return &lss->lx_pwd;
-      switch (nextuid) {
-        case 0:
-          nextuid = 1;
-          return (struct passwd *)&builtin_root;
-        default:
-          nextuid = -2;
-          /* nobody comes next anyway */
-          if ((name = (char *)getlogin()) && strcmp(name, "nobody"))
-            return getpwnam(name);
-            /* fall through */
-        case (uid_t)(-2):
-          nextuid = -1;
-          return (struct passwd *)&builtin_nobody;
-        case (uid_t)(-1):
-          return 0;        
-      }
-    break;
+      nextuid = -2;
+      /* nobody comes next anyway */
+      if ((name = (char *)getlogin()) && strcmp(name, "nobody"))
+        return getpwnam(name);
+        /* fall through */
+    case (uid_t)(-2):
+      nextuid = -1;
+      return (struct passwd *)&builtin_nobody;
+    case (uid_t)(-1):
+      return 0;
   }
 }
 
@@ -207,44 +196,41 @@ struct passwd *getpwuid(uid_t uid)
   if (uid == (uid_t)(-2))
     return (struct passwd *)&builtin_nobody; /* always handle nobody */
 
-  switch (lss=_lx_get_socket_settings(),_lx_usergroup_type(lss)) {
-    case LX_AMITCP:
-      /* Don't do this if uid == -2 (nobody2) */
-      /* This happens when someone doesn't use AmiTCP's login */
-      if (uid != (uid_t)-2) {
-        if ((pwd=__TCP2InetPwd(UG_getpwuid(uid),lss)) == NULL)
-          errno = ug_GetErr();
-        return pwd;
-      }
-      else {
-        return getpwnam(getenv("USER"));
-      }
-    break;
-
-    default:
-      if (pw_start(lss))  {
-        int rval = pw_scan(1, uid, NULL, lss);
-        if (!lss->lx_pwd_stayopen)
-          endpwent();
-        return (rval ? &lss->lx_pwd : NULL);
-      }
-      if (uid == 0)
-        return (struct passwd *)&builtin_root;
-      if ((uid == getuid()) && (lss->lx_pwd.pw_name=getlogin()))
-        if ((lss->lx_pwd.pw_dir=getenv("HOME")) == NULL)
-          lss->lx_pwd.pw_dir = "SYS:";
-      if ((lss->lx_pwd.pw_gecos=getenv("REALNAME")) == NULL)
-        lss->lx_pwd.pw_gecos = "Amiga User";
-      lss->lx_pwd.pw_uid    = uid;
-      lss->lx_pwd.pw_gid    = getgid();
-      lss->lx_pwd.pw_change = 0;
-      lss->lx_pwd.pw_expire = 0;
-      lss->lx_pwd.pw_class  = "";
-      lss->lx_pwd.pw_passwd = "*";
-      lss->lx_pwd.pw_shell  = "sh";
-      return &lss->lx_pwd;
-    break;
+  lss = _lx_get_socket_settings();
+  if (_lx_usergroup_type(lss) == LX_AMITCP) {
+    /* Don't do this if uid == -2 (nobody2) */
+    /* This happens when someone doesn't use AmiTCP's login */
+    if (uid != (uid_t)-2) {
+      if ((pwd=__TCP2InetPwd(UG_getpwuid(uid),lss)) == NULL)
+        errno = ug_GetErr();
+      return pwd;
+    }
+    else {
+      return getpwnam(getenv("USER"));
+    }
   }
+
+  if (pw_start(lss))  {
+    int rval = pw_scan(1, uid, NULL, lss);
+    if (!lss->lx_pwd_stayopen)
+      endpwent();
+    return (rval ? &lss->lx_pwd : NULL);
+  }
+  if (uid == 0)
+    return (struct passwd *)&builtin_root;
+  if ((uid == getuid()) && (lss->lx_pwd.pw_name=getlogin()))
+    if ((lss->lx_pwd.pw_dir=getenv("HOME")) == NULL)
+      lss->lx_pwd.pw_dir = "SYS:";
+  if ((lss->lx_pwd.pw_gecos=getenv("REALNAME")) == NULL)
+    lss->lx_pwd.pw_gecos = "Amiga User";
+  lss->lx_pwd.pw_uid    = uid;
+  lss->lx_pwd.pw_gid    = getgid();
+  lss->lx_pwd.pw_change = 0;
+  lss->lx_pwd.pw_expire = 0;
+  lss->lx_pwd.pw_class  = "";
+  lss->lx_pwd.pw_passwd = "*";
+  lss->lx_pwd.pw_shell  = "sh";
+  return &lss->lx_pwd;
 }
 
 struct passwd *getpwnam(const char *name)
@@ -254,35 +240,32 @@ struct passwd *getpwnam(const char *name)
   if (!strcmp(name,"nobody"))
     return (struct passwd *)&builtin_nobody;
 
-  switch (lss=_lx_get_socket_settings(),_lx_usergroup_type(lss)) {
-    case LX_AMITCP:
-      if ((pwd=__TCP2InetPwd(UG_getpwnam(name),lss)) == NULL)
-        errno = ug_GetErr();
-      return pwd;
-    break;
-
-    default:
-      if (pw_start(lss)) {
-        int rval = pw_scan(1, 0, name, lss);
-        if (!lss->lx_pwd_stayopen)
-          endpwent();
-        return (rval ? &lss->lx_pwd : NULL);
-      }
-      if (!strcmp(name,"root"))
-        return (struct passwd *)&builtin_root;
-      if ((lss->lx_pwd.pw_name=getlogin()) && !strcmp(lss->lx_pwd.pw_name,name))
-        if ((lss->lx_pwd.pw_dir=getenv("HOME")) == NULL)
-          lss->lx_pwd.pw_dir = "SYS:";
-      if ((lss->lx_pwd.pw_gecos=getenv("REALNAME")) == NULL)
-        lss->lx_pwd.pw_gecos = "Amiga User";
-      lss->lx_pwd.pw_uid    = getuid();
-      lss->lx_pwd.pw_gid    = getgid();
-      lss->lx_pwd.pw_change = 0;
-      lss->lx_pwd.pw_expire = 0;
-      lss->lx_pwd.pw_class  = "";
-      lss->lx_pwd.pw_passwd = "*";
-      lss->lx_pwd.pw_shell  = "sh";
-      return &lss->lx_pwd;
-    break;
+  lss = _lx_get_socket_settings();
+  if (_lx_usergroup_type(lss) == LX_AMITCP) {
+    if ((pwd=__TCP2InetPwd(UG_getpwnam(name),lss)) == NULL)
+      errno = ug_GetErr();
+    return pwd;
   }
+
+  if (pw_start(lss)) {
+    int rval = pw_scan(1, 0, name, lss);
+    if (!lss->lx_pwd_stayopen)
+      endpwent();
+    return (rval ? &lss->lx_pwd : NULL);
+  }
+  if (!strcmp(name,"root"))
+    return (struct passwd *)&builtin_root;
+  if ((lss->lx_pwd.pw_name=getlogin()) && !strcmp(lss->lx_pwd.pw_name,name))
+    if ((lss->lx_pwd.pw_dir=getenv("HOME")) == NULL)
+      lss->lx_pwd.pw_dir = "SYS:";
+  if ((lss->lx_pwd.pw_gecos=getenv("REALNAME")) == NULL)
+    lss->lx_pwd.pw_gecos = "Amiga User";
+  lss->lx_pwd.pw_uid    = getuid();
+  lss->lx_pwd.pw_gid    = getgid();
+  lss->lx_pwd.pw_change = 0;
+  lss->lx_pwd.pw_expire = 0;
+  lss->lx_pwd.pw_class  = "";
+  lss->lx_pwd.pw_passwd = "*";
+  lss->lx_pwd.pw_shell  = "sh";
+  return &lss->lx_pwd;
 }

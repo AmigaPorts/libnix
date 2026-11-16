@@ -6,17 +6,9 @@
 int getsockname(int s, struct sockaddr *asa, socklen_t *alen)
 { struct SocketSettings *lss;
   StdFileDes *fp = _lx_fhfromfd(s);
-  int rc;
 
-  switch (lss=_lx_get_socket_settings(),lss->lx_network_type) {
-    case LX_AMITCP:
-      rc = TCP_GetSockName(fp->lx_sock,asa,(int *)alen);
-    break;
-
-    default:
-      rc = -1;
-    break;
-  }
-
-  return rc;
+  lss = _lx_get_socket_settings();
+  if (lss->lx_network_type == LX_AMITCP)
+    return TCP_GetSockName(fp->lx_sock,asa,(int *)alen);
+  return -1;
 }

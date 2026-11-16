@@ -28,16 +28,11 @@ __stdargs int ioctl(int s, unsigned long cmd, ...)
   data = va_arg(va, caddr_t);
   va_end(va);
 
-  switch (lss=_lx_get_socket_settings(),lss->lx_network_type) {
-
-    case LX_AMITCP:
-      rc = TCP_IoctlSocket(fp->lx_sock,cmd,data);
-    break;
-
-    default:
-      rc = 0;
-    break;
-  }
+  lss = _lx_get_socket_settings();
+  if (lss->lx_network_type == LX_AMITCP)
+    rc = TCP_IoctlSocket(fp->lx_sock,cmd,data);
+  else
+    rc = 0;
 
   /* for fcntl()'s F_GETFL */
   if (rc == 0 && cmd == FIONBIO) {
