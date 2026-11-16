@@ -220,7 +220,8 @@ struct passwd *getpwent(void)
           return (struct passwd *)&builtin_root;
         default:
           nextuid = -2;
-          if ((name = (char *)getlogin()))
+          /* nobody comes next anyway */
+          if ((name = (char *)getlogin()) && strcmp(name, "nobody"))
             return getpwnam(name);
             /* fall through */
         case (uid_t)(-2):
