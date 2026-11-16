@@ -93,7 +93,7 @@ int setlogin(const char *name)
 int getgroups(int gidsetlen, gid_t *gidset)
 { struct SocketSettings *lss = _lx_get_socket_settings();
 
-  if (lss->lx_network_type == LX_AMITCP)
+  if (_lx_usergroup_type(lss) == LX_AMITCP)
     return UG_getgroups(gidsetlen, (int*)gidset);
 
   /* parameter check */
@@ -116,7 +116,7 @@ int getgroups(int gidsetlen, gid_t *gidset)
 int setgroups(int gidsetlen, const gid_t *gidset)
 { struct SocketSettings *lss = _lx_get_socket_settings();
 
-  if (lss->lx_network_type == LX_AMITCP)
+  if (_lx_usergroup_type(lss) == LX_AMITCP)
     return UG_setgroups(gidsetlen,(int*)gidset);
 
   /* parameter check */
