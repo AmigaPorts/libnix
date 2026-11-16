@@ -6,17 +6,9 @@
 int shutdown(int s, int how)
 { struct SocketSettings *lss;
   StdFileDes *fp = _lx_fhfromfd(s);
-  int rc;
 
-  switch (lss=_lx_get_socket_settings(),lss->lx_network_type) {
-    case LX_AMITCP:
-      rc = TCP_ShutDown(fp->lx_sock,how);
-    break;
-
-    default:
-      rc = 0;
-    break;
-  }
-
-  return rc;
+  lss = _lx_get_socket_settings();
+  if (lss->lx_network_type == LX_AMITCP)
+    return TCP_ShutDown(fp->lx_sock,how);
+  return 0;
 }

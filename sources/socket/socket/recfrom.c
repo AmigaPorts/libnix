@@ -6,17 +6,9 @@
 ssize_t recvfrom(int s, void *buf, size_t len, int flags, struct sockaddr *from, socklen_t *fromlen)
 { struct SocketSettings *lss;
   StdFileDes *fp = _lx_fhfromfd(s);
-  int rc;
 
-  switch (lss=_lx_get_socket_settings(),lss->lx_network_type) {
-    case LX_AMITCP:
-      rc = TCP_RecvFrom(fp->lx_sock,buf,len,flags, from, (int*)fromlen);
-    break;
-
-    default:
-      rc = -1;
-    break;
-  }
-
-  return rc;
+  lss = _lx_get_socket_settings();
+  if (lss->lx_network_type == LX_AMITCP)
+    return TCP_RecvFrom(fp->lx_sock,buf,len,flags, from, (int*)fromlen);
+  return -1;
 }

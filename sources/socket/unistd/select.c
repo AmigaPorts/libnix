@@ -68,20 +68,11 @@ static inline void setcopy(int nfd, u_int *ifd, u_int *ofd)
 }
 
 static inline int net_select(int s, fd_set *in, fd_set *out, fd_set *exc, struct timeval *timeout, u_long *sigs)
-{ struct SocketSettings *lss;
-  int rc;
+{ struct SocketSettings *lss = _lx_get_socket_settings();
 
-  switch (lss=_lx_get_socket_settings(),lss->lx_network_type) {
-    case LX_AMITCP:
-      rc = TCP_WaitSelect(s, in, out, exc, timeout, (ULONG*)sigs);
-    break;
-
-    default:
-      rc = -1;
-    break;
-  }
-
-  return rc;
+  if (lss->lx_network_type == LX_AMITCP)
+    return TCP_WaitSelect(s, in, out, exc, timeout, (ULONG*)sigs);
+  return -1;
 }
 
 static inline int lx_select(int nfd, fd_set *ifd, fd_set *ofd, fd_set *efd, struct timeval *timeout, u_long *mask)

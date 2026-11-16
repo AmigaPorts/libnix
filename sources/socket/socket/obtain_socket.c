@@ -1,18 +1,9 @@
 #include "socket.h"
 
 int obtain_socket(long id, int inet, int stream, int protocol)
-{ struct SocketSettings *lss;
-  int rc;
+{ struct SocketSettings *lss = _lx_get_socket_settings();
 
-  switch (lss=_lx_get_socket_settings(),lss->lx_network_type) {
-    case LX_AMITCP:
-      rc = TCP_ObtainSocket(id, inet, stream, protocol);
-    break;
-
-    default:
-      rc = -1;
-    break;
-  }
-
-  return rc;
+  if (lss->lx_network_type == LX_AMITCP)
+    return TCP_ObtainSocket(id, inet, stream, protocol);
+  return -1;
 }

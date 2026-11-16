@@ -14,15 +14,11 @@ int accept(int s, struct sockaddr *name, socklen_t *namelen)
   if ((fp2=_create_socket(fp->lx_family, fp->lx_domain, fp->lx_protocol)) == NULL)
     return -1;
 
-  switch (lss=_lx_get_socket_settings(),lss->lx_network_type) {
-    case LX_AMITCP:
-      rc = TCP_Accept(fp->lx_sock, name, (int*)namelen);
-    break;
-
-    default:
-      rc = -1;
-    break;
-  }
+  lss = _lx_get_socket_settings();
+  if (lss->lx_network_type == LX_AMITCP)
+    rc = TCP_Accept(fp->lx_sock, name, (int*)namelen);
+  else
+    rc = -1;
 
   if (rc >= 0) {
     fp2->lx_sock = rc; rc = fp2->lx_pos;

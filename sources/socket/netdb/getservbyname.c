@@ -3,13 +3,9 @@
 #include "socket.h"
 
 struct servent *getservbyname(const char *name, const char *proto)
-{ struct SocketSettings *lss;
+{ struct SocketSettings *lss = _lx_get_socket_settings();
 
-  switch (lss=_lx_get_socket_settings(),lss->lx_network_type) {
-    case LX_AMITCP:
-      return TCP_GetServByName(name,proto);
-
-    default:
-      return NULL;
-  }
+  if (lss->lx_network_type == LX_AMITCP)
+    return TCP_GetServByName(name,proto);
+  return NULL;
 }

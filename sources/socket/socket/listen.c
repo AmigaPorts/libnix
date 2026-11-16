@@ -9,15 +9,11 @@ int listen(int s, int backlog)
   int rc;
 
   if ((fp=_lx_fhfromfd(s))) {
-    switch (lss=_lx_get_socket_settings(),lss->lx_network_type) {
-      case LX_AMITCP:
-        rc = TCP_Listen(fp->lx_sock, backlog);
-      break;
-
-      default:
-        rc = -1;
-      break;
-    }
+    lss = _lx_get_socket_settings();
+    if (lss->lx_network_type == LX_AMITCP)
+      rc = TCP_Listen(fp->lx_sock, backlog);
+    else
+      rc = -1;
   }
   else rc = -1;
 

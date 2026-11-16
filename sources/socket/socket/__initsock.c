@@ -39,21 +39,11 @@ static ssize_t __stdargs _sock_write(struct _StdFileDes *fp,const void *buf,size
 }
 
 static int __stdargs _sock_close(struct _StdFileDes *fp)
-{ struct SocketSettings *lss;
-  int rc;
+{ struct SocketSettings *lss = _lx_get_socket_settings();
 
-  switch (lss=_lx_get_socket_settings(),lss->lx_network_type) {
-
-    case LX_AMITCP:
-      rc = TCP_CloseSocket(fp->lx_sock);
-    break;
-
-    default:
-      rc = 0;
-    break;
-  }
-
-  return rc;
+  if (lss->lx_network_type == LX_AMITCP)
+    return TCP_CloseSocket(fp->lx_sock);
+  return 0;
 }
 
 static int __stdargs _sock_dup(struct _StdFileDes *fp)
@@ -64,16 +54,11 @@ static int __stdargs _sock_dup(struct _StdFileDes *fp)
   if ((fp2=_create_socket(fp->lx_family, fp->lx_domain, fp->lx_protocol)) == NULL)
     return -1;
 
-  switch (lss=_lx_get_socket_settings(),lss->lx_network_type) {
-
-    case LX_AMITCP:
-      rc = TCP_Dup2Socket(fp->lx_sock, -1);
-    break;
-
-    default:
-      rc = -1;
-    break;
-  }
+  lss = _lx_get_socket_settings();
+  if (lss->lx_network_type == LX_AMITCP)
+    rc = TCP_Dup2Socket(fp->lx_sock, -1);
+  else
+    rc = -1;
 
   if (rc >= 0) {
     fp2->lx_sock = rc; rc = fp2->lx_pos;
@@ -125,16 +110,10 @@ static int __stdargs _sock_poll(struct _StdFileDes *fp,int io_mode,struct Socket
     break;
   }
 
-  switch (lss->lx_network_type) {
-
-    case LX_AMITCP:
-      rc = TCP_WaitSelect(fp->lx_sock, &in, &out, &exc, &tv, NULL);
-    break;
-
-    default:
-      rc = -1;
-    break;
-  }
+  if (lss->lx_network_type == LX_AMITCP)
+    rc = TCP_WaitSelect(fp->lx_sock, &in, &out, &exc, &tv, NULL);
+  else
+    rc = -1;
 
   return ((rc == 1) ? 1 : 0);
 }
@@ -348,22 +327,16 @@ void __exitsocket(void)
 
   DB( BUG("__exitsocket start\n"); )
 
-  switch (lss->lx_network_type) {
-    case LX_AMITCP:
-      DB( BUG("lss->lx_UserGroupBase is %lx\n", lss->lx_UserGroupBase); )
-      if (lss->lx_UserGroupBase)
-        CloseLibrary(lss->lx_UserGroupBase);
-      DB( BUG("lss->lx_BsdSocketBase is %lx\n", lss->lx_BsdSocketBase); )
-      if (lss->lx_BsdSocketBase) {
-        CloseLibrary(lss->lx_BsdSocketBase);
-        FreeSignal(lss->lx_sigio);
-        FreeSignal(lss->lx_sigurg);
-      }
-    break;
-
-    default:
-      /* silence compiler */
-    break;
+  if (lss->lx_network_type == LX_AMITCP) {
+    DB( BUG("lss->lx_UserGroupBase is %lx\n", lss->lx_UserGroupBase); )
+    if (lss->lx_UserGroupBase)
+      CloseLibrary(lss->lx_UserGroupBase);
+    DB( BUG("lss->lx_BsdSocketBase is %lx\n", lss->lx_BsdSocketBase); )
+    if (lss->lx_BsdSocketBase) {
+      CloseLibrary(lss->lx_BsdSocketBase);
+      FreeSignal(lss->lx_sigio);
+      FreeSignal(lss->lx_sigurg);
+    }
   }
 
   DB( BUG("__exitsocket done\n"); )

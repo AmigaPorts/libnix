@@ -9,15 +9,11 @@ int bind(int s, const struct sockaddr *name, socklen_t namelen)
   int rc;
 
   if ((fp=_lx_fhfromfd(s))) {
-    switch (lss=_lx_get_socket_settings(),lss->lx_network_type) {
-      case LX_AMITCP:
-        rc = TCP_Bind(fp->lx_sock, name, namelen);
-      break;
-
-      default:
-        rc = -1;
-      break;
-    }
+    lss = _lx_get_socket_settings();
+    if (lss->lx_network_type == LX_AMITCP)
+      rc = TCP_Bind(fp->lx_sock, name, namelen);
+    else
+      rc = -1;
   }
   else rc = -1;
 
