@@ -99,6 +99,16 @@ struct SocketSettings {
 */
 extern __stdargs struct SocketSettings *_lx_get_socket_settings(void);
 
+/* The network type of the user and group calls.  With AmiTCP they need
+   usergroup.library as well, which may not be there: without it they
+   answer as with no network. */
+static inline LX_NETWORK_TYPE _lx_usergroup_type(const struct SocketSettings *lss)
+{
+  if (lss->lx_network_type == LX_AMITCP && !lss->lx_UserGroupBase)
+    return LX_NONE;
+  return lss->lx_network_type;
+}
+
 /*
 **
 */

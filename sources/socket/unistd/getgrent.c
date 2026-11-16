@@ -103,7 +103,7 @@ static int gr_scan(int search, gid_t gid, const char *name, struct SocketSetting
 int setgroupent(int stayopen) {
 	struct SocketSettings *lss = _lx_get_socket_settings();
 
-	if (lss->lx_network_type == LX_AMITCP) {
+	if (_lx_usergroup_type(lss) == LX_AMITCP) {
 		UG_setgrent();
 	} else {
 		nextgid = 0;
@@ -121,7 +121,7 @@ void setgrent(void) {
 void endgrent(void) {
 	struct SocketSettings *lss = _lx_get_socket_settings();
 
-	if (lss->lx_network_type == LX_AMITCP) {
+	if (_lx_usergroup_type(lss) == LX_AMITCP) {
 		UG_endgrent();
 	} else {
 		nextgid = 0;
@@ -135,11 +135,11 @@ void endgrent(void) {
 struct group* getgrent(void) {
 	struct SocketSettings *lss = _lx_get_socket_settings();
 
-	if (lss->lx_network_type == LX_AMITCP) {
+	if (_lx_usergroup_type(lss) == LX_AMITCP) {
 		return UG_getgrent();
 	} else if ((lss->lx_grp_fp || gr_start(lss)) && gr_scan(0, 0, NULL, lss)) {
 		return &lss->lx_grp;
-	} else if (lss->lx_network_type == LX_NONE) {
+	} else if (_lx_usergroup_type(lss) == LX_NONE) {
 		char *name;
 		switch (nextgid) {
 		case 0:
@@ -170,7 +170,7 @@ struct group* getgrgid(gid_t gid) {
 
 	lss = _lx_get_socket_settings();
 
-	if (lss->lx_network_type == LX_AMITCP) {
+	if (_lx_usergroup_type(lss) == LX_AMITCP) {
 		struct group *grp = UG_getgrgid(gid);
 		if (!grp)
 			errno = ug_GetErr();
@@ -180,7 +180,7 @@ struct group* getgrgid(gid_t gid) {
 		if (!lss->lx_grp_stayopen)
 			endgrent();
 		return (rval ? &lss->lx_grp : NULL);
-	} else if (lss->lx_network_type == LX_NONE) {
+	} else if (_lx_usergroup_type(lss) == LX_NONE) {
 		if (gid == 0)
 			return (struct group*) &builtin_wheel;
 		if ((gid == getgid()) && (lss->lx_grp.gr_name = getenv("GROUP"))) {
@@ -202,7 +202,7 @@ struct group* getgrnam(const char *name) {
 
 	lss = _lx_get_socket_settings();
 
-	if (lss->lx_network_type == LX_AMITCP) {
+	if (_lx_usergroup_type(lss) == LX_AMITCP) {
 		struct group *grp = UG_getgrnam(name);
 		if (!grp)
 			errno = ug_GetErr();
@@ -212,7 +212,7 @@ struct group* getgrnam(const char *name) {
 		if (!lss->lx_grp_stayopen)
 			endgrent();
 		return (rval ? &lss->lx_grp : NULL);
-	} else if (lss->lx_network_type == LX_NONE) {
+	} else if (_lx_usergroup_type(lss) == LX_NONE) {
 		if (!strcmp(name, "wheel"))
 			return (struct group*) &builtin_wheel;
 		if ((lss->lx_grp.gr_name = getenv("GROUP")) && !strcmp(lss->lx_grp.gr_name, name)) {

@@ -150,7 +150,7 @@ static struct passwd *__TCP2InetPwd(struct TCP_passwd *pwd,struct SocketSettings
 int setpassent(int stayopen)
 { struct SocketSettings *lss;
 
-  switch (lss=_lx_get_socket_settings(),lss->lx_network_type) {
+  switch (lss=_lx_get_socket_settings(),_lx_usergroup_type(lss)) {
     case LX_AS225:
       SOCK_setpwent(stayopen);
     break;
@@ -177,7 +177,7 @@ int setpwent(void)
 void endpwent(void)
 { struct SocketSettings *lss;
 
-  switch (lss=_lx_get_socket_settings(),lss->lx_network_type) {
+  switch (lss=_lx_get_socket_settings(),_lx_usergroup_type(lss)) {
     case LX_AS225:
       SOCK_endpwent();
     break;
@@ -200,7 +200,7 @@ struct passwd *getpwent(void)
   struct passwd *pwd;
   char *name;
 
-  switch (lss=_lx_get_socket_settings(),lss->lx_network_type) {
+  switch (lss=_lx_get_socket_settings(),_lx_usergroup_type(lss)) {
     case LX_AS225:
       return __AS225InetPwd(SOCK_getpwent(),lss);
     break;
@@ -240,7 +240,7 @@ struct passwd *getpwuid(uid_t uid)
   if (uid == (uid_t)(-2))
     return (struct passwd *)&builtin_nobody; /* always handle nobody */
 
-  switch (lss=_lx_get_socket_settings(),lss->lx_network_type) {
+  switch (lss=_lx_get_socket_settings(),_lx_usergroup_type(lss)) {
     case LX_AS225:
       return __AS225InetPwd(SOCK_getpwuid(uid),lss);
     break;
@@ -249,8 +249,6 @@ struct passwd *getpwuid(uid_t uid)
       /* Don't do this if uid == -2 (nobody2) */
       /* This happens when someone doesn't use AmiTCP's login */
       if (uid != (uid_t)-2) {
-    	  if (!USERGROUP_BASE_NAME)
-    		  return 0;
         if ((pwd=__TCP2InetPwd(UG_getpwuid(uid),lss)) == NULL)
           errno = ug_GetErr();
         return pwd;
@@ -293,7 +291,7 @@ struct passwd *getpwnam(const char *name)
   if (!strcmp(name,"nobody"))
     return (struct passwd *)&builtin_nobody;
 
-  switch (lss=_lx_get_socket_settings(),lss->lx_network_type) {
+  switch (lss=_lx_get_socket_settings(),_lx_usergroup_type(lss)) {
     case LX_AS225:
       return __AS225InetPwd(SOCK_getpwnam((char *)name),lss);
     break;
