@@ -161,13 +161,14 @@ static inline int _d_iszero(union _d_bits u) {
 static inline int _ld_signbit(union _ld_bits u) {
 	return u.b.sign;
 }
-/* With an explicit integer bit, infinity is the ONLY $7FFF/$8000...000
- * pattern; every other all-exponent value is a NaN.                     */
+/* The 68881 ignores the integer bit of an all-ones exponent: the fraction
+ * below it is zero for infinity, which gcc writes as $7FFF/$0000...000,
+ * and nonzero for a NaN.                                                */
 static inline int _ld_isnan(union _ld_bits u) {
-	return u.b.exp == _LD_EXP_ALLONES && u.b.mant != _LD_INTBIT;
+	return u.b.exp == _LD_EXP_ALLONES && (u.b.mant & ~_LD_INTBIT) != 0;
 }
 static inline int _ld_isinf(union _ld_bits u) {
-	return u.b.exp == _LD_EXP_ALLONES && u.b.mant == _LD_INTBIT;
+	return u.b.exp == _LD_EXP_ALLONES && (u.b.mant & ~_LD_INTBIT) == 0;
 }
 static inline int _ld_iszero(union _ld_bits u) {
 	return u.b.exp == 0 && u.b.mant == 0;
