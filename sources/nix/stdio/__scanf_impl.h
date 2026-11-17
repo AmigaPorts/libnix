@@ -8,6 +8,8 @@
 #ifndef __SCANF_IMPL_H
 #define __SCANF_IMPL_H
 
+#include <errno.h>
+
 #ifdef WIDE
 
 # include "wchar.h"
@@ -538,8 +540,13 @@ if (!ignore)
 			    }
 
 			    if (!has_digit) {
+			        /* "-" or ".": a matching failure, not an input
+			         * failure (EOF), even where the input ends */
 			        PREV(c);
+			        if (size)
+			            converted = 1;
 			        if (min) PREV(min);
+			        size = 0;
 			        break;
 			    }
 
@@ -623,8 +630,13 @@ if (!ignore)
 			                STORE_DOUBLE(d);
 			            }
 			        } else {
+			            /* out of range: overflow to inf, or digits that
+			             * are not all zeros underflowing to 0 */
+			            int nonzero = (lv.l.high | lv.l.middle | lv.l.low) != 0;
 			            if (is_L) {
 			                long double ld = __ldl_to_long_double(&lv);
+			                if (isinf(ld) || (ld == 0 && nonzero))
+			                    errno = ERANGE;
 			                if (sign < 0)
 			                    ld = -ld;
 			                *va_arg(args, long double *) = ld;
@@ -634,6 +646,9 @@ if (!ignore)
 			                if (subtype != CX_l)
 			                    __ldl_round_float(&lv);
 			                d = __ldl_to_double(&lv);
+			                if (subtype == CX_l ? isinf(d) || (d == 0 && nonzero)
+			                    : isinf((float) d) || ((float) d == 0 && nonzero))
+			                    errno = ERANGE;
 			                if (sign < 0)
 			                    d = -d;
 			                STORE_DOUBLE(d);
