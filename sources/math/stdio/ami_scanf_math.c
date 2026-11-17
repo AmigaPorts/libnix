@@ -355,8 +355,9 @@ long double __ldl_to_long_double(const LDL *lv)
 			long E = (long) e + 16383;
 
 			if (E >= 0x7FFF) {
+				/* infinity as gcc and the 68881 make it */
 				u.b.exp = 0x7FFF;
-				u.b.mant = 0x8000000000000000ULL;
+				u.b.mant = 0;
 				return u.ld;
 			}
 

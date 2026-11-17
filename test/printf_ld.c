@@ -1,4 +1,5 @@
-/* printf() of subnormal and smallest normal long doubles.  The 68881's
+/* printf() of subnormal and smallest normal long doubles, and of
+   infinity.  The 68881's
    exponent field 0 is 2^-16383, and normalizing such a value takes its
    binary exponent below the bias.  Prints what fails; the exit code is the
    number of failures.  */
@@ -34,6 +35,9 @@ int main(void)
   expect("%Lg", 0x1p-16400L, "1.28254e-4937");
   expect("%.3Lf", true_min, "0.000");
   expect("%.3Lf", -0x1p-16400L, "-0.000");
+  /* gcc's infinity has no integer bit, which the 68881 ignores there */
+  expect("%Lg", __builtin_huge_vall(), "inf");
+  expect("%Lf", -__builtin_huge_vall(), "-inf");
   /* and a subnormal double, which takes the same path */
   snprintf(buf, sizeof(buf), "%e", 0x1p-1074);
   if (strcmp(buf, "4.940656e-324"))
