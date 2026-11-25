@@ -45,9 +45,6 @@ extern FILE **__sF;
  */
 StdFileDes **__stdfiledes;
 unsigned __stdfilesize;
-#ifdef __posix_threads__
-rspinlock_t __stdLock;
-#endif
 /* The normal Amiga shell sets no process->pr_CES stream -
  * we use Open("*",MODE_NEWFILE) in this case
  */

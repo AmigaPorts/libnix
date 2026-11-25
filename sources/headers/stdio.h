@@ -5,9 +5,6 @@
 /* only __gnuc_va_list: stdio.h must not define va_start and friends */
 #define __need___va_list
 #include <stdarg.h>
-#ifdef __posix_threads__
-#include <spinlock.h>
-#endif
 
 #ifndef _SSIZE_T_DECLARED
 typedef _ssize_t ssize_t;
@@ -78,25 +75,13 @@ struct __sFILE {
 	int tmpinc; /* Stored incount if ungetc pending, otherwise undefined */
 	long tmpdir; /* lock to directory if temporary file */
 	char *name; /* filename if temporary file */
-#ifdef __posix_threads__
-	rspinlock_t __spinlock;
-#endif
 };
 
-#ifdef __posix_threads__
-extern rspinlock_t __stdLock;
-#define __STDIO_LOCK(l) __recursiveSpinLock(&(l)->__spinlock)
-#define __STDIO_UNLOCK(l) __recursiveSpinUnlock(&(l)->__spinlock)
-#define __STDIO_INIT_LOCK(l) __initRecursiveSpinLock(&(l))
-#define __GLOBAL_STDIO_LOCK __recursiveSpinLock(&__stdLock)
-#define __GLOBAL_STDIO_UNLOCK __recursiveSpinUnlock(&__stdLock)
-#else
 #define __STDIO_LOCK(l)
 #define __STDIO_UNLOCK(l)
 #define __STDIO_INIT_LOCK(l)
 #define __GLOBAL_STDIO_LOCK
 #define __GLOBAL_STDIO_UNLOCK
-#endif
 
 #if !defined(__FILE_defined)
 typedef struct __sFILE __FILE;

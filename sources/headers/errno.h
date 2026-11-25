@@ -7,11 +7,7 @@ extern "C" {
 
 #define errno (*__errno)
 
-#ifdef __posix_threads__
-extern int * __thread __errno;
-#else
 extern int * __errno;
-#endif
 
 #include <sys/errno.h>
 
