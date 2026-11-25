@@ -45,21 +45,10 @@ int open(const char *path, int flags, ...) {
 	return -1;
 }
 
-#ifdef __posix_threads__
-	static StdFileDes *__allocfd2(void);
-#endif
 /**
  * Reuse or allocate a StdFileDes object.
  */
 StdFileDes *__allocfd(void) {
-#ifdef __posix_threads__
-	__GLOBAL_STDIO_LOCK;
-	StdFileDes * sfd = __allocfd2();
-	__GLOBAL_STDIO_UNLOCK;
-	return sfd;
-}
-static StdFileDes *__allocfd2(void) {
-#endif
 	StdFileDes *fp, **sfd;
 	int file, max;
 

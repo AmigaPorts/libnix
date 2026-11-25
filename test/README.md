@@ -52,9 +52,7 @@ compiler has a thread model (`m68k-amigaos-gcc -v` says other than
 `single`), and prints `SKIP: <test>: gcc has no thread model` otherwise.
 
 - `setlocale_threads` exercises concurrent locale changes. It needs
-  libpthread, and a libnix built by a thread-enabled compiler, so that
-  `__posix_threads__` enables the semaphore. It prints
-  `setlocale_threads OK`.
+  libpthread. It prints `setlocale_threads OK`.
 - `cxa-dtors` needs libstdc++ with threads. It checks that thread-local
   destructors run when a thread exits, and that static destructors
   interleave with `atexit()` in reverse registration order. It prints

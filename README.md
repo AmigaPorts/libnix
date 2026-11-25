@@ -55,7 +55,7 @@ Both run the Makefile in `test/`; [test/README.md](test/README.md) has the detai
 
 ## Threads
 
-There is one build of libnix, whatever the thread model of the compiler. With a compiler that has one (the toolchain's `THREADS=amigaos` or `THREADS=posix`), `make check-target` also runs the thread tests; with the single-task model it reports them as skipped.
+There is one build of libnix, whatever the thread model of the compiler. With a compiler that has one (the toolchain's `THREADS=amigaos`), `make check-target` also runs the thread tests; with the single-task model it reports them as skipped.
 
 ## Authors
 

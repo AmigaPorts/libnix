@@ -1,8 +1,5 @@
 #include <stdlib.h>
 #include <errno.h>
-#ifdef __posix_threads__
-#include <proto/exec.h>
-#endif
 #include "stabs.h"
 #include "stdio.h"
 
@@ -29,14 +26,8 @@ static int __addexit(void (*func)(void), void (*cxafunc)(void *), void *arg)
   node->func=func;
   node->cxafunc=cxafunc;
   node->arg=arg;
-#ifdef __posix_threads__
-  Forbid();
-#endif
   node->next=__funclist;
   __funclist=node;
-#ifdef __posix_threads__
-  Permit();
-#endif
   return 0;
 }
 
@@ -49,20 +40,14 @@ int __cxa_atexit(void (*func)(void *), void *arg, void *dso)
   return __addexit(NULL,func,arg); }
 
 /* Unlink each function before calling it: a callback may call exit() or
-   register another callback.  Use the registration lock for removal too.  */
+   register another callback.  */
 void __exitatexit(void)
 {
   struct atexitnode *thisf;
   for (;;) {
-#ifdef __posix_threads__
-    Forbid();
-#endif
     thisf=__funclist;
     if (thisf)
       __funclist=thisf->next;
-#ifdef __posix_threads__
-    Permit();
-#endif
     if (!thisf)
       break;
     if(thisf->cxafunc!=NULL)

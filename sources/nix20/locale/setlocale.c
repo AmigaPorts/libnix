@@ -3,9 +3,6 @@
 #include <string.h>
 #include <stdlib.h>
 #include <dos/dos.h>
-#ifdef __posix_threads__
-#include <exec/semaphores.h>
-#endif
 #ifndef __KICK13__
 #include <libraries/locale.h>
 #include <proto/locale.h>
@@ -32,13 +29,7 @@ int __locale_mb_cur_max(void) {
 	return 0xff;
 }
 
-/* Keep returned names and opened locales alive while callers use them.
-   Thread-enabled builds serialize individual setlocale() calls.  */
-#ifdef __posix_threads__
-static struct SignalSemaphore __localesema;
-static volatile int __localesema_ready;
-#endif
-
+/* Keep returned names and opened locales alive while callers use them.  */
 struct __localename {
 	struct __localename *next;
 	char name[1];
@@ -54,26 +45,6 @@ struct __localeopen {
 static struct __localeopen *__localesopen; /* every locale opened */
 static struct Locale *__ctypelocale; /* the locale ctype[] was made from */
 #endif
-
-static void __localelock(void) {
-#ifdef __posix_threads__
-	if (!__localesema_ready) {
-		Forbid();
-		if (!__localesema_ready) {
-			InitSemaphore(&__localesema);
-			__localesema_ready = 1;
-		}
-		Permit();
-	}
-	ObtainSemaphore(&__localesema);
-#endif
-}
-
-static void __localeunlock(void) {
-#ifdef __posix_threads__
-	ReleaseSemaphore(&__localesema);
-#endif
-}
 
 /* the kept copy of name: the same string every time for the same name */
 static char *__keepname(const char *name) {
@@ -277,12 +248,10 @@ char *setlocale(int category, const char *name) {
 	} else
 		a = b = category - 1;
 
-	__localelock();
 	if (name == NULL) /* return name of current locale */
 		result = __getlocalename(a, b);
 	else
 		result = __setlocale(a, b, name);
-	__localeunlock();
 	return result;
 }
 
