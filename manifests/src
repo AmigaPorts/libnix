@@ -278,9 +278,6 @@ sysdep/libnix/sources/nix/time/time.c
 sysdep/libnix/sources/nix13/Makefile.in
 sysdep/libnix/sources/nix13/extra/stricmp.c
 sysdep/libnix/sources/nix13/extra/strnicmp.c
-sysdep/libnix/sources/nix13/math/__divsi3.c
-sysdep/libnix/sources/nix13/math/__mulsi3.c
-sysdep/libnix/sources/nix13/math/__udivsi3.c
 sysdep/libnix/sources/nix20/Makefile.in
 sysdep/libnix/sources/nix20/extra/stricmp.c
 sysdep/libnix/sources/nix20/extra/strnicmp.c
