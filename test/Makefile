@@ -23,7 +23,8 @@ all: check
 # Target tests. Each one is <test>.c, linked ahead of the installed libraries
 # with the library sources it names in <test>_SRCS, which are compiled as
 # Makefile.m68k-amigaos compiles them, plus <test>_LIBFLAGS. <test>_CFLAGS
-# and <test>_LIBS go to the test's own compile and link.
+# and <test>_LIBS go to the test's own compile and link, and <test>_CRT, such
+# as -mcrt=nix13, replaces the C runtime that CROSS_CFLAGS selects.
 
 TARGET_TESTS = \
 	amigalib \
@@ -44,6 +45,8 @@ TARGET_TESTS = \
 	ftruncate \
 	ftw \
 	inet \
+	intdiv \
+	intdiv-nix13 \
 	math_errno \
 	mathfp \
 	memset \
@@ -185,6 +188,12 @@ ftw_CFLAGS = -I../sources/headers
 inet_SRCS = ../sources/socket/arpa/inet_aton.c ../sources/socket/arpa/inet_network.c
 inet_LIBFLAGS = -Wall -Werror=char-subscripts
 
+# The 68000's 32-bit multiply and divide helpers, against the installed
+# libraries: nix20's call utility.library, nix13 takes libgcc's.
+intdiv_CFLAGS = -m68000 -fno-builtin
+intdiv-nix13_CFLAGS = $(intdiv_CFLAGS)
+intdiv-nix13_CRT = -mcrt=nix13
+
 # Against the installed libraries, in both forms: test/math_errno.c, -m68000 and
 # -m68020 -m68881.
 math_errno_CFLAGS = -fno-builtin
@@ -275,6 +284,7 @@ cxa-dtors_LIBS = -lpthread -latomic
 # A test's objects go in $(O)/obj/<test>/, so two tests may compile the same
 # source with different flags.
 test_objs = $(addprefix $(O)/obj/$(1)/,$(notdir $($(1)_SRCS:.c=.o)))
+test_cflags = $(if $($(1)_CRT),$(filter-out -noixemul -mcrt=%,$(CROSS_CFLAGS)) $($(1)_CRT),$(CROSS_CFLAGS))
 
 define lib_object
 $(O)/obj/$(1)/$(notdir $(2:.c=.o)): $(2)
@@ -286,7 +296,7 @@ define test_program
 $(foreach src,$($(1)_SRCS),$(eval $(call lib_object,$(1),$(src))))
 $(O)/$(1): $(wildcard $(1).c) $(call test_objs,$(1))
 	@mkdir -p $$(@D)
-	$$(Q)$$(CROSS_CC) $$(CROSS_CFLAGS) -Wall $$($(1)_CFLAGS) -o $$@ $$^ $$($(1)_LIBS)
+	$$(Q)$$(CROSS_CC) $$(call test_cflags,$(1)) -Wall $$($(1)_CFLAGS) -o $$@ $$^ $$($(1)_LIBS)
 endef
 
 $(foreach t,$(filter-out cxa-dtors,$(TARGET_TESTS) $(THREAD_TESTS)),$(eval $(call test_program,$(t))))
