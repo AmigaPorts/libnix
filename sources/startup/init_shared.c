@@ -265,7 +265,7 @@ void __restore_a4() {
 long __LibClose(struct Library *childLib asm("a6")) {
 	register long *a4 asm("a4");
 	asm volatile("move.l	a4,-(a7)" :: "r"(a4));
-	asm volatile("lea	32766(a6),%0;\n" : "=r"(a4));
+	asm volatile("lea	32766(%1),%0;\n" : "=r"(a4) : "a"(childLib));
 
 	Forbid();
 	--__theMasterLib->lib_OpenCnt;
@@ -328,7 +328,7 @@ char const * __so_xlib_init(char const *name, void **to) {
 char const * __ResolveSymbols(long *p asm("a0"), struct Library *childLib asm("a6")) {
 	register long *a4 asm("a4");
 	asm volatile("move.l	a4,-(a7)" :: "r"(a4));
-	asm volatile("lea	32766(a6),%0;\n" : "=r"(a4));
+	asm volatile("lea	32766(%1),%0;\n" : "=r"(a4) : "a"(childLib));
 	char const * r = 0;
 	while (!r && *p) {
 		char const *name = (char const*) *p++;
