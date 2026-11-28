@@ -296,7 +296,8 @@ define test_program
 $(foreach src,$($(1)_SRCS),$(eval $(call lib_object,$(1),$(src))))
 $(O)/$(1): $(wildcard $(1).c) $(call test_objs,$(1))
 	@mkdir -p $$(@D)
-	$$(Q)$$(CROSS_CC) $$(call test_cflags,$(1)) -Wall $$($(1)_CFLAGS) -o $$@ $$^ $$($(1)_LIBS)
+	$$(Q)$$(CROSS_CC) $$(call test_cflags,$(1)) -Wall $$($(1)_CFLAGS) -MMD -MP -MF $$@.d -MT $$@ -o $$@ \
+	  $(wildcard $(1).c) $(call test_objs,$(1)) $$($(1)_LIBS)
 endef
 
 $(foreach t,$(filter-out cxa-dtors,$(TARGET_TESTS) $(THREAD_TESTS)),$(eval $(call test_program,$(t))))
@@ -305,7 +306,7 @@ $(O)/cxa-dtors: cxa-dtors.cpp
 	@mkdir -p $(@D)
 	$(Q)$(CROSS_CXX) $(CROSS_CFLAGS) -fuse-cxa-atexit -std=gnu++23 -o $@ $< $(cxa-dtors_LIBS)
 
--include $(wildcard $(O)/obj/*/*.d)
+-include $(wildcard $(O)/*.d $(O)/obj/*/*.d)
 
 # Each test runs in $(O), where it may create files, and prints its output
 # only when it fails.
