@@ -47,6 +47,7 @@ TARGET_TESTS = \
 	inet \
 	intdiv \
 	intdiv-nix13 \
+	libnix4 \
 	math_errno \
 	mathfp \
 	memset \
@@ -80,12 +81,17 @@ THREAD_TESTS = \
 	cxa-dtors \
 	setlocale_threads
 THREAD_MODEL := $(shell $(CROSS_CC) -v 2>&1 | sed -n 's/^Thread model: //p')
-RUN_TESTS = $(TARGET_TESTS) $(if $(filter-out single,$(THREAD_MODEL)),$(THREAD_TESTS))
+RUN_TESTS = $(filter-out $(if $(findstring volamos,$(SIM)),,$(LIBRARY_TESTS)),$(TARGET_TESTS)) \
+	$(if $(filter-out single,$(THREAD_MODEL)),$(THREAD_TESTS))
 
 # Need a TCP/IP stack, which volamos has with --net; they skip themselves
 # without one.
 NET_TESTS = fcntl_ioctl_socket sock_dup
 NET_SIMFLAGS = $(if $(findstring volamos,$(SIM)),--net)
+
+# Run on the installed libnix4.library, which volamos loads from the
+# directory --libs-dir names; they run only under volamos.
+LIBRARY_TESTS = libnix4
 
 # volamos runs the CPU and FPU the tests are built for, as
 # baseboards/volamos.exp in m68k-amigaos-gcc does for check-c.
@@ -193,6 +199,7 @@ inet_LIBFLAGS = -Wall -Werror=char-subscripts
 intdiv_CFLAGS = -m68000 -fno-builtin
 intdiv-nix13_CFLAGS = $(intdiv_CFLAGS)
 intdiv-nix13_CRT = -mcrt=nix13
+libnix4_CRT = -mcrt=library
 
 # Against the installed libraries, in both forms: test/math_errno.c, -m68000 and
 # -m68020 -m68881.
@@ -318,6 +325,10 @@ check-target: $(addprefix $(O)/,$(RUN_TESTS))
 	for t in $(RUN_TESTS); do \
 		flags="$(SIMFLAGS) $(CPU_SIMFLAGS)"; \
 		case " $(NET_TESTS) " in *" $$t "*) flags="$$flags $(NET_SIMFLAGS)";; esac; \
+		case " $(LIBRARY_TESTS) " in *" $$t "*) \
+			lib=$$($(CROSS_CC) -mcrt=library -print-file-name=../libnix4.library); \
+			flags="$$flags --libs-dir $$(dirname $$lib)";; \
+		esac; \
 		if (cd $(O) && $(SIM) $$flags ./$$t) >$(O)/$$t.log 2>&1; then \
 			if grep -q '^SKIP: ' $(O)/$$t.log; then sed -n "s/^SKIP: /SKIP: $$t: /p" $(O)/$$t.log; else echo "PASS: $$t"; fi; \
 		else \
